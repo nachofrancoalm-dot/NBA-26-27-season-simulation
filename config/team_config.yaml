@@ -1,0 +1,213 @@
+team:
+  name: Philadelphia 76ers
+  abbreviation: PHI
+  season: 2026-27
+  team_id: 1610612755
+roster:
+- name: LeBron James
+  player_id: 2544
+  role_expected: point_forward_facilitator
+  minutes_projection: 28
+  unit: starter
+- name: Jaylen Brown
+  player_id: 1627759
+  role_expected: secondary_scorer
+  minutes_projection: 34
+  unit: starter
+- name: Joel Embiid
+  player_id: 203954
+  role_expected: primary_scorer_when_healthy
+  minutes_projection: 26
+  unit: starter
+- name: Tyrese Maxey
+  player_id: 1630178
+  role_expected: primary_ball_handler
+  minutes_projection: 35
+  unit: starter
+- name: VJ Edgecombe
+  player_id: 1642845
+  role_expected: 3&D_wing
+  minutes_projection: 24
+  unit: starter
+- name: Kentavious Caldwell-Pope
+  player_id: 203484
+  role_expected: veteran_3&D_guard
+  minutes_projection: 22
+  unit: bench
+- name: Dean Wade
+  player_id: 1629731
+  role_expected: stretch_big
+  minutes_projection: 18
+  unit: bench
+- name: Anfernee Simons
+  player_id: 1629014
+  role_expected: secondary_ball_handler
+  minutes_projection: 20
+  unit: bench
+- name: Adem Bona
+  player_id: 1641737
+  role_expected: backup_big_rim_protector
+  minutes_projection: 12
+  unit: bench
+- name: Justin Edwards
+  player_id: 1642348
+  role_expected: young_wing_depth
+  minutes_projection: 10
+  unit: bench
+- name: Dominick Barlow
+  player_id: 1631230
+  role_expected: young_wing_depth
+  minutes_projection: 10
+  unit: bench
+- name: Jabari Walker
+  player_id: 1631133
+  role_expected: young_wing_depth
+  minutes_projection: 10
+  unit: bench
+- name: Labaron Philon
+  player_id: 1642889
+  role_expected: rookie_point_guard
+  minutes_projection: 10
+  unit: bench
+historical_comparables:
+- name: Miami Heat 2010-11
+  team_id: 1610612748
+  season: 2010-11
+  note: LeBron + Wade + Bosh, primer año de integración
+- name: Golden State Warriors 2016-17
+  team_id: 1610612744
+  season: 2016-17
+  note: Incorporación de Durant a un core ya campeón
+- name: Brooklyn Nets 2020-21
+  team_id: 1610612751
+  season: 2020-21
+  note: Durant + Irving + Harden, temporada acortada por lesiones
+- name: Phoenix Suns 2022-23
+  team_id: 1610612756
+  season: 2022-23
+  note: Incorporación de Durant vía trade a mitad de temporada
+# Backtesting sistemático a gran escala (opt-in, no forma parte del
+# pipeline por defecto -- ver `python src/data_pipeline.py --backtest-sweep`
+# y src/config_loader.py:resolve_backtest_sweep_cases). Genera los 30
+# equipos NBA para cada una de estas temporadas (450 casos en total) --
+# DISTINTO de `historical_comparables` arriba (4 casos narrativos, barato,
+# parte del pipeline normal).
+backtest_sweep:
+  seasons:
+    - 2010-11
+    - 2011-12
+    - 2012-13
+    - 2013-14
+    - 2014-15
+    - 2015-16
+    - 2016-17
+    - 2017-18
+    - 2018-19
+    - 2019-20
+    - 2020-21
+    - 2021-22
+    - 2022-23
+    - 2023-24
+    - 2024-25
+    # 2025-26 es la temporada COMPLETA más reciente (la que usan las
+    # proyecciones como base). Incluirla es importante: sin ella el
+    # backtesting y el análisis de campeones se quedaban a una temporada
+    # de distancia de los datos que el modelo realmente usa.
+    - 2025-26
+simulation:
+  n_seasons: 10000
+  games_per_season: 82
+  random_seed: 42
+injury_model:
+  n_seasons_lookback: 3
+  recency_half_life_seasons: 1.0
+  weights:
+    historical_load: 0.45
+    recency: 0.35
+    age: 0.2
+  age_curve:
+    low_risk_age: 24
+    peak_start_age: 32
+    peak_end_age: 36
+    base_risk: 0.05
+    plateau_risk: 0.85
+# Parámetros del modelo de fatiga acumulada (src/context/fatigue_accumulation.py).
+# Opcional: si se omite, el módulo usa los valores por defecto del código
+# (DEFAULT_WEIGHTS / DEFAULT_HIGH_MILEAGE_MINUTES / etc).
+fatigue_model:
+  n_seasons_lookback: 3
+  weights:
+    cumulative_load: 0.35
+    recent_intensity: 0.35
+    sustained_streak: 0.30
+  high_mileage_minutes: 35000
+  heavy_minutes_per_game: 34
+  full_season_gp: 65
+  recency_half_life_seasons: 1.0
+  streak_half_life_seasons: 2.0
+# Parámetros de dificultad de calendario (src/context/schedule_strength.py).
+# Opcional: si se omite, el módulo usa los valores por defecto del código.
+schedule_strength:
+  weights:
+    opponent_strength: 0.40
+    back_to_back: 0.30
+    travel: 0.30
+  high_travel_km: 3000
+# Parámetros de la curva de forma (src/context/performance_curve.py).
+# Opcional: si se omite, el módulo usa los valores por defecto del código.
+performance_curve:
+  rolling_window_games: 10
+  early_season_games: 15
+# Parámetros de ponderación por fuerza de rival (src/context/opponent_weighting.py).
+# Opcional: si se omite, el módulo usa los valores por defecto del código.
+opponent_weighting:
+  steepness: 1.0
+  contender_win_pct: 0.55
+  rebuilding_win_pct: 0.45
+# Parámetros de normalización Este/Oeste (src/context/conference_adjustment.py).
+# Opcional: si se omite, el módulo usa DiffPointsPG por defecto.
+conference_adjustment:
+  net_rating_metric: DiffPointsPG
+# Parámetros del modelo de proyección individual (src/aging_curve.py).
+# Opcional: si se omite, el módulo usa los valores por defecto del código
+# (DEFAULT_GENERAL_AGE_CURVE / DEFAULT_SHOOTING_AGE_CURVE).
+aging_curve:
+  n_seasons_lookback: 3
+  recency_half_life_seasons: 1.5
+# Parámetros del motor de simulación Monte Carlo (src/simulation.py).
+# Opcional: si se omite, el módulo usa DEFAULT_MONTE_CARLO_CONFIG del código.
+# Ver docstring de simulation.py para la justificación de cada aproximación.
+lineup_synergy:
+  usage_threshold: 18.0
+  usage_clash_weight: 0.05
+  playmaking_spacing_weight: 0.02
+league_simulation:
+  n_seasons: 1000
+  n_playoff_seasons: 1000
+monte_carlo:
+  injury_dispersion: 2.0
+  b2b_probability: 0.18
+  b2b_fatigue_penalty: 0.15
+  season_fatigue_decay: 0.10
+  game_variance_std: 3.0
+  # Calibrado empíricamente sobre los 480 casos del backtest sweep
+  # (ver docstring de src/simulation.py). NO volver a 1.0 sin re-calibrar.
+  # 0.21 corresponde a la métrica de impacto COMPUESTA (advanced_impact);
+  # con `advanced_impact: {enabled: false}` el valor correcto es 0.29.
+  game_score_to_net_rating_scale: 0.21
+  opponent_strength_scale: 20.0
+  outcome_variance_scale: 12.0
+# Métrica de impacto compuesta: Game Score de caja + ajuste por
+# NET_RATING (src/advanced_impact.py). Opcional -- si se omite se usan los
+# valores de DEFAULT_ADVANCED_IMPACT_CONFIG. Requiere
+# `league_advanced_player_stats.csv` (lo genera --backtest-sweep); sin ese
+# CSV el proyecto cae solo a Game Score puro.
+# enabled: false recupera el comportamiento anterior a la integración
+# (recuerda entonces volver game_score_to_net_rating_scale a 0.29).
+advanced_impact:
+  enabled: true
+  net_rating_weight: 0.42
+  pie_weight: 0.0   # medido: no aporta fuera de muestra, ver el módulo
+paths:
+  raw_data_dir: data/raw
+  processed_data_dir: data/processed
