@@ -1339,12 +1339,13 @@ nba-superteam-sim/
 ├── scripts/
 │   ├── resolve_player_ids.py       # resuelve player_id sin red
 │   └── experiments/                # investigaciones exploratorias, FUERA del pipeline
-│       ├── requirements-experiments.txt  # pymc/arviz/statsmodels -- no en requirements.txt
+│       ├── requirements-experiments.txt  # pymc/arviz/statsmodels/lifelines -- no en requirements.txt
 │       ├── bayesian_calibration.py       # recalibración bayesiana de game_score_to_net_rating_scale
 │       ├── aging_curve_shrinkage.py      # descartado: el encogimiento no explica la compresión de talento
 │       ├── team_quality_uncertainty.py   # calibración de la incertidumbre de calidad de equipo
 │       ├── hustle_stats_signal.py        # descartado: hustle stats no aportan señal
-│       └── pt_defend_signal.py           # defensa por tracking -- integrada en advanced_impact.py
+│       ├── pt_defend_signal.py           # defensa por tracking -- integrada en advanced_impact.py
+│       └── injury_survival_model.py      # descartado: Cox no mejora el heurístico de injury_model.py
 ├── notebooks/                      # exploración y prototipado de modelos
 ├── dashboard/
 │   ├── app.py                      # dashboard Streamlit (4 pestañas)
