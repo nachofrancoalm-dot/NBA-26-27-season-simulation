@@ -1091,7 +1091,9 @@ estaba calibrado a **0.29** por una vía completamente distinta.
 en unidades de Game Score:
 
 ```
-impacto/36 = game_score/36 + 0.42 * (NET_RATING − media_de_su_temporada)
+impacto/36 = game_score/36
+             + 0.42 * (NET_RATING − media_de_su_temporada)
+             − 57.03 * (PCT_PLUSMINUS − media_de_su_temporada)
 ```
 
 Centrar por temporada preserva la restricción de suma cero por
@@ -1099,6 +1101,21 @@ construcción y ajusta la inflación de era gratis. Requiere
 `league_advanced_player_stats.csv` (lo genera `--backtest-sweep`, una
 llamada por temporada); sin ese CSV el proyecto sigue corriendo con Game
 Score puro.
+
+**Tercera métrica: `PCT_PLUSMINUS`** (defensa por tracking, `leaguedashptdefend`
+/ Second Spectrum, disponible desde 2013-14) — cuánto empeora el % de
+tiro real del rival cuando este jugador es el defensor más cercano,
+frente a su % de tiro normal. A diferencia de los *hustle stats*
+(contested shots, deflections... investigados y descartados, no aportan
+señal — ver `scripts/experiments/hustle_stats_signal.py`), esta sí es
+una señal de impacto defensivo directo, validada leave-one-season-out
+(ΔR² fuera de muestra +0.016 sobre los 480 casos del backtest sweep,
+mejora real pero modesta). Peso derivado con la misma técnica que
+`net_rating_weight` (ratio de coeficientes de una regresión conjunta, no
+una escala inventada) — ver `scripts/experiments/pt_defend_signal.py` y
+el docstring de `advanced_impact.py` para el detalle completo, incluida
+la recalibración de `game_score_to_net_rating_scale` que exigió (0.172 →
+0.1617).
 
 ## Dashboard interactivo (`dashboard/app.py`)
 
@@ -1327,7 +1344,7 @@ nba-superteam-sim/
 │       ├── aging_curve_shrinkage.py      # descartado: el encogimiento no explica la compresión de talento
 │       ├── team_quality_uncertainty.py   # calibración de la incertidumbre de calidad de equipo
 │       ├── hustle_stats_signal.py        # descartado: hustle stats no aportan señal
-│       └── pt_defend_signal.py           # señal real pero modesta, no integrada en producción
+│       └── pt_defend_signal.py           # defensa por tracking -- integrada en advanced_impact.py
 ├── notebooks/                      # exploración y prototipado de modelos
 ├── dashboard/
 │   ├── app.py                      # dashboard Streamlit (4 pestañas)

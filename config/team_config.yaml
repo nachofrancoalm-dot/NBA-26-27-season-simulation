@@ -197,7 +197,10 @@ monte_carlo:
   # Re-calibrado de 0.21 a 0.172 vía scripts/experiments/bayesian_calibration.py
   # (modelo bayesiano jerárquico, validado leave-one-season-out -- ver el
   # docstring de DEFAULT_MONTE_CARLO_CONFIG en src/simulation.py).
-  game_score_to_net_rating_scale: 0.172
+  # Re-calibrado otra vez a 0.1617 al integrar PCT_PLUSMINUS (defensa por
+  # tracking) en advanced_impact.py -- ver "TERCERA MÉTRICA INTEGRADA" en
+  # su docstring.
+  game_score_to_net_rating_scale: 0.1617
   opponent_strength_scale: 20.0
   outcome_variance_scale: 12.0
   # Incertidumbre de calidad de equipo (puntos de diferencial, un valor

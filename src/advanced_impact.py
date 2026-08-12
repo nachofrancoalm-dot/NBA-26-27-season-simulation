@@ -120,6 +120,65 @@ Quien quiera medir el efecto del caveat tiene la palanca: con
 `advanced_impact: {enabled: false}` en el YAML se recupera exactamente el
 Game Score puro y se pueden comparar las dos proyecciones del mismo
 roster hipotético.
+
+TERCERA MÉTRICA INTEGRADA: PCT_PLUSMINUS (defensa por tracking)
+-----------------------------------------------------------------
+`leaguedashptdefend` (Second Spectrum, `data_pipeline.fetch_league_pt_defend_stats`,
+disponible desde 2013-14): PCT_PLUSMINUS = % de tiro REAL del rival
+cuando este jugador es el defensor más cercano, menos el % de tiro
+NORMAL de esos mismos rivales -- negativo significa que el rival tira
+PEOR de lo normal defendido por este jugador. A diferencia de los
+hustle stats (`scripts/experiments/hustle_stats_signal.py`, CONTESTED_SHOTS/
+DEFLECTIONS/etc., investigados y DESCARTADOS -- miden actividad, no si
+esa actividad de verdad impide anotar), esta es la señal de impacto
+defensivo más directa que expone `nba_api`.
+
+Investigado en `scripts/experiments/pt_defend_signal.py`. BUG REAL
+encontrado y corregido ANTES de reportar el resultado: la primera
+versión usaba el PCT_PLUSMINUS de la MISMA temporada que se predecía
+(R² inflado a 0.69, casi tautológico). Reescrito para usar solo la
+temporada PREVIA de cada jugador (mismo patrón de no-look-ahead que
+`compute_recency_weighted_advanced` ya aplicaba a PIE/NET_RATING).
+Resultado corregido, validado leave-one-season-out (16 pliegues, 480
+casos -- con PCT_PLUSMINUS=NaN para los ~120 casos de temporadas
+anteriores a 2013-14, que caen a Game Score+NET_RATING solos, ver más
+abajo): R² fuera de muestra 0.512 → 0.528, MAE 2.65 → 2.61 puntos/partido,
+mejora real pero modesta.
+
+**Peso derivado con la MISMA técnica que `net_rating_weight`** (ratio de
+coeficientes de una regresión conjunta, no una nueva escala inventada):
+regresión de DiffPointsPG contra el composite existente (GS+NET_RATING,
+ya en unidades de Game Score de equipo) + PCT_PLUSMINUS de equipo da
+coeficientes 0.1588 y -60.40 respectivamente -- ratio -380.2 (cuántos
+puntos de Game Score de EQUIPO vale 1 punto de PCT_PLUSMINUS), pasado a
+por-36-por-jugador: -380.2 * 36/240 = **-57.03**. Signo negativo a
+propósito: un defensor bueno tiene PCT_PLUSMINUS más NEGATIVO que la
+media, y el ajuste debe ser POSITIVO para él.
+
+**`game_score_to_net_rating_scale` RE-CALIBRADO de 0.172 a 0.1617** al
+integrar esta tercera métrica -- el composite cambia (más dispersión),
+así que la escala que lo convierte a puntos de diferencial también tiene
+que cambiar. Validado LOSO igual que el resto: el scale recalibrado
+sale estable en los 16 pliegues (0.159-0.165), escala final sobre los
+480 casos completos: 0.1617.
+
+**Tolerancia a métricas parciales (cambio real en
+`compute_league_advanced_baselines`/`compute_recency_weighted_advanced`):**
+antes de esto, PIE y NET_RATING SIEMPRE coexistían (mismo endpoint, misma
+fila) así que un `groupby` que asumiera "todas las métricas presentes en
+todas las filas" nunca fallaba en silencio. PCT_PLUSMINUS rompe esa
+asunción -- temporadas anteriores a 2013-14, o jugadores sin cobertura de
+tracking, tienen esa columna en NaN mientras PIE/NET_RATING sí existen.
+Sin arreglar esto, una media ponderada ingenua (`(col*peso).sum()/peso.sum()`)
+habría diluido el denominador con el peso de filas SIN dato para esa
+métrica, sesgando la media hacia 0 en silencio. Ambas funciones ahora
+calculan la media ponderada de CADA métrica sobre sus propias filas no
+nulas, no sobre el grupo entero -- si un jugador/temporada no tiene
+PCT_PLUSMINUS, simplemente no participa en ESA métrica (PIE/NET_RATING
+no se ven afectados), y si NINGUNA temporada reciente de un jugador
+tiene el dato, `PCT_PLUSMINUS` se omite del dict devuelto (no se inventa
+un 0.0 -- 0.0 significaría "defensor exactamente promedio", un valor,
+no una ausencia de dato).
 """
 
 from __future__ import annotations
@@ -148,6 +207,12 @@ DEFAULT_ADVANCED_IMPACT_CONFIG: Dict[str, Any] = {
     "enabled": True,
     "pie_weight": 0.0,
     "net_rating_weight": 0.42,
+    # Derivado por la misma técnica que net_rating_weight (ratio de
+    # coeficientes de una regresión conjunta contra DiffPointsPG real,
+    # ver "TERCERA MÉTRICA INTEGRADA" en el docstring del módulo) --
+    # negativo a propósito: un defensor bueno tiene PCT_PLUSMINUS más
+    # negativo que la media, y el ajuste debe ser positivo para él.
+    "pct_plusminus_weight": -57.03,
     # Recencia propia, alineada con aging_curve por defecto.
     "n_seasons_lookback": 3,
     "recency_half_life_seasons": 1.5,
@@ -158,7 +223,7 @@ DEFAULT_ADVANCED_IMPACT_CONFIG: Dict[str, Any] = {
     "min_minutes_for_advanced": 500,
 }
 
-ADVANCED_METRICS = ("PIE", "NET_RATING")
+ADVANCED_METRICS = ("PIE", "NET_RATING", "PCT_PLUSMINUS")
 
 # Nombre de la columna de minutos TOTALES que este módulo usa como peso y
 # como umbral de muestra. No es la columna MIN cruda del endpoint: con
@@ -190,7 +255,14 @@ def compute_league_advanced_baselines(
 
     `advanced_stats` debe tener el esquema de
     `league_advanced_player_stats.csv` (season, PLAYER_ID, MIN + las
-    columnas avanzadas).
+    columnas avanzadas), opcionalmente con `PCT_PLUSMINUS` fusionada por
+    `merge_pt_defend_stats` -- NaN para temporadas sin datos de tracking
+    (anteriores a 2013-14). Cada métrica se promedia sobre sus PROPIAS
+    filas no nulas, no sobre el grupo entero: promediar con un
+    denominador que incluye el peso de filas sin dato para esa métrica
+    sesgaría la media hacia 0 en silencio (ver "TERCERA MÉTRICA
+    INTEGRADA" en el docstring del módulo -- PIE/NET_RATING nunca tenían
+    este problema porque vienen del mismo endpoint y siempre coexisten).
     """
     if advanced_stats.empty:
         return {}
@@ -198,14 +270,17 @@ def compute_league_advanced_baselines(
     eligible = advanced_stats[advanced_stats[TOTAL_MINUTES_COLUMN] >= min_minutes]
     baselines: Dict[str, Dict[str, float]] = {}
     for season, group in eligible.groupby("season"):
-        weights = group[TOTAL_MINUTES_COLUMN]
-        if weights.sum() <= 0:
-            continue
-        baselines[str(season)] = {
-            metric: float((group[metric] * weights).sum() / weights.sum())
-            for metric in ADVANCED_METRICS
-            if metric in group.columns
-        }
+        season_baseline: Dict[str, float] = {}
+        for metric in ADVANCED_METRICS:
+            if metric not in group.columns:
+                continue
+            metric_rows = group[group[metric].notna()]
+            weights = metric_rows[TOTAL_MINUTES_COLUMN]
+            if weights.sum() <= 0:
+                continue
+            season_baseline[metric] = float((metric_rows[metric] * weights).sum() / weights.sum())
+        if season_baseline:
+            baselines[str(season)] = season_baseline
     return baselines
 
 
@@ -230,6 +305,14 @@ def compute_recency_weighted_advanced(
     equipo; se colapsan a una sola ponderando por minutos, que es la
     lectura correcta de "cómo le fue esa temporada" (`dedupe_traded_seasons`
     de season_utils no sirve aquí: ese CSV no trae fila 'TOT').
+
+    Cada métrica se promedia sobre las temporadas donde REALMENTE hay
+    dato para ella, no sobre las `n_seasons` completas -- un jugador cuyo
+    historial reciente cae antes de 2013-14 (o sin cobertura de tracking)
+    simplemente no lleva `PCT_PLUSMINUS` en el dict devuelto, en vez de
+    heredar un 0.0 inventado (0.0 significaría "defensor exactamente
+    promedio", no "sin dato"). PIE/NET_RATING no se ven afectados por
+    esto -- siempre coexisten, vienen del mismo endpoint.
     """
     if player_advanced.empty:
         return None
@@ -243,27 +326,34 @@ def compute_recency_weighted_advanced(
         return None
 
     # Colapsar temporadas partidas por traspaso (varias filas, un año).
+    # Cada métrica ponderada solo sobre SUS PROPIAS filas no nulas -- ver
+    # el mismo razonamiento en compute_league_advanced_baselines.
     eligible["_year"] = eligible["season"].apply(season_start_year)
     collapsed = []
     for year, group in eligible.groupby("_year"):
-        weights = group[TOTAL_MINUTES_COLUMN]
-        row = {"_year": year, TOTAL_MINUTES_COLUMN: float(weights.sum())}
+        row: Dict[str, float] = {"_year": year}
         for metric in ADVANCED_METRICS:
-            if metric in group.columns:
-                row[metric] = float((group[metric] * weights).sum() / weights.sum())
+            if metric not in group.columns:
+                continue
+            metric_rows = group[group[metric].notna()]
+            metric_weights = metric_rows[TOTAL_MINUTES_COLUMN]
+            if metric_weights.sum() > 0:
+                row[metric] = float((metric_rows[metric] * metric_weights).sum() / metric_weights.sum())
         collapsed.append(row)
 
     recent = sorted(collapsed, key=lambda r: r["_year"], reverse=True)[:n_seasons]
-    seasons_ago = np.array([target_year - r["_year"] for r in recent], dtype=float)
-    weights = 0.5 ** (seasons_ago / half_life)
-    total = weights.sum()
-    if total <= 0:
-        return None
-
-    return {
-        metric: float(sum(r.get(metric, 0.0) * w for r, w in zip(recent, weights)) / total)
-        for metric in ADVANCED_METRICS
-    }
+    seasons_ago = {r["_year"]: target_year - r["_year"] for r in recent}
+    result: Dict[str, float] = {}
+    for metric in ADVANCED_METRICS:
+        rows_with_metric = [r for r in recent if metric in r]
+        if not rows_with_metric:
+            continue  # ninguna temporada reciente tiene este dato -- no se inventa un valor
+        weights = np.array([0.5 ** (seasons_ago[r["_year"]] / half_life) for r in rows_with_metric])
+        total = weights.sum()
+        if total <= 0:
+            continue
+        result[metric] = float(sum(r[metric] * w for r, w in zip(rows_with_metric, weights)) / total)
+    return result if result else None
 
 
 def blend_impact_per36(
@@ -284,7 +374,11 @@ def blend_impact_per36(
         return float(game_score_per36)
 
     adjustment = 0.0
-    for metric, weight_key in (("PIE", "pie_weight"), ("NET_RATING", "net_rating_weight")):
+    for metric, weight_key in (
+        ("PIE", "pie_weight"),
+        ("NET_RATING", "net_rating_weight"),
+        ("PCT_PLUSMINUS", "pct_plusminus_weight"),
+    ):
         if metric in advanced and metric in season_baseline:
             adjustment += impact_config[weight_key] * (advanced[metric] - season_baseline[metric])
     return float(game_score_per36 + adjustment)
@@ -396,13 +490,23 @@ def load_advanced_stats(processed_dir) -> pd.DataFrame:
     sin él, simplemente con Game Score puro. Es un dataset opcional a
     propósito: quien clone el repo no debería necesitar 19 llamadas más a
     la API para que la simulación funcione.
+
+    Si `league_pt_defend_stats.csv` también existe (opcional, ver
+    `data_pipeline.build_league_pt_defend_dataset`), le fusiona
+    `PCT_PLUSMINUS` -- ver `merge_pt_defend_stats`. Su ausencia es
+    igual de segura: el proyecto sigue con PIE/NET_RATING solos.
     """
     path = processed_dir / "league_advanced_player_stats.csv"
     if not path.exists() or path.stat().st_size == 0:
         return pd.DataFrame()
     df = pd.read_csv(path)
     df["season"] = df["season"].astype(str)
-    return prepare_advanced_stats(df)
+    df = prepare_advanced_stats(df)
+
+    pt_defend_path = processed_dir / "league_pt_defend_stats.csv"
+    if pt_defend_path.exists() and pt_defend_path.stat().st_size > 0:
+        df = merge_pt_defend_stats(df, pd.read_csv(pt_defend_path))
+    return df
 
 
 def prepare_advanced_stats(advanced_stats: pd.DataFrame) -> pd.DataFrame:
@@ -416,3 +520,33 @@ def prepare_advanced_stats(advanced_stats: pd.DataFrame) -> pd.DataFrame:
     df = advanced_stats.copy()
     df[TOTAL_MINUTES_COLUMN] = df["MIN"] * df["GP"]
     return df
+
+
+def merge_pt_defend_stats(advanced_stats: pd.DataFrame, pt_defend_stats: pd.DataFrame) -> pd.DataFrame:
+    """
+    Añade la columna `PCT_PLUSMINUS` (defensa por tracking, ver
+    `data_pipeline.fetch_league_pt_defend_stats`) a `advanced_stats`,
+    cruzando por (PLAYER_ID, season). Colapsa posibles filas duplicadas
+    de un jugador traspasado a mitad de temporada ponderando por D_FGA
+    (tiros defendidos de cerca -- este endpoint no trae minutos).
+
+    Deja `PCT_PLUSMINUS` en NaN para jugador/temporada sin datos de
+    tracking (anteriores a 2013-14, o sin cobertura) -- separada a
+    propósito de `prepare_advanced_stats` para poder testear el cruce
+    con DataFrames en memoria, mismo patrón.
+    """
+    if advanced_stats.empty or pt_defend_stats is None or pt_defend_stats.empty:
+        return advanced_stats
+
+    pt = pt_defend_stats[pt_defend_stats["D_FGA"] > 0].copy()
+    if pt.empty:
+        return advanced_stats
+    pt["season"] = pt["season"].astype(str)
+    pt["_weighted"] = pt["PCT_PLUSMINUS"] * pt["D_FGA"]
+    collapsed = (
+        pt.groupby(["PLAYER_ID", "season"])
+        .apply(lambda g: g["_weighted"].sum() / g["D_FGA"].sum(), include_groups=False)
+        .rename("PCT_PLUSMINUS")
+        .reset_index()
+    )
+    return advanced_stats.merge(collapsed, on=["PLAYER_ID", "season"], how="left")
