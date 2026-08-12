@@ -369,7 +369,16 @@ DEFAULT_MONTE_CARLO_CONFIG: Dict[str, float] = {
     # aplica `league_baseline_by_season` parece absorber toda esa
     # variación), así que el resultado se queda en una única constante
     # mejor calibrada, no en un slope por temporada.
-    "game_score_to_net_rating_scale": 0.172,
+    #
+    # RE-CALIBRADO otra vez a 0.1617 al integrar PCT_PLUSMINUS (defensa
+    # por tracking) en advanced_impact.py -- ver "TERCERA MÉTRICA
+    # INTEGRADA" en su docstring. El composite cambia (más dispersión al
+    # sumar una tercera señal), así que la escala que lo convierte a
+    # puntos también cambia. Validado LOSO igual que la vez anterior: la
+    # escala recalibrada sale estable en los 16 pliegues (0.159-0.165),
+    # escala final sobre los 480 casos completos: 0.1617. R² fuera de
+    # muestra 0.512 -> 0.528, MAE 2.65 -> 2.61 puntos/partido.
+    "game_score_to_net_rating_scale": 0.1617,
     "opponent_strength_scale": 20.0,  # cuánto resta/suma un rival top/flojo (WinPCT 1.0 vs 0.0) al diferencial
     "outcome_variance_scale": 12.0,  # dispersión típica de resultado de un partido NBA individual
     # VENTAJA DE CAMPO, medida sobre los game logs reales de las 15
