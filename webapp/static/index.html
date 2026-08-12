@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NBA Superteam Sim</title>
+  <link rel="stylesheet" href="/css/tokens.css?v=2" />
+  <link rel="stylesheet" href="/css/layout.css?v=2" />
+  <link rel="stylesheet" href="/css/components.css?v=2" />
+</head>
+<body>
+  <div class="app-shell">
+    <main class="main">
+      <header class="topbar">
+        <div class="team-identity">
+          <div class="team-badge" id="header-badge">--</div>
+          <div>
+            <h1 id="page-title">NBA Superteam Simulator</h1>
+            <p class="subtitle" id="page-subtitle">Cargando…</p>
+          </div>
+        </div>
+        <img
+          class="brand-mark"
+          src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
+          alt="NBA"
+          onerror="this.style.display='none'"
+        />
+      </header>
+
+      <nav class="tabs" id="top-tabs" role="tablist">
+        <button class="tab-button" role="tab" data-tab="mi-equipo" aria-selected="true">🏀 Mi equipo</button>
+        <button class="tab-button" role="tab" data-tab="liga-nba" aria-selected="false">🏆 Liga NBA</button>
+        <button class="tab-button" role="tab" data-tab="explicador" aria-selected="false">🤖 Explicador (IA)</button>
+      </nav>
+
+      <section id="tab-mi-equipo" class="tab-panel">
+        <nav class="subtabs" id="sub-tabs-team" role="tablist">
+          <button class="tab-button" role="tab" data-subtab="roster" aria-selected="true">Roster y proyecciones</button>
+          <button class="tab-button" role="tab" data-subtab="simulacion" aria-selected="false">Simulación Monte Carlo</button>
+          <button class="tab-button" role="tab" data-subtab="sinergia" aria-selected="false">Sinergia de alineación</button>
+          <button class="tab-button" role="tab" data-subtab="backtesting" aria-selected="false">Backtesting</button>
+        </nav>
+        <div id="subtab-team-roster" class="subtab-panel"></div>
+        <div id="subtab-team-simulacion" class="subtab-panel" hidden></div>
+        <div id="subtab-team-sinergia" class="subtab-panel" hidden></div>
+        <div id="subtab-team-backtesting" class="subtab-panel" hidden></div>
+      </section>
+
+      <section id="tab-liga-nba" class="tab-panel" hidden>
+        <nav class="subtabs" id="sub-tabs-league" role="tablist">
+          <button class="tab-button" role="tab" data-subtab="liga" aria-selected="true">Liga y Playoffs</button>
+          <button class="tab-button" role="tab" data-subtab="premios" aria-selected="false">Premios individuales</button>
+          <button class="tab-button" role="tab" data-subtab="campeones" aria-selected="false">Campeones reales</button>
+        </nav>
+        <div id="subtab-league-liga" class="subtab-panel"></div>
+        <div id="subtab-league-premios" class="subtab-panel" hidden></div>
+        <div id="subtab-league-campeones" class="subtab-panel" hidden></div>
+      </section>
+
+      <section id="tab-explicador" class="tab-panel" hidden></section>
+    </main>
+  </div>
+
+  <div class="chart-tooltip" id="chart-tooltip"></div>
+
+  <dialog id="player-modal" class="detail-modal"></dialog>
+  <dialog id="team-modal" class="detail-modal"></dialog>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

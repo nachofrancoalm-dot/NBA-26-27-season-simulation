@@ -1,0 +1,10 @@
+# Dependencias SOLO de scripts/experiments/ -- deliberadamente separadas
+# de requirements.txt (raíz) para no forzarle pymc/pytensor (pesado, no
+# hace falta GPU pero sí bastante espacio en disco) a nadie que solo
+# quiera correr el simulador y el dashboard.
+#
+# Instalar con: pip install -r scripts/experiments/requirements-experiments.txt
+
+pymc>=5.25.0
+arviz>=0.23.0
+statsmodels>=0.14.0

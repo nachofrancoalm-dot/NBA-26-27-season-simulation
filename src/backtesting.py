@@ -55,6 +55,8 @@ from config_loader import get_paths  # noqa: E402
 from season_utils import dedupe_traded_seasons, season_start_year  # noqa: E402
 from aging_curve import (  # noqa: E402
     DEFAULT_GENERAL_AGE_CURVE,
+    DEFAULT_N_SEASONS_LOOKBACK,
+    DEFAULT_RECENCY_HALF_LIFE_SEASONS,
     DEFAULT_SHOOTING_AGE_CURVE,
     compute_league_game_score_baseline,
     project_player_season,
@@ -132,6 +134,8 @@ def project_historical_player(
     games_in_season: int,
     player_id: Optional[int] = None,
     advanced_context: Optional[Dict[str, Any]] = None,
+    n_seasons_lookback: Optional[int] = None,
+    recency_half_life_seasons: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Proyección, risk_score y fatigue_score de UN jugador para el caso
@@ -143,6 +147,14 @@ def project_historical_player(
     métrica COMPUESTA (Game Score + ajuste por NET_RATING, ver
     src/advanced_impact.py) en vez del Game Score puro. Opcional para que
     el backtest siga corriendo sin `league_advanced_player_stats.csv`.
+
+    `n_seasons_lookback`/`recency_half_life_seasons`: BUG REAL -- esta
+    función nunca pasaba estos parámetros a `project_player_season`, así
+    que ignoraba `config["aging_curve"]` por completo y usaba siempre los
+    defaults del módulo (mismo bug que en `league_simulation.py`, ver su
+    docstring). `None` (default) preserva el comportamiento de siempre --
+    `project_backtest_team()` es quien los rellena desde `config` cuando
+    los llama.
     """
     target_year = season_start_year(target_season)
     prior_regular = filter_seasons_before(player_regular_seasons, target_year)
@@ -170,6 +182,10 @@ def project_historical_player(
         games_per_season=games_in_season,
         general_curve=DEFAULT_GENERAL_AGE_CURVE,
         shooting_curve=DEFAULT_SHOOTING_AGE_CURVE,
+        n_seasons=n_seasons_lookback if n_seasons_lookback is not None else DEFAULT_N_SEASONS_LOOKBACK,
+        half_life_seasons=(
+            recency_half_life_seasons if recency_half_life_seasons is not None else DEFAULT_RECENCY_HALF_LIFE_SEASONS
+        ),
     )
     risk = compute_risk_score(prior_regular)
     fatigue = compute_fatigue_score(prior_regular, prior_playoff)
@@ -224,6 +240,12 @@ def project_backtest_team(
     rotation_size = config.get("league_simulation", {}).get("rotation_size", DEFAULT_ROTATION_SIZE)
     normalized_minutes = normalize_rotation_minutes(raw_minutes, rotation_size)
 
+    # Ver el docstring de project_historical_player: sin esto, el
+    # backtesting ignoraba config["aging_curve"] por completo.
+    aging_cfg = config.get("aging_curve", {})
+    aging_n_seasons = aging_cfg.get("n_seasons_lookback", DEFAULT_N_SEASONS_LOOKBACK)
+    aging_half_life = aging_cfg.get("recency_half_life_seasons", DEFAULT_RECENCY_HALF_LIFE_SEASONS)
+
     game_score_per36, risk_scores, fatigue_scores, minutes_projection = [], [], [], []
     profiles: Dict[int, Dict[str, float]] = {}
     minutes_by_player: Dict[int, float] = {}
@@ -249,6 +271,8 @@ def project_backtest_team(
             games_in_season,
             player_id=player_id,
             advanced_context=advanced_context,
+            n_seasons_lookback=aging_n_seasons,
+            recency_half_life_seasons=aging_half_life,
         )
         game_score_per36.append(result["game_score_per36"])
         risk_scores.append(result["risk_score"])

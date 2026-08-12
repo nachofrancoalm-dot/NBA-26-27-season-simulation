@@ -71,7 +71,11 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config_loader import get_paths  # noqa: E402
 from season_utils import dedupe_traded_seasons, season_start_year  # noqa: E402
-from aging_curve import project_player_season  # noqa: E402
+from aging_curve import (  # noqa: E402
+    DEFAULT_N_SEASONS_LOOKBACK,
+    DEFAULT_RECENCY_HALF_LIFE_SEASONS,
+    project_player_season,
+)
 from advanced_impact import (  # noqa: E402
     adjust_with_context,
     build_advanced_context,
@@ -84,11 +88,11 @@ from lineup_synergy import (  # noqa: E402
 )
 from simulation import (  # noqa: E402
     DEFAULT_MONTE_CARLO_CONFIG,
-    TOTAL_TEAM_MINUTES_PER_GAME,
     apply_star_bonus,
     compute_player_contributions,
     normalize_rotation_minutes,
     sample_injury_absences,
+    sample_team_quality_noise,
 )
 from context.injury_model import compute_risk_score  # noqa: E402
 from context.fatigue_accumulation import compute_fatigue_score  # noqa: E402
@@ -107,6 +111,49 @@ TEAM_CONFERENCE: Dict[str, str] = {
 
 DEFAULT_LEAGUE_N_SEASONS = 1000  # más barato que el n_seasons de simulation.py -- ver docstring
 DEFAULT_ROTATION_SIZE = 10  # tamaño de rotación real NBA -- ver docstring de project_team_roster
+
+# Escenario "sin lesiones": mismo motor, mismos rosters proyectados --
+# solo se pone a cero el risk_score de todo el mundo (ver
+# _apply_scenario) antes de simular. "with_injuries" escribe los mismos
+# nombres de archivo que el proyecto ya usaba antes de que existiera el
+# concepto de escenario, así que no rompe nada existente (Streamlit,
+# tests) que llame sin pasar `scenario`.
+SCENARIO_WITH_INJURIES = "with_injuries"
+SCENARIO_NO_INJURIES = "no_injuries"
+
+
+def _scenario_suffix(scenario: str) -> str:
+    if scenario == SCENARIO_NO_INJURIES:
+        return "_no_injuries"
+    if scenario == SCENARIO_WITH_INJURIES:
+        return ""
+    raise ValueError(f"scenario desconocido: {scenario!r} (usa {SCENARIO_WITH_INJURIES!r} o {SCENARIO_NO_INJURIES!r})")
+
+
+def _apply_scenario(
+    team_projections: Dict[int, Dict[str, Any]], scenario: str
+) -> Dict[int, Dict[str, Any]]:
+    """
+    Devuelve una copia de `team_projections` con el `risk_score` de TODO
+    el mundo puesto a cero si `scenario == SCENARIO_NO_INJURIES` -- un
+    solo punto de intervención que cascada correctamente a la simulación
+    de temporada regular, a los playoffs (ambos leen `risk_scores`, el
+    array por equipo) y a `league_player_projections.csv` (cada fila de
+    `player_rows` trae su propio `risk_score`, de donde salen GP/MPG
+    mostrados en cualquier tabla y el umbral de elegibilidad de
+    All-NBA/All-Defensive en awards_projection.py). No vuelve a proyectar
+    nada -- es una mutación barata sobre proyecciones ya calculadas.
+    """
+    if scenario == SCENARIO_WITH_INJURIES:
+        return team_projections
+    if scenario != SCENARIO_NO_INJURIES:
+        raise ValueError(f"scenario desconocido: {scenario!r}")
+
+    healthy: Dict[int, Dict[str, Any]] = {}
+    for team_id, proj in team_projections.items():
+        healthy_rows = [{**row, "risk_score": 0.0} for row in proj["player_rows"]]
+        healthy[team_id] = {**proj, "risk_scores": np.zeros_like(proj["risk_scores"]), "player_rows": healthy_rows}
+    return healthy
 
 
 def _most_recent_season_row(player_seasons: pd.DataFrame):
@@ -180,6 +227,19 @@ def project_team_roster(
     )
     target_year = season_start_year(config["team"]["season"])
     rotation_size = config.get("league_simulation", {}).get("rotation_size", DEFAULT_ROTATION_SIZE)
+    # BUG REAL: este módulo llamaba a project_player_season() sin pasar
+    # n_seasons/half_life_seasons, así que usaba SIEMPRE los defaults del
+    # módulo (aging_curve.DEFAULT_*), ignorando config["aging_curve"] por
+    # completo -- solo build_aging_projection_dataset() (roster propio) lo
+    # leía. Hoy no cambia ningún número (el YAML coincide con los defaults
+    # por casualidad), pero dejaba el bloque "aging_curve" del config
+    # muerto para los 30 equipos reales de Liga NBA -- justo lo que
+    # bloqueaba calibrar el encogimiento hacia la media que causa la
+    # compresión de victorias entre equipos (ver
+    # scripts/experiments/aging_curve_shrinkage.py).
+    aging_cfg = config.get("aging_curve", {})
+    aging_n_seasons = aging_cfg.get("n_seasons_lookback", DEFAULT_N_SEASONS_LOOKBACK)
+    aging_half_life = aging_cfg.get("recency_half_life_seasons", DEFAULT_RECENCY_HALF_LIFE_SEASONS)
 
     # --- Paso 1: minutos "en bruto" de cada jugador, sin proyectar todavía ---
     raw_minutes: Dict[int, float] = {}
@@ -247,6 +307,8 @@ def project_team_roster(
             target_age=target_age,
             minutes_per_game=minutes_per_game,
             games_per_season=config["simulation"]["games_per_season"],
+            n_seasons=aging_n_seasons,
+            half_life_seasons=aging_half_life,
         )
         risk = compute_risk_score(player_regular)
         fatigue = compute_fatigue_score(player_regular, player_playoff if not player_playoff.empty else None)
@@ -358,6 +420,18 @@ def simulate_league_regular_season(
     rng = np.random.default_rng(random_seed)
 
     team_game_scores: Dict[int, np.ndarray] = {}
+    # Incertidumbre de calidad de equipo -- ver simulation.sample_team_quality_noise:
+    # un valor por (equipo, temporada simulada), constante en los 82
+    # partidos de esa temporada. Desactivado por defecto (std=0.0). Ya en
+    # puntos de diferencial (no en unidades de Game Score), así que se
+    # suma DESPUÉS de convertir el diferencial de Game Score con
+    # game_score_to_net_rating_scale, no antes.
+    team_quality_noise = {
+        team_id: sample_team_quality_noise(
+            n_seasons, mc_config.get("team_quality_uncertainty_std", 0.0), rng
+        ).ravel()
+        for team_id in team_projections
+    }
     for team_id, proj in team_projections.items():
         available = sample_injury_absences(
             proj["risk_scores"], n_seasons, games_per_season, rng, mc_config["injury_dispersion"]
@@ -384,6 +458,7 @@ def simulate_league_regular_season(
         # con la escala calibrada antes de entrar en la logística -- ver el
         # bug documentado en el docstring del módulo.
         point_differential = (score_a - score_b) * mc_config["game_score_to_net_rating_scale"]
+        point_differential = point_differential + (team_quality_noise[team_a] - team_quality_noise[team_b])
         win_prob_a = 1 / (1 + np.exp(-point_differential / mc_config["outcome_variance_scale"]))
         team_a_wins = rng.random(n_seasons) < win_prob_a
         wins[team_a] += team_a_wins
@@ -909,7 +984,9 @@ def _conference_bracket_with_matchups(
     return {"round1": round1, "conf_semis": conf_semis, "conference_champion": conference_champion}
 
 
-def simulate_single_bracket(config: Dict[str, Any], random_seed: Optional[int] = None) -> Dict[str, Any]:
+def simulate_single_bracket(
+    config: Dict[str, Any], random_seed: Optional[int] = None, scenario: str = SCENARIO_WITH_INJURIES
+) -> Dict[str, Any]:
     """
     Simula UN bracket de playoffs concreto (no una distribución agregada
     de miles de temporadas) para poder mostrarlo como un bracket real en
@@ -921,9 +998,15 @@ def simulate_single_bracket(config: Dict[str, Any], random_seed: Optional[int] =
     para esto, sería redundante y lento para una sola vista interactiva.
     Todos los IDs de equipo en el resultado se devuelven como
     `team_abbreviation` (no team_id), listos para mostrar.
+
+    `scenario` (ver `_apply_scenario`) decide si se lee
+    `league_regular_season_summary.csv` o su variante
+    `..._no_injuries.csv`, y si el roster de cada equipo se juega el
+    bracket con o sin riesgo de lesión -- para que el bracket sea
+    coherente con el escenario activo en el resto de la app.
     """
     paths = get_paths(config)
-    regular_season_path = paths["processed"] / "league_regular_season_summary.csv"
+    regular_season_path = paths["processed"] / f"league_regular_season_summary{_scenario_suffix(scenario)}.csv"
     if not regular_season_path.exists():
         raise FileNotFoundError(
             f"No se encontró {regular_season_path}. Corre "
@@ -933,6 +1016,7 @@ def simulate_single_bracket(config: Dict[str, Any], random_seed: Optional[int] =
     wins_by_team = regular_season.set_index("team_id")["wins_mean"].to_dict()
 
     team_ids, team_abbrev_by_id, team_conference, team_projections = load_and_project_all_teams(config)
+    team_projections = _apply_scenario(team_projections, scenario)
 
     seed = random_seed if random_seed is not None else config["simulation"]["random_seed"]
     rng = np.random.default_rng(seed)
@@ -983,7 +1067,9 @@ def simulate_single_bracket(config: Dict[str, Any], random_seed: Optional[int] =
     }
 
 
-def build_league_simulation_dataset(config: Dict[str, Any]) -> Dict[str, pd.DataFrame]:
+def build_league_simulation_dataset(
+    config: Dict[str, Any], scenario: str = SCENARIO_WITH_INJURIES
+) -> Dict[str, pd.DataFrame]:
     """
     Punto de entrada: lee league_rosters.csv y league_player*_stats.csv
     (generados por data_pipeline.py), proyecta los 30 equipos, simula la
@@ -995,9 +1081,17 @@ def build_league_simulation_dataset(config: Dict[str, Any]) -> Dict[str, pd.Data
     - data/processed/league_regular_season_summary.csv (una fila por equipo)
     - data/processed/league_playoff_summary.csv (una fila por equipo: %
       de veces que hace playoffs / ronda alcanzada / campeonato)
+
+    `scenario` (`SCENARIO_WITH_INJURIES` por defecto, o
+    `SCENARIO_NO_INJURIES`) decide si se sortean ausencias por lesión --
+    ver `_apply_scenario`. Los 3 CSV de salida llevan el sufijo
+    correspondiente (`_scenario_suffix`); con el escenario por defecto
+    los nombres son EXACTAMENTE los de siempre, sin sufijo.
     """
     paths = get_paths(config)
+    suffix = _scenario_suffix(scenario)
     team_ids, team_abbrev_by_id, team_conference, team_projections = load_and_project_all_teams(config)
+    team_projections = _apply_scenario(team_projections, scenario)
 
     games_per_season_for_players = config["simulation"]["games_per_season"]
     player_projection_rows = []
@@ -1028,7 +1122,7 @@ def build_league_simulation_dataset(config: Dict[str, Any]) -> Dict[str, pd.Data
             player_projections_df["FG3M_projected"] / player_projections_df["FG3A_projected"] * 100
         ).round(1)
 
-    player_projections_path = paths["processed"] / "league_player_projections.csv"
+    player_projections_path = paths["processed"] / f"league_player_projections{suffix}.csv"
     player_projections_df.to_csv(player_projections_path, index=False)
     print(f"Guardado: {player_projections_path} ({len(player_projections_df)} jugadores)")
 
@@ -1087,7 +1181,7 @@ def build_league_simulation_dataset(config: Dict[str, Any]) -> Dict[str, pd.Data
         for team_id in team_ids
     ]
     regular_season_df = pd.DataFrame(regular_season_rows).sort_values("wins_mean", ascending=False)
-    regular_out = paths["processed"] / "league_regular_season_summary.csv"
+    regular_out = paths["processed"] / f"league_regular_season_summary{suffix}.csv"
     regular_season_df.to_csv(regular_out, index=False)
     print(f"Guardado: {regular_out} ({len(regular_season_df)} equipos)")
 
@@ -1136,7 +1230,7 @@ def build_league_simulation_dataset(config: Dict[str, Any]) -> Dict[str, pd.Data
         for tid in team_ids
     ]
     playoff_df = pd.DataFrame(playoff_rows).sort_values("championship_pct", ascending=False)
-    playoff_out = paths["processed"] / "league_playoff_summary.csv"
+    playoff_out = paths["processed"] / f"league_playoff_summary{suffix}.csv"
     playoff_df.to_csv(playoff_out, index=False)
     print(f"Guardado: {playoff_out} ({len(playoff_df)} equipos, {n_playoff_seasons} temporadas de playoffs simuladas)")
 

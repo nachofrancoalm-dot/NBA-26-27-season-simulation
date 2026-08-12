@@ -192,11 +192,29 @@ monte_carlo:
   game_variance_std: 3.0
   # Calibrado empíricamente sobre los 480 casos del backtest sweep
   # (ver docstring de src/simulation.py). NO volver a 1.0 sin re-calibrar.
-  # 0.21 corresponde a la métrica de impacto COMPUESTA (advanced_impact);
-  # con `advanced_impact: {enabled: false}` el valor correcto es 0.29.
-  game_score_to_net_rating_scale: 0.21
+  # Corresponde a la métrica de impacto COMPUESTA (advanced_impact); con
+  # `advanced_impact: {enabled: false}` el valor correcto es 0.29.
+  # Re-calibrado de 0.21 a 0.172 vía scripts/experiments/bayesian_calibration.py
+  # (modelo bayesiano jerárquico, validado leave-one-season-out -- ver el
+  # docstring de DEFAULT_MONTE_CARLO_CONFIG en src/simulation.py).
+  game_score_to_net_rating_scale: 0.172
   opponent_strength_scale: 20.0
   outcome_variance_scale: 12.0
+  # Incertidumbre de calidad de equipo (puntos de diferencial, un valor
+  # por temporada simulada -- ver simulation.sample_team_quality_noise).
+  # Calibrado vía scripts/experiments/team_quality_uncertainty.py: barrido
+  # sobre los 480 casos del backtest sweep, con n_seasons reducido
+  # (1000), buscando el valor que deja el ~80% de los resultados reales
+  # dentro de la banda P10-P90 simulada (el 61.25% que había con std=0
+  # es un síntoma real que reportó el usuario -- demasiados casos caían
+  # en los percentiles extremos). std=5.0 da 80.2%, estable por temporada
+  # (66.7%-93.3% en las 16 temporadas, dentro del ruido esperado con 30
+  # casos/temporada). NO mueve wins_mean (ruido de media cero, ver test
+  # de regresión en tests/test_simulation.py) -- arregla la anchura de la
+  # banda de incertidumbre, NO la separación entre las victorias medias
+  # de distintos equipos (eso se investigó y se descartó por separado en
+  # scripts/experiments/aging_curve_shrinkage.py).
+  team_quality_uncertainty_std: 5.0
 # Métrica de impacto compuesta: Game Score de caja + ajuste por
 # NET_RATING (src/advanced_impact.py). Opcional -- si se omite se usan los
 # valores de DEFAULT_ADVANCED_IMPACT_CONFIG. Requiere

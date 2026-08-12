@@ -1,0 +1,55 @@
+// api.js -- fetch wrapper compartido por todas las vistas.
+
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function request(path, options = {}) {
+  const response = await fetch(`/api${path}`, options);
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail || detail;
+    } catch (_) {
+      // sin cuerpo JSON -- nos quedamos con statusText
+    }
+    throw new ApiError(detail, response.status);
+  }
+  return response.json();
+}
+
+export const api = {
+  status: () => request("/status"),
+  roster: (mode) => request(`/roster?mode=${mode}`),
+  simulation: () => request("/simulation"),
+  simulationNoInjuries: () => request("/simulation/no-injuries", { method: "POST" }),
+  simulationSeasonLog: () => request("/simulation/season-log", { method: "POST" }),
+  synergy: () => request("/synergy"),
+  backtest: () => request("/backtest"),
+  backtestSweep: () => request("/backtest/sweep"),
+
+  leagueStandings: (scenario = "with_injuries") => request(`/league/standings?scenario=${scenario}`),
+  leaguePlayoffs: (scenario = "with_injuries") => request(`/league/playoffs?scenario=${scenario}`),
+  leagueTeams: (scenario = "with_injuries") => request(`/league/teams?scenario=${scenario}`),
+  leagueTeam: (abbreviation, mode, scenario = "with_injuries") =>
+    request(`/league/team/${abbreviation}?mode=${mode}&scenario=${scenario}`),
+  leagueBracket: (scenario = "with_injuries") => request(`/league/bracket?scenario=${scenario}`, { method: "POST" }),
+  leagueSimulate: (scenario) => request(`/league/simulate?scenario=${scenario}`, { method: "POST" }),
+
+  awards: (scenario = "with_injuries") => request(`/awards?scenario=${scenario}`),
+  champions: () => request("/champions"),
+
+  player: (playerId) => request(`/player/${playerId}`),
+
+  explainerContext: () => request("/explainer/context"),
+  explainerAsk: (question) =>
+    request("/explainer/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    }),
+};

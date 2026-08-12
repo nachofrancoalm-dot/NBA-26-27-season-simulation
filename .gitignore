@@ -5,5 +5,7 @@ __pycache__/
 data/raw/*.csv
 data/raw/**/*.csv
 data/processed/*.csv
+data/processed/*.json
+data/processed/*.nc
 .env
 CLAUDE.md

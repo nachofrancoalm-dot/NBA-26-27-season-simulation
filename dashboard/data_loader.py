@@ -258,6 +258,37 @@ def _apply_simulated_games_and_minutes(
     falte `risk_score` o `minutes_projection` se conserva el valor
     histórico de esa fila en vez de dejarlo en blanco -- degradar así es
     más útil que perder el dato por completo.
+
+    También escala los TOTALES de temporada (columnas `TOTAL_STATS`:
+    PTS_projected, REB_projected...) por el mismo factor de
+    disponibilidad `(1 - risk_score)` -- BUG REAL reportado por el
+    usuario: al cambiar el escenario de liga "con" / "sin lesiones" solo
+    se movían GP y MPG, los puntos/rebotes/asistencias totales quedaban
+    igual, como si jugar menos partidos no costara nada de producción.
+    Las columnas PER_GAME_STATS (PPG/RPG/...) se dejan SIN escalar a
+    propósito -- representan el ritmo del jugador cuando SÍ juega (igual
+    que un PPG real de la NBA no baja porque un jugador se pierda
+    partidos), y de hecho la relación Total = PPG × GP se mantiene
+    exacta con este diseño (PTS_projected × disponibilidad =
+    PTS_projected/games_per_season × (games_per_season ×
+    disponibilidad) = PPG constante × GP simulado). Mismo factor exacto
+    que ya usa `webapp/routers/players.py::_projected_season_row` para
+    la fila de proyección del popup de jugador -- no una fórmula nueva.
+
+    LIMITACIÓN CONOCIDA (no arreglada a propósito, preguntado al
+    usuario): PPG/RPG/APG es un punto fijo (ritmo per-36 × minutes_projection,
+    NINGUNA de las dos depende de risk_score), así que es
+    matemáticamente IDÉNTICO en los escenarios "con" y "sin lesiones" --
+    no hay ruido partido a partido simulado a nivel de jugador en esta
+    tabla. Esto ignora un efecto real: jugar los 82 partidos sin
+    descanso (escenario "sin lesiones") acumula fatiga y podría reducir
+    el ritmo real, mientras que un jugador que se pierde partidos por
+    lesión llega más descansado a los que sí juega. El proyecto ya mide
+    ese desgaste (`fatigue_score`, ver fatigue_accumulation.py) pero hoy
+    solo alimenta el resultado ganar/perder a nivel de EQUIPO, nunca se
+    conecta a estos promedios individuales por partido -- conectarlo
+    exigiría decidir la magnitud del efecto y recalibrarlo, no es un
+    ajuste trivial.
     """
     if games_per_season is None or "risk_score" not in overview.columns:
         return overview
@@ -280,6 +311,11 @@ def _apply_simulated_games_and_minutes(
             overview["minutes_projection"].fillna(0).to_numpy(), overview["risk_score"].fillna(0).to_numpy()
         )
         overview.loc[has_minutes, "minutes_per_game_last_season"] = simulated_mpg[has_minutes.to_numpy()]
+
+    availability = (1 - overview["risk_score"].fillna(0)).to_numpy()
+    for total_col in TOTAL_STATS:
+        if total_col in overview.columns:
+            overview.loc[has_risk, total_col] = overview.loc[has_risk, total_col] * availability[has_risk.to_numpy()]
 
     return overview
 
@@ -334,10 +370,18 @@ def select_roster_view(
     return pd.concat(parts, axis=1)
 
 
-def load_league_player_projections(config: Dict[str, Any]) -> Optional[pd.DataFrame]:
-    """Proyecciones por jugador de los 30 equipos (league_simulation.py). None si no se ha corrido."""
+def load_league_player_projections(config: Dict[str, Any], scenario: str = "with_injuries") -> Optional[pd.DataFrame]:
+    """
+    Proyecciones por jugador de los 30 equipos (league_simulation.py).
+    None si no se ha corrido. `scenario="no_injuries"` lee la variante
+    sin riesgo de lesión (ver league_simulation._apply_scenario) --
+    default sin cambios, mismo archivo de siempre, así que Streamlit
+    sigue funcionando igual sin tocar sus llamadas.
+    """
+    from league_simulation import _scenario_suffix
+
     paths = get_paths(config)
-    return _read_csv_if_exists(paths["processed"] / "league_player_projections.csv")
+    return _read_csv_if_exists(paths["processed"] / f"league_player_projections{_scenario_suffix(scenario)}.csv")
 
 
 def load_simulation_results(config: Dict[str, Any]) -> Optional[pd.DataFrame]:
@@ -424,14 +468,18 @@ def load_lineup_synergy_pairs(config: Dict[str, Any]) -> Optional[pd.DataFrame]:
     return _read_csv_if_exists(paths["processed"] / "lineup_synergy_pairs.csv")
 
 
-def load_league_regular_season_summary(config: Dict[str, Any]) -> Optional[pd.DataFrame]:
+def load_league_regular_season_summary(config: Dict[str, Any], scenario: str = "with_injuries") -> Optional[pd.DataFrame]:
+    from league_simulation import _scenario_suffix
+
     paths = get_paths(config)
-    return _read_csv_if_exists(paths["processed"] / "league_regular_season_summary.csv")
+    return _read_csv_if_exists(paths["processed"] / f"league_regular_season_summary{_scenario_suffix(scenario)}.csv")
 
 
-def load_league_playoff_summary(config: Dict[str, Any]) -> Optional[pd.DataFrame]:
+def load_league_playoff_summary(config: Dict[str, Any], scenario: str = "with_injuries") -> Optional[pd.DataFrame]:
+    from league_simulation import _scenario_suffix
+
     paths = get_paths(config)
-    return _read_csv_if_exists(paths["processed"] / "league_playoff_summary.csv")
+    return _read_csv_if_exists(paths["processed"] / f"league_playoff_summary{_scenario_suffix(scenario)}.csv")
 
 
 # Estado real de playoffs NBA aplicado al seed simulado (1-6 clasifica
@@ -514,7 +562,9 @@ def _win_loss_record(wins_mean: float, games_per_season: int) -> str:
     return f"{wins}-{games_per_season - wins}"
 
 
-def compute_awards_summary(config: Dict[str, Any], top_n: int = 5) -> Optional[Dict[str, Any]]:
+def compute_awards_summary(
+    config: Dict[str, Any], top_n: int = 5, scenario: str = "with_injuries"
+) -> Optional[Dict[str, Any]]:
     """
     Calcula los premios individuales heurísticos (ver src/awards_projection.py:
     MVP, DPOY, 6MOY, ROY, MIP y, si hay datos de liga completa, COY) sobre
@@ -523,13 +573,20 @@ def compute_awards_summary(config: Dict[str, Any], top_n: int = 5) -> Optional[D
     contra toda la NBA), si no sobre el roster propio
     (aging_curve_projection.csv). None si ni siquiera el roster propio
     está disponible todavía.
+
+    `scenario="no_injuries"` calcula los premios sobre la variante de
+    liga sin riesgo de lesión -- afecta directamente la elegibilidad de
+    All-NBA/All-Defensive (`games_played_expected >= 65`, ver
+    src/awards_projection.py), que con `risk_score=0` deja de excluir a
+    jugadores propensos a lesión. No afecta al scope "own" (roster
+    propio), que no depende de la liga completa.
     """
     import awards_projection as ap
 
     paths = get_paths(config)
     games_per_season = config["simulation"]["games_per_season"]
 
-    league_players = load_league_player_projections(config)
+    league_players = load_league_player_projections(config, scenario=scenario)
     team_win_pct: Optional[Dict[Any, float]] = None
     team_record: Optional[Dict[Any, str]] = None
     coy: Optional[pd.DataFrame] = None
@@ -538,7 +595,7 @@ def compute_awards_summary(config: Dict[str, Any], top_n: int = 5) -> Optional[D
         scope = "league"
         player_df = league_players
         career = _read_csv_if_exists(paths["processed"] / "league_player_career_stats.csv")
-        regular = load_league_regular_season_summary(config)
+        regular = load_league_regular_season_summary(config, scenario=scenario)
 
         if regular is not None:
             wins_by_team = (regular.set_index("team_abbreviation")["wins_mean"] / games_per_season).to_dict()
@@ -628,7 +685,9 @@ def compute_awards_summary(config: Dict[str, Any], top_n: int = 5) -> Optional[D
     }
 
 
-def run_single_bracket_simulation(config: Dict[str, Any], random_seed: Optional[int] = None) -> Dict[str, Any]:
+def run_single_bracket_simulation(
+    config: Dict[str, Any], random_seed: Optional[int] = None, scenario: str = "with_injuries"
+) -> Dict[str, Any]:
     """
     ÚNICA excepción a "esta capa solo lee CSV": simula un bracket de
     playoffs concreto (league_simulation.simulate_single_bracket) para el
@@ -636,11 +695,12 @@ def run_single_bracket_simulation(config: Dict[str, Any], random_seed: Optional[
     la temporada regular -- reutiliza league_regular_season_summary.csv
     (ya calculado) para el seeding y proyecta los 30 equipos desde los
     CSV de league_rosters/league_player_career_stats ya cacheados, así
-    que es rápido (segundos, no minutos).
+    que es rápido (segundos, no minutos). `scenario="no_injuries"` juega
+    el bracket con el roster de cada equipo sano.
     """
     from league_simulation import simulate_single_bracket
 
-    return simulate_single_bracket(config, random_seed=random_seed)
+    return simulate_single_bracket(config, random_seed=random_seed, scenario=scenario)
 
 
 def run_single_season_player_log_simulation(

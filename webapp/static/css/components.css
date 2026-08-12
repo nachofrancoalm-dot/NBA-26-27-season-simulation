@@ -1,0 +1,670 @@
+/* components.css -- cards, tablas, stat tiles, badges, gráficos, estados vacíos */
+
+.card {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  font-size: 1.1rem;
+  margin: 0 0 4px;
+}
+
+.card h3 {
+  font-size: 0.95rem;
+  margin: 24px 0 10px;
+}
+
+.card > .caption,
+.caption {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+/* --- Team identity + badges (sin logos redistribuidos, ver README) --- */
+
+.team-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.team-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-blue), var(--brand-red));
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.team-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.brand-mark {
+  height: 22px;
+  opacity: 0.85;
+}
+
+/* --- Stat tiles --- */
+
+.stat-tile {
+  background: var(--surface-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.stat-tile .label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px;
+}
+
+.stat-tile .value {
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-variant-numeric: proportional-nums;
+}
+
+/* --- Rail de equipos (explorador de Liga y Playoffs) --- */
+
+.team-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 480px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.team-rail-item {
+  appearance: none;
+  border: none;
+  background: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.team-rail-item:hover {
+  background: var(--surface-card-alt);
+  color: var(--text-primary);
+}
+
+.team-rail-item[aria-current="true"] {
+  background: color-mix(in srgb, var(--brand-red) 18%, var(--surface-card-alt));
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* --- Toggle (Totales / Por partido) --- */
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  appearance: none;
+  border: none;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--accent-450);
+  color: #fff;
+}
+
+/* --- Tables --- */
+
+/* Tablas grandes (liga de 30 equipos, 450+ casos de backtest sweep...) se
+   quedaban con su altura completa, alargando la página hasta hacerla
+   inmanejable. Se limita a una ventana con scroll propio y cabecera
+   fija -- una tabla pequeña simplemente no llega a activar el scroll. */
+.table-wrap {
+  overflow: auto;
+  max-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* Panel "hundido" más oscuro que la card que lo contiene -- separa
+     visualmente la tabla del resto de la sección en vez de fundirse con
+     el mismo tono de fondo. */
+  background: color-mix(in srgb, var(--surface-page) 45%, var(--surface-card));
+}
+
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--gridline);
+  white-space: nowrap;
+}
+
+.data-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-card-alt);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  z-index: 1;
+}
+
+.data-table th .info-icon {
+  cursor: help;
+  color: var(--text-muted);
+  margin-left: 3px;
+}
+
+/* Zebra striping -- sin esto, filas contiguas eran casi indistinguibles
+   del fondo de la card (mismo tono), dificultando leer una fila de punta
+   a punta en tablas anchas. */
+.data-table tbody tr:nth-child(even) {
+  background: var(--surface-card-alt);
+}
+
+.data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent-450) 14%, transparent);
+}
+
+/* Fila de proyección (temporada simulada) en la trayectoria del popup de
+   jugador -- se distingue del histórico real, nunca se confunde con un
+   dato ya ocurrido. */
+.data-table tbody tr.row-projection {
+  background: color-mix(in srgb, var(--brand-red) 16%, transparent);
+  font-weight: 600;
+}
+
+.data-table tbody tr.row-projection:hover {
+  background: color-mix(in srgb, var(--brand-red) 24%, transparent);
+}
+
+/* --- Glossary expander --- */
+
+.glossary {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+.glossary summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.glossary-body {
+  padding: 0 14px 14px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.glossary-body b {
+  color: var(--text-primary);
+}
+
+/* --- Banners de estado (success/warning) --- */
+
+.banner {
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+}
+
+.banner.success {
+  background: color-mix(in srgb, var(--status-good) 12%, var(--surface-card));
+  border-color: color-mix(in srgb, var(--status-good) 40%, var(--border));
+}
+
+.banner.warning {
+  background: color-mix(in srgb, var(--status-warning) 12%, var(--surface-card));
+  border-color: color-mix(in srgb, var(--status-warning) 40%, var(--border));
+}
+
+/* --- Empty / error state --- */
+
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.empty-state code {
+  background: var(--surface-page);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.82em;
+}
+
+/* --- Buttons --- */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--brand-red), var(--brand-red-dark));
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  filter: brightness(1.12);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* --- Chat (Explicador IA) --- */
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 4px 2px;
+  margin: 14px 0;
+}
+
+.chat-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.chat-bubble.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--brand-blue), var(--accent-450));
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.assistant {
+  align-self: flex-start;
+  background: var(--surface-card-alt);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input-row input {
+  background: var(--surface-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.chat-input-row input:focus {
+  outline: 2px solid var(--accent-450);
+  outline-offset: 1px;
+}
+
+/* --- Charts --- */
+
+.chart-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--text-primary);
+  color: var(--surface-card);
+  font-size: 0.78rem;
+  padding: 6px 9px;
+  border-radius: 6px;
+  transform: translate(-50%, -120%);
+  white-space: nowrap;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.08s ease;
+}
+
+.chart-tooltip.visible {
+  opacity: 1;
+}
+
+svg.chart text {
+  fill: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 10px;
+}
+
+svg.chart .axis-line {
+  stroke: var(--baseline);
+  stroke-width: 1;
+}
+
+svg.chart .gridline {
+  stroke: var(--gridline);
+  stroke-width: 1;
+}
+
+/* --- Celda de tabla con doble clic (popup de jugador) --- */
+
+.cell-clickable {
+  cursor: pointer;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+}
+
+.cell-clickable:hover {
+  text-decoration-color: var(--brand-red);
+}
+
+/* --- Popup de detalle (jugador o equipo) -- chrome compartido --- */
+
+.detail-modal {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  padding: 0;
+  width: min(680px, 92vw);
+  max-height: 85vh;
+}
+
+.detail-modal::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.detail-modal-body {
+  padding: 24px;
+  position: relative;
+  overflow-y: auto;
+  max-height: 85vh;
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-card-alt);
+  color: var(--text-secondary);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.detail-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 4px 36px 18px 0;
+}
+
+.player-photo {
+  background: linear-gradient(135deg, var(--surface-card-alt), var(--surface-card));
+  border: 2px solid var(--border);
+}
+
+.bio-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.bio-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.85rem;
+}
+
+.bio-fact-label {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.quality-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.quality-chip {
+  background: color-mix(in srgb, var(--brand-blue) 30%, var(--surface-card-alt));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-badge);
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+
+/* --- Bracket de playoffs (árbol real, no una lista de resultados) ---
+   Geometría exacta con CSS Grid: cada conferencia es una rejilla de 4
+   filas (una por partido de Ronda 1) x 5 columnas (Ronda 1 / conector /
+   Semis / conector / Final de conf.), con altura de fila fija
+   (--leaf-h). Un partido de ronda N ocupa el rango de filas exacto de
+   los dos partidos de la ronda N-1 que lo alimentan y se centra ahí
+   (align-self: center) -- eso ubica su centro vertical exactamente en
+   el punto medio de sus dos "padres", sin aproximaciones de flexbox.
+   El conector de esa misma columna usa la fórmula
+   margin = (leafCount * leaf-h + (leafCount-1) * row-gap) / 2, que se
+   deduce de esa misma geometría, para que sus bordes toquen justo esos
+   dos centros -- ver el comentario de bracketConnector() en league.js
+   para la derivación completa. Oeste fluye izquierda->derecha, Este es
+   la misma rejilla en espejo (orden de columnas invertido en JS), así
+   ambas confluyen hacia el campeón central, como en un bracket real de
+   TV. */
+
+.bracket-scroll {
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.bracket-layout {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: max-content;
+  padding: 12px 4px 4px;
+}
+
+.bracket-conf {
+  --leaf-h: 64px;
+  --row-gap: 10px;
+  display: grid;
+  grid-template-rows: repeat(4, var(--leaf-h));
+  row-gap: var(--row-gap);
+  grid-template-columns: 148px 24px 148px 24px 148px;
+}
+
+.bracket-labels {
+  display: grid;
+  grid-template-columns: 148px 24px 148px 24px 148px;
+  margin-bottom: 8px;
+}
+
+.bracket-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.bracket-match {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-card-alt);
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  align-self: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.bracket-team {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.bracket-team .seed {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  width: 13px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.bracket-team .abbr {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-team.winner {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.bracket-team.winner .team-badge {
+  box-shadow: 0 0 0 2px var(--brand-red);
+}
+
+.bracket-connector {
+  border-top: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+}
+
+.bracket-connector.side-west {
+  border-right: 2px solid var(--border);
+}
+
+.bracket-connector.side-east {
+  border-left: 2px solid var(--border);
+}
+
+.bracket-connector.depth-1 {
+  margin: calc(var(--leaf-h) / 2) 0;
+}
+
+.bracket-connector.depth-2 {
+  margin: calc(var(--leaf-h) + var(--row-gap) / 2) 0;
+}
+
+.bracket-final-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 130px;
+  text-align: center;
+  position: relative;
+}
+
+.bracket-trophy {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+/* --- Play-in (resumen compacto debajo del bracket principal) --- */
+
+.bracket-playin-games {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.bracket-playin-game {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--surface-card-alt);
+  min-width: 120px;
+}

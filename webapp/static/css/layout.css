@@ -1,0 +1,131 @@
+/* layout.css -- estructura de página: una sola columna, tabs, grid de contenido */
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 36px 64px;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.topbar .team-identity {
+  gap: 14px;
+}
+
+.topbar h1 {
+  font-size: 1.4rem;
+  margin: 0 0 2px;
+}
+
+.topbar .subtitle {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.tabs,
+.subtabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.subtabs {
+  margin-top: -4px;
+}
+
+.tab-button {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+}
+
+.tab-button:hover {
+  color: var(--text-primary);
+  background: var(--surface-card);
+}
+
+.tab-button[aria-selected="true"] {
+  color: var(--text-primary);
+  border-bottom-color: var(--brand-red);
+  font-weight: 600;
+}
+
+.subtabs .tab-button {
+  font-size: 0.85rem;
+  padding: 8px 12px;
+}
+
+.tab-panel[hidden],
+.subtab-panel[hidden] {
+  display: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Sin esto, un hijo de grid no se encoge por debajo del ancho de su
+   contenido (min-width: auto por defecto) -- una tabla ancha dentro de
+   una columna 1fr la empuja más allá del viewport en vez de activar el
+   scroll horizontal de .table-wrap. Bug real: pestaña Premios con tablas
+   de muchas columnas desbordando el layout. */
+.grid-2 > * {
+  min-width: 0;
+}
+
+/* Explorador de equipo (Liga y Playoffs): rail lateral de equipos +
+ * detalle, en vez de un <select> nativo. */
+.team-explorer {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 16px;
+}
+
+/* Igual que .grid-2 > * -- sin min-width: 0 el panel de detalle (stat
+   tiles + tabla ancha) no se encoge por debajo de su contenido y empuja
+   el layout más allá del viewport. Bug real reportado: KPIs y tabla del
+   explorador de equipo saliéndose del marco horizontalmente. */
+.team-explorer > * {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .main {
+    padding: 16px 16px 48px;
+  }
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .team-explorer {
+    grid-template-columns: 1fr;
+  }
+}

@@ -27,6 +27,7 @@ código.
 - [x] Motor de simulación Monte Carlo (`src/simulation.py`) — ver detalle abajo
 - [x] Backtesting contra comparables históricos (`src/backtesting.py`) — ver detalle abajo
 - [x] Dashboard interactivo (`dashboard/app.py`, Streamlit) — ver detalle abajo
+- [x] Frontend web propio (`webapp/`, FastAPI + HTML/CSS/JS), en paralelo a Streamlit — ver detalle abajo
 - [x] Simulación de liga completa (30 equipos reales) + playoffs (`src/league_simulation.py`) — ver detalle abajo
 
 ## Roadmap: capa de contexto de temporada (`src/context/`)
@@ -1190,6 +1191,36 @@ vs. 23 PPG es una diferencia real a lo largo de una temporada).
 
 El tema visual (color de acento) está en `.streamlit/config.toml`.
 
+## Frontend web (`webapp/`)
+
+Interfaz alternativa en HTML/CSS/JS puro (sin frameworks ni dependencias
+de terceros) para un acabado visual más cuidado, en paralelo al dashboard
+de Streamlit — **no lo reemplaza**. Backend FastAPI que reutiliza
+`dashboard/data_loader.py` (y, en Liga NBA, `src/awards_projection.py` /
+`src/champion_profiles.py` / `src/llm_explainer.py`) sin duplicar ninguna
+transformación de datos.
+
+```bash
+uvicorn webapp.main:app --reload
+# abre http://localhost:8000
+```
+
+Tres pestañas de primer nivel (sin la de "Resumen" de Streamlit —
+duplicaba exactamente los mismos 4 datos ya visibles en Simulación, sin
+aportar nada propio): 🏀 Mi equipo (Roster, Simulación Monte Carlo con
+los botones en vivo, Sinergia de alineación, Backtesting — incluido el
+sweep de 450+ casos), 🏆 Liga NBA (Liga y Playoffs con explorador de
+equipo, selector de escenario con/sin lesiones y simulador de bracket
+con árbol visual, Premios individuales, Campeones reales) y 🤖
+Explicador (IA, chat contra Groq). Los gráficos (histogramas, línea de
+Net Rating,
+scatter de calibración) son SVG hecho a mano, sin librería externa. Los
+logos de equipo/NBA se cargan en vivo desde `cdn.nba.com` (nunca se
+guardan en el repo, que es público) y caen a una insignia con las
+iniciales del equipo si la imagen no carga. Tema oscuro fijo con un
+degradado de marca (azul marino → negro → rojo muy oscuro) en
+`webapp/static/css/tokens.css`. Tests en `tests/test_webapp_api.py`.
+
 ## Instalación
 
 ```bash
@@ -1281,6 +1312,7 @@ nba-superteam-sim/
 │   ├── test_league_simulation.py
 │   ├── test_backtesting.py
 │   ├── test_dashboard_data_loader.py
+│   ├── test_webapp_api.py
 │   ├── test_injury_model.py
 │   ├── test_fatigue_accumulation.py
 │   ├── test_schedule_strength.py
@@ -1288,11 +1320,23 @@ nba-superteam-sim/
 │   ├── test_opponent_weighting.py
 │   └── test_conference_adjustment.py
 ├── scripts/
-│   └── resolve_player_ids.py       # resuelve player_id sin red
+│   ├── resolve_player_ids.py       # resuelve player_id sin red
+│   └── experiments/                # investigaciones exploratorias, FUERA del pipeline
+│       ├── requirements-experiments.txt  # pymc/arviz/statsmodels -- no en requirements.txt
+│       ├── bayesian_calibration.py       # recalibración bayesiana de game_score_to_net_rating_scale
+│       ├── aging_curve_shrinkage.py      # descartado: el encogimiento no explica la compresión de talento
+│       ├── team_quality_uncertainty.py   # calibración de la incertidumbre de calidad de equipo
+│       ├── hustle_stats_signal.py        # descartado: hustle stats no aportan señal
+│       └── pt_defend_signal.py           # señal real pero modesta, no integrada en producción
 ├── notebooks/                      # exploración y prototipado de modelos
 ├── dashboard/
 │   ├── app.py                      # dashboard Streamlit (4 pestañas)
 │   └── data_loader.py              # carga/combinación de CSV, testeable
+├── webapp/                         # frontend HTML/CSS/JS (Fase 1, en paralelo a Streamlit)
+│   ├── main.py                     # FastAPI: monta routers + sirve static/
+│   ├── serializers.py              # DataFrame -> JSON (NaN/NaT -> None)
+│   ├── routers/                    # /api/status, /api/roster, /api/simulation, ...
+│   └── static/                     # index.html, css/, js/ (sin dependencias externas)
 └── requirements.txt
 ```
 

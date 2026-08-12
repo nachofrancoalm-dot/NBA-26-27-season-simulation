@@ -258,6 +258,83 @@ def fetch_league_advanced_player_stats(
     return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
 
 
+def fetch_league_hustle_stats(
+    season: str,
+    raw_dir: Path,
+    force_refresh: bool = False,
+) -> pd.DataFrame:
+    """
+    Hustle stats de todos los jugadores de la liga en una temporada
+    (`leaguehustlestatsplayer`): CONTESTED_SHOTS, DEFLECTIONS,
+    CHARGES_DRAWN, SCREEN_ASSISTS, LOOSE_BALLS_RECOVERED, BOX_OUTS.
+    Misma ingesta barata que fetch_league_advanced_player_stats -- UNA
+    llamada por temporada, liga entera.
+
+    Motivación: investigar si aportan señal de "defensa/juego en equipo
+    sin balón" que ni Game Score (puramente ofensivo, ver
+    aging_curve.py) ni NET_RATING/PIE (ver advanced_impact.py) capturan
+    -- ver scripts/experiments/hustle_stats_signal.py para la
+    investigación en sí; esta función SOLO ingiere, no decide si el dato
+    aporta.
+
+    LIMITACIÓN DE DISPONIBILIDAD real (no un bug): la NBA solo trackea
+    hustle stats desde la temporada 2015-16 (SportVU/Second Spectrum).
+    Temporadas anteriores devuelven un DataFrame VACÍO (no una excepción)
+    -- `build_league_hustle_stats_dataset` lo detecta y salta esa
+    temporada sin abortar el resto.
+    """
+    from nba_api.stats.endpoints import leaguehustlestatsplayer
+
+    cache_path = raw_dir / "league_hustle_stats" / f"{season}.csv"
+
+    def _fetch():
+        stats = leaguehustlestatsplayer.LeagueHustleStatsPlayer(season=season, per_mode_time="PerGame")
+        return stats.get_data_frames()[0]
+
+    return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
+
+
+def fetch_league_pt_defend_stats(
+    season: str,
+    raw_dir: Path,
+    force_refresh: bool = False,
+) -> pd.DataFrame:
+    """
+    Defensa por tracking (`leaguedashptdefend`, Second Spectrum):
+    D_FG_PCT (% de tiro REAL del rival cuando este jugador es el
+    defensor más cercano), NORMAL_FG_PCT (% de tiro normal de esos
+    mismos rivales) y PCT_PLUSMINUS = D_FG_PCT - NORMAL_FG_PCT --
+    negativo significa que el rival tira PEOR de lo normal defendido por
+    este jugador, la señal de impacto defensivo más directa que expone
+    nba_api (más que los hustle stats de fetch_league_hustle_stats, que
+    miden actividad/esfuerzo, no si ese esfuerzo de verdad impide
+    anotar -- ver scripts/experiments/hustle_stats_signal.py, resultado
+    negativo, y scripts/experiments/pt_defend_signal.py para esta
+    investigación).
+
+    UNA llamada por temporada, liga entera -- misma ingesta barata que
+    fetch_league_advanced_player_stats/fetch_league_hustle_stats.
+    `CLOSE_DEF_PERSON_ID` es el player_id del defensor (no `PLAYER_ID`,
+    nombre de columna distinto de cualquier otro endpoint de este
+    proyecto -- OJO al combinar).
+
+    LIMITACIÓN DE DISPONIBILIDAD real (no un bug): disponible desde
+    2013-14 (Second Spectrum) -- temporadas anteriores devuelven un
+    DataFrame VACÍO, no una excepción, mismo patrón que hustle stats.
+    """
+    from nba_api.stats.endpoints import leaguedashptdefend
+
+    cache_path = raw_dir / "league_pt_defend_stats" / f"{season}.csv"
+
+    def _fetch():
+        stats = leaguedashptdefend.LeagueDashPtDefend(
+            season=season, defense_category="Overall", per_mode_simple="PerGame"
+        )
+        return stats.get_data_frames()[0]
+
+    return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
+
+
 def fetch_player_common_info(
     player_id: int,
     raw_dir: Path,
@@ -790,6 +867,78 @@ def build_league_advanced_player_stats_dataset(
 
     combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     out_path = paths["processed"] / "league_advanced_player_stats.csv"
+    combined.to_csv(out_path, index=False)
+    print(f"Guardado: {out_path} ({len(combined)} filas, {len(frames)} temporadas)")
+    return combined
+
+
+def build_league_hustle_stats_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Hustle stats de jugador (ver fetch_league_hustle_stats) para las
+    mismas temporadas que resolve_advanced_stats_seasons -- reutiliza esa
+    resolución para no mantener dos listas de temporadas por separado.
+    Guarda data/processed/league_hustle_player_stats.csv.
+
+    Temporadas anteriores a 2015-16 devuelven un DataFrame VACÍO (la NBA
+    no trackeaba esto todavía) -- se saltan sin abortar el resto, mismo
+    patrón que un caso roto en _run_backtest_cases.
+    """
+    paths = get_paths(config)
+    frames = []
+    skipped_no_data = []
+    for season in tqdm(resolve_advanced_stats_seasons(config), desc="Hustle stats"):
+        try:
+            df = fetch_league_hustle_stats(season, paths["raw"], force_refresh)
+        except Exception as exc:  # noqa: BLE001 -- ver _download_*_for_cases
+            print(f"  AVISO: temporada {season} saltada ({type(exc).__name__}: {exc})")
+            continue
+        if df.empty:
+            skipped_no_data.append(season)
+            continue
+        frames.append(df.assign(season=season))
+        time.sleep(API_CALL_DELAY_SECONDS)
+
+    if skipped_no_data:
+        print(f"  Sin datos de hustle (anteriores a 2015-16): {', '.join(skipped_no_data)}")
+
+    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    out_path = paths["processed"] / "league_hustle_player_stats.csv"
+    combined.to_csv(out_path, index=False)
+    print(f"Guardado: {out_path} ({len(combined)} filas, {len(frames)} temporadas)")
+    return combined
+
+
+def build_league_pt_defend_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Defensa por tracking (ver fetch_league_pt_defend_stats) para las
+    mismas temporadas que resolve_advanced_stats_seasons. Guarda
+    data/processed/league_pt_defend_stats.csv con `CLOSE_DEF_PERSON_ID`
+    renombrado a `PLAYER_ID` (consistencia con el resto de datasets del
+    proyecto).
+
+    Temporadas anteriores a 2013-14 devuelven un DataFrame vacío (Second
+    Spectrum no trackeaba todavía) -- se saltan sin abortar el resto.
+    """
+    paths = get_paths(config)
+    frames = []
+    skipped_no_data = []
+    for season in tqdm(resolve_advanced_stats_seasons(config), desc="PT defend stats"):
+        try:
+            df = fetch_league_pt_defend_stats(season, paths["raw"], force_refresh)
+        except Exception as exc:  # noqa: BLE001 -- ver _download_*_for_cases
+            print(f"  AVISO: temporada {season} saltada ({type(exc).__name__}: {exc})")
+            continue
+        if df.empty:
+            skipped_no_data.append(season)
+            continue
+        frames.append(df.rename(columns={"CLOSE_DEF_PERSON_ID": "PLAYER_ID"}).assign(season=season))
+        time.sleep(API_CALL_DELAY_SECONDS)
+
+    if skipped_no_data:
+        print(f"  Sin datos de tracking (anteriores a 2013-14): {', '.join(skipped_no_data)}")
+
+    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    out_path = paths["processed"] / "league_pt_defend_stats.csv"
     combined.to_csv(out_path, index=False)
     print(f"Guardado: {out_path} ({len(combined)} filas, {len(frames)} temporadas)")
     return combined

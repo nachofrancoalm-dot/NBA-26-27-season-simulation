@@ -80,6 +80,42 @@ def test_simulate_league_regular_season_favors_stronger_team():
     assert wins[1].mean() > wins[2].mean()
 
 
+def test_simulate_league_regular_season_wins_mean_unaffected_by_team_quality_uncertainty():
+    """Mismo chequeo que en test_simulation.py: ruido de media cero, no
+    debe mover wins.mean() de forma perceptible -- solo ensanchar la
+    dispersión dentro de la distribución de cada equipo."""
+    team_ids = [1, 2]
+    projections = {1: _team_proj(game_score=25.0), 2: _team_proj(game_score=5.0)}
+    schedule = build_round_robin_schedule(team_ids, games_per_season=20, rng=np.random.default_rng(3))
+
+    without_noise = simulate_league_regular_season(
+        projections, schedule, n_seasons=20000, games_per_season=20,
+        mc_config=DEFAULT_MONTE_CARLO_CONFIG, random_seed=42,
+    )
+    with_noise = simulate_league_regular_season(
+        projections, schedule, n_seasons=20000, games_per_season=20,
+        mc_config={**DEFAULT_MONTE_CARLO_CONFIG, "team_quality_uncertainty_std": 4.0}, random_seed=42,
+    )
+    assert with_noise[1].mean() == pytest.approx(without_noise[1].mean(), abs=1.0)
+    assert with_noise[2].mean() == pytest.approx(without_noise[2].mean(), abs=1.0)
+
+
+def test_simulate_league_regular_season_widens_win_distribution_with_team_quality_uncertainty():
+    team_ids = [1, 2]
+    projections = {1: _team_proj(game_score=25.0), 2: _team_proj(game_score=5.0)}
+    schedule = build_round_robin_schedule(team_ids, games_per_season=20, rng=np.random.default_rng(3))
+
+    without_noise = simulate_league_regular_season(
+        projections, schedule, n_seasons=20000, games_per_season=20,
+        mc_config=DEFAULT_MONTE_CARLO_CONFIG, random_seed=42,
+    )
+    with_noise = simulate_league_regular_season(
+        projections, schedule, n_seasons=20000, games_per_season=20,
+        mc_config={**DEFAULT_MONTE_CARLO_CONFIG, "team_quality_uncertainty_std": 4.0}, random_seed=42,
+    )
+    assert with_noise[1].std() > without_noise[1].std()
+
+
 def test_simulate_playoff_game_favors_stronger_team_on_average():
     strong = _team_proj(game_score=30.0)
     weak = _team_proj(game_score=2.0)
@@ -328,6 +364,51 @@ def test_project_team_roster_normalizes_total_minutes_to_240():
     # en la dirección contraria cuando la suma bruta excede 240).
     result = project_team_roster(roster, regular, pd.DataFrame(), config)
     assert sum(result["minutes_projection"]) == pytest.approx(240.0)
+
+
+def test_project_team_roster_reads_aging_curve_config_instead_of_ignoring_it():
+    """
+    BUG REAL: project_team_roster() llamaba a project_player_season() sin
+    pasar n_seasons/half_life_seasons, así que ignoraba
+    config["aging_curve"] por completo y usaba siempre los defaults del
+    módulo -- solo build_aging_projection_dataset() (roster propio) lo
+    leía. Un jugador con una temporada vieja floja y una reciente muy
+    fuerte debe proyectar MÁS alto con n_seasons_lookback=1 (solo cuenta
+    la reciente) que con n_seasons_lookback=2 (la vieja floja diluye la
+    media) -- si el config no se lee, el resultado sería idéntico.
+    """
+    roster = pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "Breakout Player"}])
+    regular = pd.DataFrame(
+        [
+            {  # temporada vieja, floja
+                "PLAYER_ID": 1, "SEASON_ID": "2024-25", "PLAYER_AGE": 26, "GP": 80, "MIN": 2400,
+                "PTS": 800, "AST": 0, "REB": 0, "STL": 0, "BLK": 0, "TOV": 0,
+                "FG3M": 0, "FG3A": 0, "OREB": 0, "DREB": 0, "FGM": 0, "FGA": 0,
+                "FTM": 0, "FTA": 0, "PF": 0,
+            },
+            {  # temporada más reciente, mucho mejor (breakout real)
+                "PLAYER_ID": 1, "SEASON_ID": "2025-26", "PLAYER_AGE": 27, "GP": 80, "MIN": 2400,
+                "PTS": 2000, "AST": 0, "REB": 0, "STL": 0, "BLK": 0, "TOV": 0,
+                "FG3M": 0, "FG3A": 0, "OREB": 0, "DREB": 0, "FGM": 0, "FGA": 0,
+                "FTM": 0, "FTA": 0, "PF": 0,
+            },
+        ]
+    )
+    # season == la más reciente de los datos -> sin ajuste de edad
+    # (target_age == current_age), aísla el efecto del recency-weighting.
+    base_config = {"team": {"season": "2025-26"}, "simulation": {"games_per_season": 82}, "lineup_synergy": {}}
+
+    only_recent = project_team_roster(
+        roster, regular, pd.DataFrame(),
+        {**base_config, "aging_curve": {"n_seasons_lookback": 1}},
+    )
+    diluted_by_old_season = project_team_roster(
+        roster, regular, pd.DataFrame(),
+        # half_life muy grande -> pesos casi planos entre las 2 temporadas
+        {**base_config, "aging_curve": {"n_seasons_lookback": 2, "recency_half_life_seasons": 100.0}},
+    )
+
+    assert only_recent["game_score_per36"][0] > diluted_by_old_season["game_score_per36"][0]
 
 
 def _minutes_only_roster(rows):

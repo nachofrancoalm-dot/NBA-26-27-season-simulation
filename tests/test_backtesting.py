@@ -22,6 +22,7 @@ from backtesting import (  # noqa: E402
     load_league_baselines,
     filter_seasons_before,
     get_actual_season_row,
+    project_backtest_team,
     project_historical_player,
     run_backtest_case,
 )
@@ -118,6 +119,41 @@ def test_project_historical_player_only_uses_prior_seasons():
     # PTS_per36 de la temporada 2010-11 sería 3000/3000*36=36; si hubiera
     # look-ahead el game_score_per36 sería absurdamente alto.
     assert result["game_score_per36"] < 30
+
+
+def test_project_backtest_team_reads_aging_curve_config_instead_of_ignoring_it():
+    """
+    BUG REAL (mismo patrón que en league_simulation.py, ver su docstring):
+    project_backtest_team()/project_historical_player() nunca pasaban
+    n_seasons/half_life_seasons a project_player_season(), así que
+    ignoraban config["aging_curve"] por completo. Un jugador con una
+    temporada previa floja y otra más reciente (aún anterior al caso, no
+    look-ahead) mucho más fuerte debe proyectar más alto con
+    n_seasons_lookback=1 que con n_seasons_lookback=2 -- si el config no
+    se leyera, ambos saldrían idénticos.
+    """
+    case = {"name": "Test Team 2026-27", "team_id": 1610612748, "season": "2026-27"}
+    rosters = pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "Breakout Player", "AGE": 27,
+                             "comparable_name": case["name"], "season": case["season"]}])
+    player_stats = _career_seasons([
+        {"player_id": 1, "season": "2024-25", "age": 25, "pts": 800, "min": 2400},   # vieja, floja
+        {"player_id": 1, "season": "2025-26", "age": 26, "pts": 2000, "min": 2400},  # reciente, fuerte
+    ])
+    config = {
+        "lineup_synergy": {}, "league_simulation": {},
+        "aging_curve": {"n_seasons_lookback": 1},
+    }
+    only_recent = project_backtest_team(case, rosters, player_stats, pd.DataFrame(), config, games_in_season=82)
+
+    config_diluted = {
+        "lineup_synergy": {}, "league_simulation": {},
+        "aging_curve": {"n_seasons_lookback": 2, "recency_half_life_seasons": 100.0},
+    }
+    diluted_by_old_season = project_backtest_team(
+        case, rosters, player_stats, pd.DataFrame(), config_diluted, games_in_season=82
+    )
+
+    assert only_recent["game_score_per36"][0] > diluted_by_old_season["game_score_per36"][0]
 
 
 def test_build_real_schedule_context_resolves_opponent_and_back_to_back():

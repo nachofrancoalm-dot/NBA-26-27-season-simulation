@@ -352,7 +352,24 @@ DEFAULT_MONTE_CARLO_CONFIG: Dict[str, float] = {
     # medido para el Game Score solo sobre los mismos 480 casos --
     # confirmación independiente del 0.29 anterior). Con
     # `advanced_impact: {enabled: false}` habría que volver a 0.29.
-    "game_score_to_net_rating_scale": 0.21,
+    #
+    # RE-CALIBRADO otra vez a 0.172 (scripts/experiments/bayesian_calibration.py,
+    # experimento explícitamente fuera de src/ -- ver su docstring): un
+    # modelo bayesiano jerárquico sobre los mismos 480 casos, con
+    # partial pooling del slope por temporada, da una media posterior de
+    # 0.172 (94% HDI [0.157, 0.188], que deja fuera al 0.21 anterior por
+    # un margen claro). Validado con leave-one-season-out (16 ajustes,
+    # cada temporada predicha SIN haberla visto): el slope recalibrado
+    # sale entre 0.169 y 0.175 en los 16 casos -- estable, no un
+    # sobreajuste a los 480 casos completos -- y gana en R² fuera de
+    # muestra a la constante anterior en 13 de 16 temporadas (R² global
+    # 0.488 -> 0.512, error medio 2.70 -> 2.65 puntos/partido). La
+    # jerarquía por temporada no aportó lo que se esperaba (las 16
+    # pendientes salen casi idénticas entre sí -- el ajuste de era que ya
+    # aplica `league_baseline_by_season` parece absorber toda esa
+    # variación), así que el resultado se queda en una única constante
+    # mejor calibrada, no en un slope por temporada.
+    "game_score_to_net_rating_scale": 0.172,
     "opponent_strength_scale": 20.0,  # cuánto resta/suma un rival top/flojo (WinPCT 1.0 vs 0.0) al diferencial
     "outcome_variance_scale": 12.0,  # dispersión típica de resultado de un partido NBA individual
     # VENTAJA DE CAMPO, medida sobre los game logs reales de las 15
@@ -373,6 +390,11 @@ DEFAULT_MONTE_CARLO_CONFIG: Dict[str, float] = {
     # como config opcional para quien quiera experimentar.
     "star_bonus_top_n": 0,  # nº de jugadores (por valor de temporada) que reciben la prima -- ver apply_star_bonus
     "star_bonus_multiplier": 1.0,  # multiplicador de Game Score/36 efectivo para esos jugadores
+    # DESACTIVADA POR DEFECTO (0.0) -- ver "INCERTIDUMBRE DE CALIDAD DE
+    # EQUIPO" en el docstring del módulo y compute_game_net_rating_estimate.
+    # Puntos de diferencial (mismas unidades que home_court_advantage), NO
+    # de Game Score -- se suma directamente al net rating ya escalado.
+    "team_quality_uncertainty_std": 0.0,
 }
 
 
@@ -804,6 +826,36 @@ def compute_win_probabilities(net_rating_estimate: np.ndarray, outcome_variance_
     return 1 / (1 + np.exp(-net_rating_estimate / outcome_variance_scale))
 
 
+def sample_team_quality_noise(n_seasons: int, std: float, rng: np.random.Generator) -> np.ndarray:
+    """
+    Un valor por TEMPORADA simulada (no por partido): "en este mundo
+    hipotético, ¿el equipo es en realidad algo mejor o peor de lo que dice
+    nuestra proyección de talento?" -- química, salud de coincidencia,
+    entrenador, nada que un box score capture. Shape (n_seasons, 1) para
+    poder sumarse por broadcasting a un array (n_seasons, games_per_season)
+    -- MISMO valor en los 82 partidos de una temporada simulada, a
+    diferencia del ruido de `compute_player_contributions` (`game_variance_std`),
+    que se sortea partido a partido.
+
+    LO QUE ESTO ARREGLA Y LO QUE NO ARREGLA (ver
+    scripts/experiments/team_quality_uncertainty.py): con std=0 (default,
+    desactivado) esto es una función identidad. Con std>0, ensancha la
+    banda P10-P90 de un equipo CONCRETO alrededor de su propia proyección
+    -- corrige que solo el 61% de los 480 casos del backtest sweep caían
+    dentro de esa banda (debería ser ~80%). NO mueve `wins_mean` (la MEDIA
+    de miles de temporadas simuladas) porque es ruido de media cero -- se
+    cancela al promediar por la ley de los grandes números. Si lo que se
+    busca es más separación entre las victorias medias proyectadas de
+    equipos distintos, esto no es la palanca (medido y descartado en
+    scripts/experiments/aging_curve_shrinkage.py: el cuello de botella
+    está en la propia señal de talento, no en cuánta incertidumbre se
+    simula alrededor de ella).
+    """
+    if std <= 0:
+        return np.zeros((n_seasons, 1))
+    return rng.normal(0.0, std, size=(n_seasons, 1))
+
+
 def run_monte_carlo(
     player_ids: list,
     game_score_per36: np.ndarray,
@@ -863,6 +915,11 @@ def run_monte_carlo(
         synergy_adjustment = compute_game_synergy_adjustment(available, synergy_matrix)
         net_rating_estimate = net_rating_estimate + synergy_adjustment
 
+    team_quality_noise = sample_team_quality_noise(
+        n_seasons, mc_config.get("team_quality_uncertainty_std", 0.0), rng
+    )
+    net_rating_estimate = net_rating_estimate + team_quality_noise
+
     win_probability = compute_win_probabilities(net_rating_estimate, mc_config["outcome_variance_scale"])
 
     outcomes = rng.random((n_seasons, games_per_season)) < win_probability
@@ -881,14 +938,19 @@ def run_monte_carlo(
     )
 
 
-def build_simulation_dataset(config: Dict[str, Any]) -> pd.DataFrame:
+def compute_simulation_results(
+    config: Dict[str, Any], risk_scores_override: Optional[np.ndarray] = None
+) -> pd.DataFrame:
     """
-    Lee aging_curve_projection.csv, injury_risk.csv, fatigue_risk.csv y
-    prior_season_standings.csv (generados por aging_curve.py,
-    injury_model.py, fatigue_accumulation.py y data_pipeline.py
-    respectivamente), corre la simulación Monte Carlo y guarda
-    data/processed/simulation_results.csv (una fila por temporada
-    simulada).
+    Toda la lógica de `build_simulation_dataset` salvo el guardado en
+    disco -- extraída para que el frontend web pueda pedir una variante
+    "en vivo" (p.ej. `risk_scores_override=zeros` para un modo "sin
+    lesiones") sin escribir sobre `simulation_results.csv`, el resultado
+    persistido de la configuración real. `risk_scores_override`, si se
+    pasa, sustituye por completo los `risk_score` de `injury_risk.csv`
+    (mismo orden que `player_ids`) -- todo lo demás (sinergia, línea
+    base de liga, fatiga) se calcula exactamente igual que la corrida
+    real, así que el resultado sigue siendo comparable.
     """
     paths = get_paths(config)
     required = {
@@ -920,7 +982,9 @@ def build_simulation_dataset(config: Dict[str, Any]) -> pd.DataFrame:
         p["player_id"]: p.get("minutes_projection", 0) for p in config["roster"] if p.get("player_id")
     }
     minutes_projection = np.array([minutes_projection_by_player[pid] for pid in player_ids])
-    risk_scores = injury.loc[player_ids, "risk_score"].to_numpy()
+    risk_scores = (
+        risk_scores_override if risk_scores_override is not None else injury.loc[player_ids, "risk_score"].to_numpy()
+    )
     fatigue_scores = fatigue.loc[player_ids, "fatigue_score"].to_numpy()
     league_win_pcts = standings["WinPCT"].to_numpy()
 
@@ -954,7 +1018,7 @@ def build_simulation_dataset(config: Dict[str, Any]) -> pd.DataFrame:
     games_per_season = config["simulation"]["games_per_season"]
     random_seed = config["simulation"]["random_seed"]
 
-    results = run_monte_carlo(
+    return run_monte_carlo(
         player_ids,
         game_score_per36,
         minutes_projection,
@@ -968,6 +1032,17 @@ def build_simulation_dataset(config: Dict[str, Any]) -> pd.DataFrame:
         synergy_matrix=synergy_matrix,
     )
 
+
+def build_simulation_dataset(config: Dict[str, Any]) -> pd.DataFrame:
+    """
+    Corre `compute_simulation_results` con los `risk_score` reales de
+    `injury_risk.csv` y guarda `data/processed/simulation_results.csv`
+    (una fila por temporada simulada) -- el resultado "oficial" de la
+    configuración actual, el que lee el resto de la app.
+    """
+    results = compute_simulation_results(config)
+
+    paths = get_paths(config)
     out_path = paths["processed"] / "simulation_results.csv"
     results.to_csv(out_path, index=False)
     print(f"Guardado: {out_path} ({len(results)} temporadas simuladas)")

@@ -1,0 +1,95 @@
+/*
+  tokens.css
+
+  Tema oscuro fijo por defecto, con un degradado de fondo que insinúa los
+  colores de marca de la NBA (azul marino -> negro -> rojo muy oscuro)
+  sin ser literal ni chillón -- las cards/tablas/gráficos NO viven sobre
+  el degradado, viven sobre --surface-card, que sigue siendo exactamente
+  la superficie oscura ya validada por la skill dataviz de este proyecto
+  (references/palette.md, "Dark chart surface": #1a1a19) -- el degradado
+  es decoración de la página, nunca la superficie donde se mide contraste
+  de un gráfico. --accent-* (azul) sigue siendo el hue secuencial
+  validado para datos; --brand-red es un acento de marca NUEVO, solo para
+  chrome de interfaz (botones, tab activo) -- nunca se usa para codificar
+  datos en un gráfico.
+
+  [data-theme="light"] deja el tema claro disponible para un futuro
+  toggle manual (no expuesto en la UI todavía).
+*/
+
+:root {
+  color-scheme: dark;
+
+  --surface-page: #0d0d0d;
+  --page-gradient: radial-gradient(1200px 800px at 8% -10%, #0f2a52 0%, rgba(15, 42, 82, 0) 55%),
+    radial-gradient(1100px 900px at 100% 115%, #4a0e14 0%, rgba(74, 14, 20, 0) 50%),
+    linear-gradient(160deg, #0a0e18 0%, #08090c 45%, #0c0708 100%);
+  --surface-card: #2b2b30;
+  --surface-card-alt: #38383f;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --gridline: #45454e;
+  --baseline: #55555f;
+  --border: rgba(255, 255, 255, 0.20);
+
+  --accent-100: #184f95;
+  --accent-400: #3987e5;
+  --accent-450: #3987e5;
+  --accent-600: #86b6ef;
+
+  --brand-red: #e0293e;
+  --brand-red-dark: #a01623;
+  --brand-blue: #1d428a;
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-card: 12px;
+  --radius-badge: 999px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --surface-page: #f9f9f7;
+  --page-gradient: none;
+  --surface-card: #fcfcfb;
+  --surface-card-alt: #f4f3ef;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --gridline: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+
+  --accent-100: #cde2fb;
+  --accent-400: #3987e5;
+  --accent-450: #2a78d6;
+  --accent-600: #184f95;
+
+  --brand-red: #c8102e;
+  --brand-red-dark: #96091f;
+  --brand-blue: #1d428a;
+
+  --shadow-card: 0 1px 2px rgba(11, 11, 11, 0.04), 0 1px 8px rgba(11, 11, 11, 0.03);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background-color: var(--surface-page);
+  background-image: var(--page-gradient);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}

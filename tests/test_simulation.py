@@ -29,6 +29,7 @@ from simulation import (
     run_monte_carlo,
     sample_injury_absences,
     sample_schedule_context,
+    sample_team_quality_noise,
     simulate_single_season_player_log,
     compute_expected_games_played,
     compute_expected_effective_minutes_per_game,
@@ -181,6 +182,56 @@ def test_run_monte_carlo_is_reproducible_with_same_seed():
     result2 = run_monte_carlo(**kwargs)
     pd_equal = (result1["wins"].to_numpy() == result2["wins"].to_numpy()).all()
     assert pd_equal
+
+
+def test_sample_team_quality_noise_is_zero_when_disabled():
+    rng = np.random.default_rng(1)
+    noise = sample_team_quality_noise(n_seasons=10, std=0.0, rng=rng)
+    assert noise.shape == (10, 1)
+    assert (noise == 0.0).all()
+
+
+def test_sample_team_quality_noise_varies_across_seasons():
+    rng = np.random.default_rng(1)
+    noise = sample_team_quality_noise(n_seasons=500, std=3.0, rng=rng)
+    assert noise.shape == (500, 1)
+    assert noise.std() == pytest.approx(3.0, rel=0.15)
+    assert not np.allclose(noise, noise[0])  # varía de una temporada simulada a otra
+
+
+def test_run_monte_carlo_wins_mean_unaffected_by_team_quality_uncertainty():
+    """
+    LA DISTINCIÓN CLAVE del experimento (ver docstring de
+    sample_team_quality_noise): el ruido de calidad de equipo es de media
+    cero, así que promediado sobre miles de temporadas simuladas NO
+    debe mover wins.mean() de forma perceptible -- solo debe ensanchar la
+    dispersión DENTRO de la distribución de un mismo equipo. Si esto
+    fallara, el "arreglo" estaría inflando las victorias medias en vez de
+    solo la incertidumbre, que es justo lo que NO se quiere.
+    """
+    kwargs = dict(
+        player_ids=[1, 2], game_score_per36=np.array([15.0, 10.0]), minutes_projection=np.array([32.0, 20.0]),
+        risk_scores=np.array([0.1, 0.2]), fatigue_scores=np.array([0.3, 0.2]),
+        league_win_pcts=np.array([0.3, 0.5, 0.7]), n_seasons=20000, games_per_season=82, random_seed=42,
+    )
+    without_noise = run_monte_carlo(mc_config=DEFAULT_MONTE_CARLO_CONFIG, **kwargs)
+    with_noise = run_monte_carlo(
+        mc_config={**DEFAULT_MONTE_CARLO_CONFIG, "team_quality_uncertainty_std": 4.0}, **kwargs
+    )
+    assert with_noise["wins"].mean() == pytest.approx(without_noise["wins"].mean(), abs=1.0)
+
+
+def test_run_monte_carlo_widens_win_distribution_with_team_quality_uncertainty():
+    kwargs = dict(
+        player_ids=[1, 2], game_score_per36=np.array([15.0, 10.0]), minutes_projection=np.array([32.0, 20.0]),
+        risk_scores=np.array([0.1, 0.2]), fatigue_scores=np.array([0.3, 0.2]),
+        league_win_pcts=np.array([0.3, 0.5, 0.7]), n_seasons=20000, games_per_season=82, random_seed=42,
+    )
+    without_noise = run_monte_carlo(mc_config=DEFAULT_MONTE_CARLO_CONFIG, **kwargs)
+    with_noise = run_monte_carlo(
+        mc_config={**DEFAULT_MONTE_CARLO_CONFIG, "team_quality_uncertainty_std": 4.0}, **kwargs
+    )
+    assert with_noise["wins"].std() > without_noise["wins"].std()
 
 
 def test_higher_injury_risk_reduces_average_wins():
