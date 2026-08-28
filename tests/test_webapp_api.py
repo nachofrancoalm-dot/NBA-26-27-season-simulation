@@ -343,6 +343,70 @@ def test_explainer_ask_503_without_api_key(client, monkeypatch):
     assert "GROQ_API_KEY" in response.json()["detail"]
 
 
+def test_explainer_ask_forwards_pasted_news_text(client, monkeypatch):
+    # news_text es opcional y solo llega si el usuario lo pega en el
+    # textarea del frontend -- este test confirma que el router lo
+    # reenvia a explain_question tal cual, sin tocarlo.
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    captured = {}
+
+    def _fake_explain_question(question, config, api_key=None, news_text=None):
+        captured["question"] = question
+        captured["news_text"] = news_text
+        return "respuesta"
+
+    monkeypatch.setattr(explainer_router, "explain_question", _fake_explain_question)
+
+    response = client.post(
+        "/api/explainer/ask",
+        json={"question": "¿Que le paso a Embiid?", "news_text": "Embiid se lesiono la rodilla."},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"answer": "respuesta"}
+    assert captured["news_text"] == "Embiid se lesiono la rodilla."
+
+
+def test_explainer_search_news_503_without_api_key(client, monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    response = client.get("/api/explainer/search-news", params={"query": "lesiones 76ers"})
+    assert response.status_code == 503
+    assert "TAVILY_API_KEY" in response.json()["detail"]
+
+
+def test_explainer_search_news_forwards_query_and_returns_text(client, monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "test-key")
+    captured = {}
+
+    def _fake_search(query, api_key=None):
+        captured["query"] = query
+        captured["api_key"] = api_key
+        return "Embiid se lesiono la rodilla."
+
+    monkeypatch.setattr(explainer_router, "search_recent_news", _fake_search)
+
+    response = client.get("/api/explainer/search-news", params={"query": "lesiones 76ers"})
+
+    assert response.status_code == 200
+    assert response.json() == {"news_text": "Embiid se lesiono la rodilla."}
+    assert captured["query"] == "lesiones 76ers"
+    assert captured["api_key"] == "test-key"
+
+
+def test_explainer_search_news_502_on_search_failure(client, monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "test-key")
+
+    def _fake_search(query, api_key=None):
+        raise RuntimeError("timeout")
+
+    monkeypatch.setattr(explainer_router, "search_recent_news", _fake_search)
+
+    response = client.get("/api/explainer/search-news", params={"query": "lesiones 76ers"})
+
+    assert response.status_code == 502
+    assert "timeout" in response.json()["detail"]
+
+
 # --- Popup de detalle de jugador (doble clic en el nombre) ---
 
 
@@ -530,3 +594,124 @@ def test_player_detail_projection_discounts_injury_risk(client, config):
     # factor de disponibilidad -- si no, el modo "Por partido" del popup
     # saldría inflado (misma producción total repartida en menos partidos).
     assert projected["PTS"] == round(2000 * (33 / 82))
+
+
+def _write_single_season_game_log(processed_dir, rows, suffix=""):
+    pd.DataFrame(rows).to_csv(processed_dir / f"league_single_season_game_log{suffix}.csv", index=False)
+
+
+def test_league_schedule_404_without_season_log(client):
+    response = client.get("/api/league/schedule")
+    assert response.status_code == 404
+    assert "calendario" in response.json()["detail"].lower()
+
+
+def test_league_simulate_season_log_calls_orchestrator_and_returns_game_count(client, config, monkeypatch):
+    processed_dir = tmp_path_from_config(config)
+    _write_league_csvs(processed_dir)  # _require_league_data necesita regular+playoff, mismo criterio que /bracket
+
+    fake_game_log = pd.DataFrame([{"game_id": 0, "day": 0, "home_team_id": 1, "away_team_id": 2, "winner_team_id": 1}])
+    captured = {}
+
+    def _fake_run(cfg, scenario="with_injuries"):
+        captured["scenario"] = scenario
+        return {"game_log": fake_game_log, "player_box_scores": pd.DataFrame()}
+
+    monkeypatch.setattr(league_router, "run_single_league_season_simulation", _fake_run)
+
+    response = client.post("/api/league/simulate-season-log")
+    assert response.status_code == 200
+    assert response.json() == {"scenario": "with_injuries", "games": 1}
+    assert captured["scenario"] == "with_injuries"
+
+
+def test_league_schedule_filters_by_team(client, config):
+    processed_dir = tmp_path_from_config(config)
+    _write_single_season_game_log(processed_dir, [
+        {"game_id": 0, "day": 0, "home_team_id": 1, "home_abbreviation": "AAA", "away_team_id": 2,
+         "away_abbreviation": "BBB", "home_score": 100.0, "away_score": 95.0, "point_differential": 5.0,
+         "winner_team_id": 1, "winner_abbreviation": "AAA"},
+        {"game_id": 1, "day": 1, "home_team_id": 3, "home_abbreviation": "CCC", "away_team_id": 4,
+         "away_abbreviation": "DDD", "home_score": 90.0, "away_score": 92.0, "point_differential": -2.0,
+         "winner_team_id": 4, "winner_abbreviation": "DDD"},
+    ])
+
+    all_games = client.get("/api/league/schedule")
+    assert all_games.status_code == 200
+    assert len(all_games.json()["games"]) == 2
+
+    filtered = client.get("/api/league/schedule?team=AAA")
+    assert filtered.status_code == 200
+    games = filtered.json()["games"]
+    assert len(games) == 1
+    assert games[0]["home_abbreviation"] == "AAA"
+
+
+def test_league_boxscore_returns_home_and_away_players(client, config):
+    processed_dir = tmp_path_from_config(config)
+    _write_single_season_game_log(processed_dir, [
+        {"game_id": 0, "day": 0, "home_team_id": 1, "home_abbreviation": "AAA", "away_team_id": 2,
+         "away_abbreviation": "BBB", "home_score": 100.0, "away_score": 95.0, "point_differential": 5.0,
+         "winner_team_id": 1, "winner_abbreviation": "AAA"},
+    ])
+    pd.DataFrame([
+        {"game_id": 0, "day": 0, "team_id": 1, "player_id": 100, "player_name": "Local Player",
+         "PTS": 20.0, "REB": 5.0, "AST": 3.0, "STL": 1.0, "BLK": 0.0, "TOV": 2.0, "3PM": 2.0},
+        {"game_id": 0, "day": 0, "team_id": 2, "player_id": 200, "player_name": "Away Player",
+         "PTS": 15.0, "REB": 8.0, "AST": 1.0, "STL": 0.0, "BLK": 1.0, "TOV": 1.0, "3PM": 1.0},
+    ]).to_csv(processed_dir / "league_single_season_player_box_scores.csv", index=False)
+
+    response = client.get("/api/league/boxscore/0")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["game"]["home_abbreviation"] == "AAA"
+    assert len(body["home_players"]) == 1 and body["home_players"][0]["player_name"] == "Local Player"
+    assert len(body["away_players"]) == 1 and body["away_players"][0]["player_name"] == "Away Player"
+
+
+def test_league_boxscore_404_for_unknown_game_id(client, config):
+    processed_dir = tmp_path_from_config(config)
+    _write_single_season_game_log(processed_dir, [
+        {"game_id": 0, "day": 0, "home_team_id": 1, "home_abbreviation": "AAA", "away_team_id": 2,
+         "away_abbreviation": "BBB", "home_score": 100.0, "away_score": 95.0, "point_differential": 5.0,
+         "winner_team_id": 1, "winner_abbreviation": "AAA"},
+    ])
+    response = client.get("/api/league/boxscore/999")
+    assert response.status_code == 404
+
+
+def test_league_head_to_head_counts_wins_between_two_real_teams(client, config):
+    from context.opponent_weighting import ABBREVIATION_TO_TEAM_ID
+
+    processed_dir = tmp_path_from_config(config)
+    bos_id, mia_id, cle_id = ABBREVIATION_TO_TEAM_ID["BOS"], ABBREVIATION_TO_TEAM_ID["MIA"], ABBREVIATION_TO_TEAM_ID["CLE"]
+    _write_single_season_game_log(processed_dir, [
+        {"game_id": 0, "day": 0, "home_team_id": bos_id, "home_abbreviation": "BOS", "away_team_id": mia_id,
+         "away_abbreviation": "MIA", "home_score": 100.0, "away_score": 90.0, "point_differential": 10.0,
+         "winner_team_id": bos_id, "winner_abbreviation": "BOS"},
+        {"game_id": 1, "day": 10, "home_team_id": mia_id, "home_abbreviation": "MIA", "away_team_id": bos_id,
+         "away_abbreviation": "BOS", "home_score": 95.0, "away_score": 92.0, "point_differential": 3.0,
+         "winner_team_id": mia_id, "winner_abbreviation": "MIA"},
+        # Partido contra un tercer equipo -- no debe contar en el H2H de BOS vs MIA.
+        {"game_id": 2, "day": 20, "home_team_id": bos_id, "home_abbreviation": "BOS", "away_team_id": cle_id,
+         "away_abbreviation": "CLE", "home_score": 100.0, "away_score": 80.0, "point_differential": 20.0,
+         "winner_team_id": bos_id, "winner_abbreviation": "BOS"},
+    ])
+
+    response = client.get("/api/league/head-to-head?team_a=BOS&team_b=MIA")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["team_a_wins"] == 1
+    assert body["team_b_wins"] == 1
+    assert len(body["games"]) == 2
+
+
+def test_league_head_to_head_404_for_unknown_abbreviation(client, config):
+    processed_dir = tmp_path_from_config(config)
+    _write_single_season_game_log(processed_dir, [
+        {"game_id": 0, "day": 0, "home_team_id": 1, "home_abbreviation": "AAA", "away_team_id": 2,
+         "away_abbreviation": "BBB", "home_score": 100.0, "away_score": 95.0, "point_differential": 5.0,
+         "winner_team_id": 1, "winner_abbreviation": "AAA"},
+    ])
+    response = client.get("/api/league/head-to-head?team_a=ZZZ&team_b=BBB")
+    assert response.status_code == 404

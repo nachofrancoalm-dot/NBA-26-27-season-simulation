@@ -16,6 +16,9 @@ calculado.
 
 from __future__ import annotations
 
+from typing import Optional
+
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 
 from dashboard.data_loader import (  # noqa: E402 -- importar primero inserta src/ en sys.path
@@ -26,12 +29,15 @@ from dashboard.data_loader import (  # noqa: E402 -- importar primero inserta sr
     load_league_player_projections,
     load_league_playoff_summary,
     load_league_regular_season_summary,
+    load_league_single_season_game_log,
+    load_league_single_season_player_box_scores,
     run_single_bracket_simulation,
+    run_single_league_season_simulation,
     select_roster_view,
 )
 from config_loader import load_config  # noqa: E402
 from context.opponent_weighting import ABBREVIATION_TO_TEAM_ID  # noqa: E402
-from league_simulation import build_league_simulation_dataset  # noqa: E402
+from league_simulation import build_league_simulation_dataset, compute_head_to_head_record  # noqa: E402
 
 from webapp.serializers import df_to_records
 
@@ -169,3 +175,85 @@ def post_bracket(scenario: str = SCENARIO_QUERY):
     result = run_single_bracket_simulation(config, scenario=scenario)
     result["team_ids"] = ABBREVIATION_TO_TEAM_ID
     return result
+
+
+SEASON_LOG_MISSING_DETAIL = (
+    "Todavía no se ha simulado un calendario concreto para este escenario. Pulsa "
+    "'Simular calendario de la temporada' (POST /api/league/simulate-season-log)."
+)
+
+
+def _require_season_log(config, scenario: str) -> pd.DataFrame:
+    game_log = load_league_single_season_game_log(config, scenario=scenario)
+    if game_log is None:
+        raise HTTPException(status_code=404, detail=SEASON_LOG_MISSING_DETAIL)
+    return game_log
+
+
+@router.post("/simulate-season-log")
+def post_simulate_season_log(scenario: str = SCENARIO_QUERY):
+    """
+    Simula UNA temporada regular concreta (calendario + resultado de
+    cada partido + boxscore ilustrativo por jugador -- ver
+    league_simulation.run_single_league_season_simulation) y persiste
+    los CSV. Distinta tirada cada vez que se pulsa (seed por reloj) --
+    a diferencia de /simulate, esto no toca standings/playoffs/premios,
+    solo el detalle partido a partido.
+    """
+    config = load_config()
+    _require_league_data(config, scenario)  # necesita los 30 equipos ya proyectados/descargados
+    result = run_single_league_season_simulation(config, scenario=scenario)
+    return {"scenario": scenario, "games": len(result["game_log"])}
+
+
+@router.get("/schedule")
+def get_schedule(team: Optional[str] = None, scenario: str = SCENARIO_QUERY):
+    """Calendario de la temporada concreta ya simulada, opcionalmente
+    filtrado a los partidos (local o visitante) de un equipo."""
+    config = load_config()
+    game_log = _require_season_log(config, scenario)
+    if team:
+        game_log = game_log[(game_log["home_abbreviation"] == team) | (game_log["away_abbreviation"] == team)]
+    return {"games": df_to_records(game_log.sort_values("day"))}
+
+
+@router.get("/boxscore/{game_id}")
+def get_boxscore(game_id: int, scenario: str = SCENARIO_QUERY):
+    config = load_config()
+    game_log = _require_season_log(config, scenario)
+    box_scores = load_league_single_season_player_box_scores(config, scenario=scenario)
+
+    game_row = game_log[game_log["game_id"] == game_id]
+    if game_row.empty:
+        raise HTTPException(status_code=404, detail=f"No existe el partido game_id={game_id} en este calendario.")
+    game = df_to_records(game_row)[0]
+
+    home_players, away_players = [], []
+    if box_scores is not None:
+        game_box = box_scores[box_scores["game_id"] == game_id]
+        home_players = df_to_records(
+            game_box[game_box["team_id"] == game["home_team_id"]].sort_values("PTS", ascending=False)
+        )
+        away_players = df_to_records(
+            game_box[game_box["team_id"] == game["away_team_id"]].sort_values("PTS", ascending=False)
+        )
+
+    return {"game": game, "home_players": home_players, "away_players": away_players}
+
+
+@router.get("/head-to-head")
+def get_head_to_head(team_a: str, team_b: str, scenario: str = SCENARIO_QUERY):
+    config = load_config()
+    game_log = _require_season_log(config, scenario)
+
+    team_a_id = ABBREVIATION_TO_TEAM_ID.get(team_a)
+    team_b_id = ABBREVIATION_TO_TEAM_ID.get(team_b)
+    if team_a_id is None or team_b_id is None:
+        raise HTTPException(status_code=404, detail=f"Abreviación de equipo desconocida: '{team_a}' o '{team_b}'.")
+
+    record = compute_head_to_head_record(game_log, team_a_id, team_b_id)
+    return {
+        "team_a": team_a, "team_b": team_b,
+        "team_a_wins": record["team_a_wins"], "team_b_wins": record["team_b_wins"],
+        "games": df_to_records(pd.DataFrame(record["games"])),
+    }

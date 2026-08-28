@@ -963,6 +963,39 @@ def build_team_schedule_dataset(config: Dict[str, Any], force_refresh: bool = Fa
     return team_schedule
 
 
+def build_league_schedule_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Calendario REAL de la liga completa (los 30 equipos), para
+    league_simulation.py -- hermana de build_team_schedule_dataset (que
+    filtra a UN equipo), reutiliza fetch_league_schedule tal cual, sin
+    llamada nueva a la API. Guarda data/processed/league_schedule_full.csv
+    con gameDate/homeTeam_teamTricode/awayTeam_teamTricode.
+
+    Dos filtros, ninguno inventa datos:
+    - `gameLabel == "Preseason"` -- no es temporada regular.
+    - Filas con tricode nulo -- plazas de la fase eliminatoria de la NBA
+      Cup todavía sin resolver (los dos equipos se deciden más adelante
+      en la temporada real); se descartan en vez de inventarse. Esto
+      hace que, mientras la Cup no se resuelva del todo, cada equipo
+      tenga menos partidos que `config["simulation"]["games_per_season"]`
+      -- limitación temporal real, documentada en
+      league_simulation.py, no oculta.
+    """
+    paths = get_paths(config)
+    league_schedule = fetch_league_schedule(config["team"]["season"], paths["raw"], force_refresh)
+
+    is_regular_season = league_schedule["gameLabel"].fillna("") != "Preseason"
+    has_both_teams = league_schedule["homeTeam_teamTricode"].notna() & league_schedule["awayTeam_teamTricode"].notna()
+    schedule = league_schedule[is_regular_season & has_both_teams][
+        ["gameDate", "homeTeam_teamTricode", "awayTeam_teamTricode"]
+    ].copy()
+
+    out_path = paths["processed"] / "league_schedule_full.csv"
+    schedule.to_csv(out_path, index=False)
+    print(f"Guardado: {out_path} ({len(schedule)} partidos)")
+    return schedule
+
+
 def build_prior_season_standings_dataset(
     config: Dict[str, Any], force_refresh: bool = False
 ) -> pd.DataFrame:
@@ -1238,10 +1271,10 @@ if __name__ == "__main__":
         "--league",
         action="store_true",
         help="Además del pipeline normal, descarga rosters + career stats + nacionalidad "
-             "de las 30 franquicias (necesario para league_simulation.py y para el "
-             "chequeo de cuota del All-Star). ADVERTENCIA: ~1350 llamadas a la API, "
-             "la ingesta más cara del proyecto (30-45+ min la primera vez). Opt-in a "
-             "propósito, no forma parte del pipeline normal.",
+             "de las 30 franquicias + calendario real de la temporada (necesario para "
+             "league_simulation.py y para el chequeo de cuota del All-Star). ADVERTENCIA: "
+             "~1350 llamadas a la API, la ingesta más cara del proyecto (30-45+ min la "
+             "primera vez). Opt-in a propósito, no forma parte del pipeline normal.",
     )
     parser.add_argument(
         "--backtest-sweep",
@@ -1260,12 +1293,14 @@ if __name__ == "__main__":
     if args.league:
         config = load_config()
         print("\n=== Ingesta de liga completa (30 equipos) ===\n")
-        print("--- 1/3: Rosters de las 30 franquicias ---")
+        print("--- 1/4: Rosters de las 30 franquicias ---")
         build_league_rosters_dataset(config, force_refresh=args.refresh)
-        print("\n--- 2/3: Career stats de todos los jugadores de la liga ---")
+        print("\n--- 2/4: Career stats de todos los jugadores de la liga ---")
         build_league_player_stats_dataset(config, force_refresh=args.refresh)
-        print("\n--- 3/3: Nacionalidad de todos los jugadores de la liga (cuota All-Star) ---")
+        print("\n--- 3/4: Nacionalidad de todos los jugadores de la liga (cuota All-Star) ---")
         build_league_player_countries_dataset(config, force_refresh=args.refresh)
+        print("\n--- 4/4: Calendario real de la temporada (1 llamada, barato) ---")
+        build_league_schedule_dataset(config, force_refresh=args.refresh)
 
     if args.backtest_sweep:
         print("\n=== Ingesta del backtest sweep (30 equipos x 15 temporadas) ===\n")

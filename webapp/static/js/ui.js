@@ -29,6 +29,19 @@ export function apiErrorState(err) {
   return emptyState(err.message || "No se encontró el dataset todavía.");
 }
 
+/** Placeholder de carga con shimmer, en vez de un texto fijo "Cargando...".
+ * `lines` describe el contenido aproximado que va a llegar (una card con
+ * título + un par de filas por defecto) para minimizar el salto de layout
+ * cuando el dato real reemplaza al esqueleto -- ver progressive-loading en
+ * la skill de UI/UX de este proyecto. */
+export function skeleton(lines = ["title", "", "short"]) {
+  return el(
+    "div",
+    { class: "card", "aria-hidden": "true" },
+    lines.map((variant) => el("div", { class: `skeleton-line ${variant}`.trim() }))
+  );
+}
+
 export function statTile(label, value) {
   return el("div", { class: "stat-tile" }, [
     el("p", { class: "label" }, label),
@@ -190,7 +203,26 @@ export function dataTable(records, glossary = {}, options = {}) {
   const table = el("table", { class: "data-table" }, [el("thead", {}, headerRow), el("tbody", {}, bodyRows)]);
 
   const wrap = el("div", { class: "table-wrap" }, table);
-  const container = el("div", {}, [wrap]);
+  const shadowLeft = el("div", { class: "scroll-shadow scroll-shadow-left" });
+  const shadowRight = el("div", { class: "scroll-shadow scroll-shadow-right" });
+  const scrollRegion = el("div", { class: "table-scroll-region" }, [wrap, shadowLeft, shadowRight]);
+  const container = el("div", {}, [scrollRegion]);
+
+  // Sombra de scroll horizontal -- ver el comentario de .scroll-shadow en
+  // components.css. Se recalcula al hacer scroll; requestAnimationFrame
+  // porque scrollWidth recién montado puede no estar listo en el mismo
+  // tick que el append. Sin listener de `resize` a propósito -- varias
+  // vistas recrean su tabla en cada clic (re-simular bracket/calendario),
+  // y acumular listeners de `window` que nunca se limpian sí sería un
+  // leak real; el de `scroll` vive y muere con `wrap`, que sí se
+  // descarta entero al re-renderizar.
+  const updateShadows = () => {
+    const maxScroll = wrap.scrollWidth - wrap.clientWidth;
+    shadowLeft.classList.toggle("visible", wrap.scrollLeft > 2);
+    shadowRight.classList.toggle("visible", maxScroll > 2 && wrap.scrollLeft < maxScroll - 2);
+  };
+  wrap.addEventListener("scroll", updateShadows, { passive: true });
+  requestAnimationFrame(updateShadows);
 
   const glossaryEntries = Object.entries(glossary).filter(([col]) => columns.includes(col));
   if (glossaryEntries.length > 0) {

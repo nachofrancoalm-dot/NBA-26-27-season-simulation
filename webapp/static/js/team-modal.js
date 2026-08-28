@@ -72,7 +72,10 @@ export async function openTeamModal(abbreviation, teamId) {
   }
 
   dialog.replaceChildren(
-    el("div", { class: "detail-modal-body" }, [el("button", { class: "modal-close", onclick: () => dialog.close() }, "✕"), body])
+    el("div", { class: "detail-modal-body" }, [
+      el("button", { class: "modal-close", "aria-label": "Cerrar", onclick: () => dialog.close() }, "✕"),
+      body,
+    ])
   );
   await loadAndRender();
 }

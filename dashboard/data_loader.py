@@ -14,7 +14,7 @@ league_simulation.py). Si un CSV no existe todavía, se devuelve None --
 app.py decide cómo avisar al usuario, esta capa no lanza excepciones por
 archivos faltantes.
 
-TRES EXCEPCIONES a "solo lee CSV": run_single_bracket_simulation() sí
+CUATRO EXCEPCIONES a "solo lee CSV": run_single_bracket_simulation() sí
 ejecuta código en vivo (una simulación de bracket de playoffs) -- es
 rápido (proyecta 30 equipos desde CSV ya cacheados, sin red) y el botón
 de la pestaña "Liga y Playoffs" lo necesita para mostrar un bracket
@@ -22,10 +22,16 @@ distinto cada vez que se pulsa. run_single_season_player_log_simulation()
 simula UNA temporada concreta (no la distribución agregada de
 simulation_results.csv) para el botón "Simular partidos de la temporada"
 de la pestaña Simulación -- misma idea que el bracket: rápido, sin red,
-sobre CSV ya cacheados. compute_awards_summary() no llama a la API ni
-simula nada nuevo, pero sí importa lógica de negocio de
-src/awards_projection.py (en vez de solo leer y reformatear un CSV) para
-calcular los premios individuales sobre los CSV ya generados.
+sobre CSV ya cacheados. run_single_league_season_simulation() es lo
+mismo pero para los 30 equipos de Liga NBA -- calendario, resultado de
+cada partido y boxscore ilustrativo por jugador, para el botón "Simular
+calendario de la temporada" (a diferencia del bracket y del resto de la
+liga, SÍ persiste CSV propios -- league_single_season_game_log.csv /
+league_single_season_player_box_scores.csv -- porque son caros de
+regenerar en cada rerender de Streamlit). compute_awards_summary() no
+llama a la API ni simula nada nuevo, pero sí importa lógica de negocio
+de src/awards_projection.py (en vez de solo leer y reformatear un CSV)
+para calcular los premios individuales sobre los CSV ya generados.
 """
 
 from __future__ import annotations
@@ -482,6 +488,30 @@ def load_league_playoff_summary(config: Dict[str, Any], scenario: str = "with_in
     return _read_csv_if_exists(paths["processed"] / f"league_playoff_summary{_scenario_suffix(scenario)}.csv")
 
 
+def load_league_single_season_game_log(config: Dict[str, Any], scenario: str = "with_injuries") -> Optional[pd.DataFrame]:
+    """Calendario y resultado de UNA temporada concreta ya simulada (ver
+    run_single_league_season_simulation) -- None si todavía no se ha
+    pulsado el botón que la genera."""
+    from league_simulation import _scenario_suffix
+
+    paths = get_paths(config)
+    return _read_csv_if_exists(paths["processed"] / f"league_single_season_game_log{_scenario_suffix(scenario)}.csv")
+
+
+def load_league_single_season_player_box_scores(
+    config: Dict[str, Any], scenario: str = "with_injuries"
+) -> Optional[pd.DataFrame]:
+    """Boxscore ILUSTRATIVO por jugador y partido de la misma temporada
+    concreta que load_league_single_season_game_log -- ver el caveat en
+    league_simulation.simulate_single_league_season_player_box_scores."""
+    from league_simulation import _scenario_suffix
+
+    paths = get_paths(config)
+    return _read_csv_if_exists(
+        paths["processed"] / f"league_single_season_player_box_scores{_scenario_suffix(scenario)}.csv"
+    )
+
+
 # Estado real de playoffs NBA aplicado al seed simulado (1-6 clasifica
 # directo, 7-10 juega el play-in, 11-15 queda fuera) -- mismo formato que
 # league_simulation.py simula (ver resolve_play_in / simulate_conference_bracket).
@@ -701,6 +731,23 @@ def run_single_bracket_simulation(
     from league_simulation import simulate_single_bracket
 
     return simulate_single_bracket(config, random_seed=random_seed, scenario=scenario)
+
+
+def run_single_league_season_simulation(
+    config: Dict[str, Any], random_seed: Optional[int] = None, scenario: str = "with_injuries"
+) -> Dict[str, pd.DataFrame]:
+    """
+    Excepción a "esta capa solo lee CSV": simula UNA temporada regular
+    concreta -- calendario, resultado de cada partido y boxscore
+    ilustrativo por jugador (league_simulation.run_single_league_season_simulation)
+    -- para el botón "Simular calendario de la temporada". Guarda los CSV
+    en disco de paso (mismo patrón que el bracket), así que llamadas
+    posteriores a load_league_single_season_game_log() los encuentran sin
+    tener que volver a simular.
+    """
+    from league_simulation import run_single_league_season_simulation as _run
+
+    return _run(config, scenario=scenario, random_seed=random_seed)
 
 
 def run_single_season_player_log_simulation(

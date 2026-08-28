@@ -9,3 +9,4 @@ data/processed/*.json
 data/processed/*.nc
 .env
 CLAUDE.md
+.claude/

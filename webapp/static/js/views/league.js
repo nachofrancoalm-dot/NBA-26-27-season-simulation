@@ -1,12 +1,20 @@
 import { api } from "../api.js";
-import { card, el, statGrid, dataTable, emptyState, teamBadge, teamCell, pillToggle } from "../ui.js";
+import { card, el, statGrid, dataTable, emptyState, teamBadge, teamCell, pillToggle, skeleton } from "../ui.js";
 import { openPlayerModal } from "../player-modal.js";
 import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
 
+/** `day` es un entero sintetico (0-81, "Dia N") cuando no hay calendario
+ * real publicado, o directamente la fecha real ("2026-10-20") cuando sí
+ * lo hay -- ver league_simulation.py: run_single_league_season_simulation
+ * cae al calendario sintético solo si league_schedule_full.csv no
+ * existe. JSON preserva el tipo (numero vs string), así que basta mirarlo. */
+function formatScheduleDay(day) {
+  return typeof day === "number" ? `Día ${day + 1}` : day;
+}
+
 export async function render(container) {
-  container.replaceChildren();
-  container.append(el("div", { class: "caption" }, "Cargando liga…"));
+  container.replaceChildren(skeleton(["title", "short"]), skeleton(["", "", ""]));
 
   const status = await api.status();
   const scenario = getScenario();
@@ -35,6 +43,8 @@ export async function render(container) {
 
   if (teams.status === "fulfilled") {
     cards.push(teamExplorerCard(teams.value.teams, standings.value.team_ids));
+    cards.push(scheduleCard(teams.value.teams));
+    cards.push(headToHeadCard(teams.value.teams));
   }
 
   cards.push(bracketCard());
@@ -123,7 +133,7 @@ function teamExplorerCard(teamAbbrevs, teamIds) {
 async function loadTeamDetail(container, abbreviation) {
   let mode = "per_game";
   const scenario = getScenario();
-  container.replaceChildren(el("div", { class: "caption" }, "Cargando equipo…"));
+  container.replaceChildren(skeleton());
 
   const header = el("div");
   const metricsBox = el("div");
@@ -139,7 +149,7 @@ async function loadTeamDetail(container, abbreviation) {
     }
 
     header.replaceChildren(
-      el("div", { style: "display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px;" }, [
+      el("div", { class: "card-header-row", style: "margin-bottom: 16px;" }, [
         el("div", { class: "team-identity", style: "gap: 16px;" }, [
           teamBadge(data.team_id, abbreviation, 72),
           el("strong", { style: "font-size: 1.4rem;" }, abbreviation),
@@ -179,6 +189,161 @@ async function loadTeamDetail(container, abbreviation) {
 
   container.replaceChildren(header, metricsBox, tableBox);
   await loadRoster();
+}
+
+/** Calendario de UNA temporada regular concreta (día 1-82, no fechas
+ * reales -- ver league_simulation.run_single_league_season_simulation) con
+ * resultado de cada partido; doble clic en el resultado carga el boxscore
+ * ilustrativo de ambos equipos. Cada tirada del botón es una temporada
+ * distinta (seed por reloj), igual que el bracket. */
+function scheduleCard(teamAbbrevs) {
+  const teamSelect = el("select", {}, [
+    el("option", { value: "" }, "Todos los equipos"),
+    ...teamAbbrevs.map((abbr) => el("option", { value: abbr }, abbr)),
+  ]);
+  const tableBox = el("div", { style: "margin-top: 16px;" });
+  const boxscoreBox = el("div", { style: "margin-top: 16px;" });
+
+  async function loadBoxscore(gameId) {
+    boxscoreBox.replaceChildren(el("div", { class: "caption" }, "Cargando boxscore…"));
+    let data;
+    try {
+      data = await api.leagueBoxscore(gameId, getScenario());
+    } catch (err) {
+      boxscoreBox.replaceChildren(emptyState(err.message));
+      return;
+    }
+    const trimStats = (rows) =>
+      rows.map((r) => ({
+        jugador: r.player_name, PTS: r.PTS, REB: r.REB, AST: r.AST, STL: r.STL, BLK: r.BLK, TOV: r.TOV, "3PM": r["3PM"],
+      }));
+    boxscoreBox.replaceChildren(
+      el("h3", {}, `${data.game.home_abbreviation} ${data.game.home_score.toFixed(0)} – ${data.game.away_score.toFixed(0)} ${data.game.away_abbreviation}`),
+      el(
+        "p",
+        { class: "caption" },
+        "Boxscore ILUSTRATIVO (media por-partido de temporada + ruido, categorías independientes) -- no una simulación conjunta jugada a jugada."
+      ),
+      el("div", { class: "grid-2" }, [
+        el("div", {}, [el("h4", {}, data.game.home_abbreviation), dataTable(trimStats(data.home_players))]),
+        el("div", {}, [el("h4", {}, data.game.away_abbreviation), dataTable(trimStats(data.away_players))]),
+      ])
+    );
+  }
+
+  async function loadSchedule() {
+    tableBox.replaceChildren(el("div", { class: "caption" }, "Cargando calendario…"));
+    boxscoreBox.replaceChildren();
+    let data;
+    try {
+      data = await api.leagueSchedule(teamSelect.value || undefined, getScenario());
+    } catch (err) {
+      tableBox.replaceChildren(emptyState(err.message));
+      return;
+    }
+    const trimmed = data.games.map((g) => ({
+      dia: formatScheduleDay(g.day),
+      local: g.home_abbreviation,
+      resultado: `${g.home_score.toFixed(0)} – ${g.away_score.toFixed(0)}`,
+      visitante: g.away_abbreviation,
+      ganador: g.winner_abbreviation,
+      game_id: g.game_id,
+    }));
+    tableBox.replaceChildren(
+      dataTable(trimmed, {}, {
+        hiddenColumns: ["game_id"],
+        doubleClick: { column: "resultado", onOpen: (record) => loadBoxscore(record.game_id) },
+      })
+    );
+  }
+
+  const button = el("button", { class: "btn" }, "🎲 Simular calendario de la temporada");
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    button.textContent = "Simulando…";
+    try {
+      await api.leagueSimulateSeasonLog(getScenario());
+      await loadSchedule();
+    } catch (err) {
+      tableBox.replaceChildren(emptyState(err.message));
+    } finally {
+      button.disabled = false;
+      button.textContent = "🎲 Simular calendario de la temporada";
+    }
+  });
+  teamSelect.addEventListener("change", loadSchedule);
+
+  loadSchedule();
+
+  return card([
+    el("h2", {}, "Calendario de la temporada"),
+    el(
+      "p",
+      { class: "caption" },
+      "Calendario real de la temporada si ya está publicado (fechas y rivales reales -- si no, cae a un " +
+        "calendario sintético día 1-82) con el resultado de cada partido de UNA temporada concreta. Doble " +
+        "clic en el resultado para ver el boxscore. Cada tirada del botón es una temporada distinta."
+    ),
+    el("div", { style: "display: flex; gap: 12px; align-items: center; flex-wrap: wrap;" }, [button, teamSelect]),
+    tableBox,
+    boxscoreBox,
+  ]);
+}
+
+/** Récord entre dos equipos en la temporada regular simulada por
+ * scheduleCard -- filtra el mismo calendario, no dispara ninguna
+ * simulación nueva. */
+function headToHeadCard(teamAbbrevs) {
+  const teamAOptions = () => teamAbbrevs.map((abbr) => el("option", { value: abbr }, abbr));
+  const teamASelect = el("select", {}, teamAOptions());
+  const teamBSelect = el("select", {}, teamAOptions());
+  if (teamAbbrevs.length > 1) {
+    teamASelect.value = teamAbbrevs[0];
+    teamBSelect.value = teamAbbrevs[1];
+  }
+  const button = el("button", { class: "btn" }, "Ver head-to-head");
+  const resultBox = el("div", { style: "margin-top: 16px;" });
+
+  button.addEventListener("click", async () => {
+    if (teamASelect.value === teamBSelect.value) {
+      resultBox.replaceChildren(emptyState("Elige dos equipos distintos."));
+      return;
+    }
+    button.disabled = true;
+    resultBox.replaceChildren(el("div", { class: "caption" }, "Cargando…"));
+    try {
+      const data = await api.leagueHeadToHead(teamASelect.value, teamBSelect.value, getScenario());
+      const trimmed = data.games.map((g) => ({
+        dia: formatScheduleDay(g.day),
+        local: g.home_abbreviation,
+        resultado: `${g.home_score.toFixed(0)} – ${g.away_score.toFixed(0)}`,
+        visitante: g.away_abbreviation,
+        ganador: g.winner_abbreviation,
+      }));
+      resultBox.replaceChildren(
+        statGrid([[`${data.team_a} vs. ${data.team_b}`, `${data.team_a_wins}-${data.team_b_wins}`]]),
+        el("div", { style: "margin-top: 12px;" }, dataTable(trimmed))
+      );
+    } catch (err) {
+      resultBox.replaceChildren(emptyState(err.message));
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  return card([
+    el("h2", {}, "Head-to-head"),
+    el(
+      "p",
+      { class: "caption" },
+      "Récord entre dos equipos en la temporada regular ya simulada (mismo calendario de arriba -- simula " +
+        "primero si todavía no lo has hecho)."
+    ),
+    el("div", { style: "display: flex; gap: 12px; align-items: center; flex-wrap: wrap;" }, [
+      teamASelect, "vs.", teamBSelect, button,
+    ]),
+    resultBox,
+  ]);
 }
 
 function bracketCard() {

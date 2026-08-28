@@ -1,0 +1,466 @@
+/* hero.css -- pantalla de entrada (splash, ver views/splash.js) + jugador
+   animado (player-hero.js) + transición de navegación entre pestañas de
+   primer nivel. Separado de components.css porque es la única parte de
+   la interfaz con animación de movimiento no trivial -- mantenerlo aparte
+   deja components.css como el catálogo "estático" de piezas reutilizables. */
+
+/* --- Splash: pantalla de entrada, ANTERIOR a la app, no una pestaña ---
+   Overlay fijo por encima de .app-shell (que sigue existiendo debajo,
+   normalmente ya en la sección "Mi equipo" por defecto) -- app.js solo
+   descarta este overlay al entrar, nunca desmonta ni reconstruye el
+   shell de pestañas. Con scroll propio porque en pantallas bajas
+   (portátil con poca altura) el hero + KPIs + accesos rápidos no caben
+   enteros en un viewport fijo. */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: hidden;
+  background: var(--surface-page);
+  background-image: var(--page-gradient);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.35s ease, visibility 0.35s;
+}
+
+.splash.dismissed {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* height:100% (no min-height) es lo que hace que overflow-y:auto tenga
+   algo que desbordar -- con min-height el contenedor simplemente crecía
+   con su contenido (scrollHeight == clientHeight, comprobado) y quedaba
+   recortado sin scrollbar por el overflow:hidden de .splash, un bug peor
+   que el que se estaba arreglando. Y NO flex + align-items:center a
+   propósito: con contenido más alto que el viewport (caso normal: hero +
+   KPIs + 6 accesos rápidos) centrar verticalmente en un contenedor con
+   scroll deja la parte de ARRIBA inalcanzable (scrollTop no puede bajar
+   de 0, y el centrado empuja el contenido hacia arriba fuera del área de
+   scroll) -- bug real visto en captura: el eyebrow/título del hero
+   aparecía cortado sin forma de hacer scroll hasta él. Flujo de bloque
+   normal de arriba a abajo, alto fijo al 100%, es lo único que deja
+   TANTO el principio como el final alcanzables. */
+.splash-scroll {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.splash-content {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+/* --- Hero banner (dentro del splash) --- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  padding: 40px clamp(20px, 5vw, 56px);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  min-height: 260px;
+  color: #fff;
+  background: linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--team-primary) 92%, black) 0%,
+      color-mix(in srgb, var(--team-primary) 78%, #050608) 55%,
+      color-mix(in srgb, var(--team-secondary) 55%, #050608) 100%
+    ),
+    var(--surface-page);
+}
+
+/* Líneas de cancha de baloncesto muy sutiles -- decoración original (no
+   una foto de una cancha real), solo para dar textura de "producto
+   deportivo" al banner sin competir con el texto. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  background-image: radial-gradient(circle at 82% 50%, transparent 0 78px, rgba(255, 255, 255, 0.9) 78px 80px, transparent 80px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.5) 0 1px, transparent 1px 64px);
+  background-position: 0 0;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0 0 10px;
+}
+
+.hero-eyebrow::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--basketball-orange);
+  box-shadow: 0 0 0 3px rgba(226, 121, 58, 0.25);
+}
+
+.hero h1 {
+  font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+  line-height: 1.1;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+}
+
+.hero p {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.98rem;
+  line-height: 1.6;
+  margin: 0 0 22px;
+  max-width: 46ch;
+}
+
+.hero-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hero .btn {
+  background: #fff;
+  color: color-mix(in srgb, var(--team-primary) 85%, black);
+  border-color: transparent;
+}
+
+.hero .btn:hover {
+  filter: none;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.hero .btn-ghost {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.hero .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.hero-stage {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: clamp(150px, 20vw, 220px);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.hero-stage .dribbler-shadow {
+  position: absolute;
+  bottom: 6%;
+  left: 50%;
+  width: 62%;
+  height: 14px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), transparent 80%);
+  animation: db-shadow-pulse 0.5s ease-in-out infinite alternate;
+}
+
+/* --- Jugador destacado (player-hero.js): foto real + balón animado ---
+   Reemplaza un primer intento de silueta ilustrada a mano (formas SVG
+   genéricas para cabeza/torso/piernas) que se veía incompleta -- una foto
+   real del roster (hotlink en vivo a cdn.nba.com, mismo mecanismo que ya
+   usa el popup de jugador) resuelve "un jugador de los 76ers" de forma
+   mucho más creíble y profesional que reintentar la anatomía a mano. */
+
+.hero-motion {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  opacity: 0.5;
+}
+
+.motion-arc {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.motion-arc.a2 {
+  opacity: 0.7;
+}
+
+.motion-arc.a3 {
+  opacity: 0.45;
+}
+
+.hero-photo-bob {
+  position: relative;
+  z-index: 1;
+  animation: db-bob 0.5s ease-in-out infinite alternate;
+}
+
+.hero-photo-bob .team-badge {
+  border: 4px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.hero-ball-wrap {
+  position: absolute;
+  z-index: 2;
+  right: 2%;
+  bottom: 10%;
+  width: 30%;
+  max-width: 64px;
+}
+
+.hero-ball {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+}
+
+.db-ball {
+  fill: var(--basketball-orange);
+}
+
+.db-seam {
+  stroke: var(--basketball-orange-dark);
+  stroke-width: 1.6;
+  fill: none;
+}
+
+.db-ball-bounce {
+  animation: db-ball-bounce 0.5s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+@keyframes db-bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes db-ball-bounce {
+  from {
+    transform: translateY(0) scale(1, 1) rotate(0deg);
+  }
+  to {
+    transform: translateY(-22px) scale(1.04, 0.96) rotate(-18deg);
+  }
+}
+
+@keyframes db-shadow-pulse {
+  from {
+    opacity: 0.5;
+    transform: translateX(-50%) scale(1);
+  }
+  to {
+    opacity: 0.25;
+    transform: translateX(-50%) scale(0.82);
+  }
+}
+
+/* --- KPI strip debajo del hero --- */
+
+.hero-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.hero-kpi {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hero-kpi .label {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hero-kpi .value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.hero-kpi .value.accent {
+  color: color-mix(in srgb, var(--team-primary) 55%, var(--text-primary));
+}
+
+.hero-kpi .sub {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+/* --- Tarjetas de acceso rápido a las secciones principales --- */
+
+.quick-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.quick-link {
+  appearance: none;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 18px 20px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: inherit;
+  color: var(--text-primary);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.quick-link:hover {
+  border-color: color-mix(in srgb, var(--team-primary) 45%, var(--border));
+  transform: translateY(-2px);
+}
+
+.quick-link .quick-link-title {
+  font-weight: 700;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-link .quick-link-desc {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* --- Transición de navegación entre pestañas de primer nivel ---
+   Se activa al entrar desde el splash Y al cambiar entre Mi equipo/Liga
+   NBA/Explicador (no en cada sub-pestaña o toggle -- el pedido era "antes
+   de entrar en estadísticas", no en cada clic). Cubre el viewport un
+   instante, mientras la pestaña de destino ya se está montando/pidiendo
+   datos detrás -- doble función: comunica que "esto va a otra sección
+   grande" Y disimula el parpadeo de contenido vacío mientras carga.
+   z-index por encima de .splash (80) para que se vea también durante el
+   propio hand-off splash -> app. */
+.nav-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-page);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+.nav-transition.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.nav-transition-track {
+  position: absolute;
+  top: 50%;
+  left: -22%;
+  width: 160px;
+  transform: translateY(-50%);
+  animation: db-run-across 0.85s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes db-run-across {
+  from {
+    left: -22%;
+  }
+  to {
+    left: 108%;
+  }
+}
+
+/* En pleno cruce de pantalla no hay un "suelo" fijo con el que la sombra
+   elíptica del hero tenga sentido (esa sombra asume una franja de banner
+   estática) -- se oculta solo en este contexto. */
+.dribbler-shadow-off .dribbler-shadow {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-photo-bob,
+  .db-ball-bounce,
+  .dribbler-shadow {
+    animation: none;
+  }
+  .nav-transition-track {
+    animation: none;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    flex-direction: column;
+    text-align: center;
+    padding: 32px 24px;
+  }
+  .hero-copy {
+    max-width: none;
+  }
+  .hero-cta-row {
+    justify-content: center;
+  }
+  .hero-stage {
+    width: 150px;
+  }
+}

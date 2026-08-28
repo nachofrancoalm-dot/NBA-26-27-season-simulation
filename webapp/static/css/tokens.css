@@ -42,6 +42,19 @@
   --brand-red-dark: #a01623;
   --brand-blue: #1d428a;
 
+  /* Colores reales de la franquicia activa -- team-colors.js los
+     sobrescribe en JS al arrancar, leyendo /api/status. Estos son solo el
+     fallback antes de que ese script corra (o si la abreviatura no
+     estuviera en la tabla). --brand-*  arriba se queda como el acento de
+     CHROME (nav, tabs, botones) para cualquier equipo; --team-* es solo
+     para el hero de Inicio y el ilustrador del jugador, donde SÍ tiene
+     sentido que cambie con la franquicia. */
+  --team-primary: var(--brand-blue);
+  --team-secondary: var(--brand-red);
+
+  --basketball-orange: #e2793a;
+  --basketball-orange-dark: #a8531e;
+
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-serious: #ec835a;

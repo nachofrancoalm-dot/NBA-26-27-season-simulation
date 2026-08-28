@@ -4,21 +4,28 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NBA Superteam Sim</title>
-  <link rel="stylesheet" href="/css/tokens.css?v=2" />
+  <link rel="stylesheet" href="/css/tokens.css?v=3" />
   <link rel="stylesheet" href="/css/layout.css?v=2" />
-  <link rel="stylesheet" href="/css/components.css?v=2" />
+  <link rel="stylesheet" href="/css/components.css?v=3" />
+  <link rel="stylesheet" href="/css/hero.css?v=1" />
 </head>
 <body>
+  <div class="splash" id="splash">
+    <div class="splash-scroll">
+      <div class="splash-content" id="splash-content"></div>
+    </div>
+  </div>
+
   <div class="app-shell">
     <main class="main">
       <header class="topbar">
-        <div class="team-identity">
+        <button type="button" class="team-identity team-identity-home" id="home-link" title="Volver a Inicio">
           <div class="team-badge" id="header-badge">--</div>
           <div>
             <h1 id="page-title">NBA Superteam Simulator</h1>
             <p class="subtitle" id="page-subtitle">Cargando…</p>
           </div>
-        </div>
+        </button>
         <img
           class="brand-mark"
           src="https://cdn.nba.com/logos/leagues/logo-nba.svg"
@@ -62,6 +69,8 @@
   </div>
 
   <div class="chart-tooltip" id="chart-tooltip"></div>
+
+  <div class="nav-transition" id="nav-transition" aria-hidden="true"></div>
 
   <dialog id="player-modal" class="detail-modal"></dialog>
   <dialog id="team-modal" class="detail-modal"></dialog>

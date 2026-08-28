@@ -1,10 +1,9 @@
 import { api } from "../api.js";
-import { card, el, statGrid, dataTable, glossaryExpander, emptyState } from "../ui.js";
+import { card, el, statGrid, dataTable, glossaryExpander, emptyState, skeleton } from "../ui.js";
 import { columnChart, scatterChart } from "../charts.js";
 
 export async function render(container) {
-  container.replaceChildren();
-  container.append(el("div", { class: "caption" }, "Cargando backtesting…"));
+  container.replaceChildren(skeleton(["title", "short"]), skeleton());
 
   const [narrative, sweep] = await Promise.allSettled([api.backtest(), api.backtestSweep()]);
 

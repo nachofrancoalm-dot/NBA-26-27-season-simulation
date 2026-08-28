@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config_loader import load_config  # noqa: E402
 from llm_explainer import build_context_snapshot, explain_question  # noqa: E402
+from news_search import search_recent_news  # noqa: E402
 from data_loader import (  # noqa: E402
     AWARDS_GLOSSARY,
     BACKTEST_GLOSSARY,
@@ -63,10 +64,12 @@ from data_loader import (  # noqa: E402
     load_lineup_synergy_pairs,
     load_roster_overview,
     run_single_bracket_simulation,
+    run_single_league_season_simulation,
     run_single_season_player_log_simulation,
     load_simulation_results,
     select_roster_view,
 )
+from league_simulation import compute_head_to_head_record  # noqa: E402
 
 
 # ---------------------------------------------------------------------
@@ -83,6 +86,17 @@ def render_glossary_expander(df_columns, glossary, title="Leyenda de estadístic
             if col in glossary:
                 st.markdown(f"**{col}** — {glossary[col]}")
     return column_config
+
+
+def _format_schedule_day(day_series: pd.Series) -> pd.Series:
+    """`day` es un entero sintético (0-81, "Día N") cuando no hay
+    calendario real publicado, o directamente la fecha real
+    ("2026-10-20") cuando sí lo hay -- ver
+    league_simulation.run_single_league_season_simulation, que cae al
+    calendario sintético solo si league_schedule_full.csv no existe."""
+    if pd.api.types.is_numeric_dtype(day_series):
+        return "Día " + (day_series + 1).astype(str)
+    return day_series
 
 
 def _series_line(game: dict) -> str:
@@ -154,6 +168,7 @@ playoff_summary = load_league_playoff_summary(config)
 player_projections = load_league_player_projections(config)
 awards = compute_awards_summary(config)
 groq_api_key = os.environ.get("GROQ_API_KEY")
+tavily_api_key = os.environ.get("TAVILY_API_KEY")
 
 DATASET_STATUS = {
     "Roster propio": roster_overview is not None,
@@ -607,6 +622,98 @@ with tab_league_group:
                     f"## 🏆🏆 Campeón de la NBA: **{bracket_result['nba_champion']}** 🏆🏆",
                 )
 
+            st.subheader("Calendario de la temporada")
+            st.caption(
+                "Calendario real de la temporada si ya está publicado (fechas y rivales reales -- si no, "
+                "cae a un calendario sintético día 1-82) con el resultado de UNA temporada regular concreta "
+                "(no la distribución agregada de arriba). Permite navegar los partidos, ver el boxscore "
+                "ilustrativo de cada uno y el head-to-head entre dos equipos. Cada tirada del botón es "
+                "una temporada distinta."
+            )
+            if st.button("🎲 Simular calendario de la temporada"):
+                with st.spinner("Simulando calendario..."):
+                    result = run_single_league_season_simulation(config)
+                    st.session_state["season_game_log"] = result["game_log"]
+                    st.session_state["season_box_scores"] = result["player_box_scores"]
+
+            game_log = st.session_state.get("season_game_log")
+            box_scores = st.session_state.get("season_box_scores")
+
+            if game_log is None:
+                st.info("Pulsa el botón de arriba para simular un calendario y poder verlo aquí.")
+            else:
+                team_id_by_abbrev = dict(zip(game_log["home_abbreviation"], game_log["home_team_id"]))
+                team_id_by_abbrev.update(dict(zip(game_log["away_abbreviation"], game_log["away_team_id"])))
+                all_teams_sched = sorted(team_id_by_abbrev.keys())
+
+                schedule_team = st.selectbox("Filtrar por equipo", ["Todos"] + all_teams_sched, key="schedule_team_filter")
+                filtered = (
+                    game_log if schedule_team == "Todos"
+                    else game_log[
+                        (game_log["home_abbreviation"] == schedule_team) | (game_log["away_abbreviation"] == schedule_team)
+                    ]
+                ).sort_values("day")
+                display = filtered.assign(
+                    dia=_format_schedule_day(filtered["day"]),
+                    resultado=(
+                        filtered["home_score"].round(0).astype(int).astype(str)
+                        + " – " + filtered["away_score"].round(0).astype(int).astype(str)
+                    ),
+                )[["dia", "home_abbreviation", "resultado", "away_abbreviation", "winner_abbreviation"]]
+                st.dataframe(display, width="stretch", hide_index=True)
+
+                if box_scores is not None and not filtered.empty:
+                    label_by_game_id = {
+                        int(row.game_id): (
+                            f"Día {int(row.day) + 1}: {row.home_abbreviation} vs {row.away_abbreviation} "
+                            f"({int(round(row.home_score))}-{int(round(row.away_score))})"
+                        )
+                        for row in filtered.itertuples()
+                    }
+                    selected_game_id = st.selectbox(
+                        "Ver boxscore del partido", list(label_by_game_id.keys()),
+                        format_func=lambda gid: label_by_game_id[gid], key="schedule_boxscore_select",
+                    )
+                    game_row = game_log[game_log["game_id"] == selected_game_id].iloc[0]
+                    st.caption(
+                        "Boxscore ILUSTRATIVO (media por-partido de temporada + ruido, categorías "
+                        "independientes) -- no una simulación conjunta jugada a jugada."
+                    )
+                    stat_cols = ["player_name", "PTS", "REB", "AST", "STL", "BLK", "TOV", "3PM"]
+                    box_cols = st.columns(2)
+                    for box_col, side in zip(box_cols, ["home", "away"]):
+                        with box_col:
+                            st.markdown(f"**{game_row[f'{side}_abbreviation']}**")
+                            side_box = box_scores[
+                                (box_scores["game_id"] == selected_game_id)
+                                & (box_scores["team_id"] == game_row[f"{side}_team_id"])
+                            ]
+                            st.dataframe(
+                                side_box[stat_cols].sort_values("PTS", ascending=False).round(1),
+                                width="stretch", hide_index=True,
+                            )
+
+                st.markdown("#### Head-to-head")
+                h2h_cols = st.columns(2)
+                team_a = h2h_cols[0].selectbox("Equipo A", all_teams_sched, index=0, key="h2h_team_a")
+                default_b_index = 1 if len(all_teams_sched) > 1 else 0
+                team_b = h2h_cols[1].selectbox("Equipo B", all_teams_sched, index=default_b_index, key="h2h_team_b")
+                if team_a == team_b:
+                    st.warning("Elige dos equipos distintos.")
+                else:
+                    record = compute_head_to_head_record(game_log, team_id_by_abbrev[team_a], team_id_by_abbrev[team_b])
+                    st.metric(f"{team_a} vs. {team_b}", f"{record['team_a_wins']}-{record['team_b_wins']}")
+                    if record["games"]:
+                        h2h_df = pd.DataFrame(record["games"])
+                        h2h_display = h2h_df.assign(
+                            dia=_format_schedule_day(h2h_df["day"]),
+                            resultado=(
+                                h2h_df["home_score"].round(0).astype(int).astype(str)
+                                + " – " + h2h_df["away_score"].round(0).astype(int).astype(str)
+                            ),
+                        )[["dia", "home_abbreviation", "resultado", "away_abbreviation", "winner_abbreviation"]]
+                        st.dataframe(h2h_display, width="stretch", hide_index=True)
+
     with sub_awards:
         st.subheader("Premios individuales — heurísticas sobre la proyección")
         st.caption(
@@ -912,6 +1019,45 @@ with tab_explainer:
         with st.expander("Ver el contexto (snapshot de datos) que recibe el modelo"):
             st.markdown(build_context_snapshot(config))
 
+        with st.expander("Opcional: pegar noticias recientes (lesiones, fichajes, cambios de entrenador...)"):
+            search_col, button_col = st.columns([3, 1])
+            with search_col:
+                search_query = st.text_input(
+                    "Buscar noticias recientes (opcional)",
+                    key="explainer_search_query",
+                    placeholder="Ej: lesiones Philadelphia 76ers",
+                    label_visibility="collapsed",
+                )
+            with button_col:
+                # Fase 2 del RAG -- solo se llama al pulsar, nunca automático.
+                # El resultado se escribe en session_state ANTES de instanciar
+                # el text_area de abajo (mismo key) para que Streamlit lo
+                # recoja como valor inicial en este mismo rerun.
+                if st.button("Buscar noticias"):
+                    if not tavily_api_key:
+                        st.warning(
+                            "No se encontró TAVILY_API_KEY. Copia .env.example a .env y rellena tu "
+                            "API key de https://tavily.com -- puedes seguir pegando texto a mano."
+                        )
+                    elif not search_query.strip():
+                        st.warning("Escribe algo para buscar.")
+                    else:
+                        with st.spinner("Buscando..."):
+                            try:
+                                st.session_state["explainer_news_text"] = search_recent_news(
+                                    search_query, api_key=tavily_api_key
+                                )
+                            except Exception as exc:  # noqa: BLE001 -- mostramos cualquier error de API
+                                st.warning(f"Error al buscar noticias: {exc}")
+
+            news_text = st.text_area(
+                "El modelo lo usará como contexto adicional NO verificado -- lo marcará "
+                "explícitamente como tal en sus respuestas, nunca lo mezclará con los datos "
+                "calculados por el pipeline.",
+                key="explainer_news_text",
+                height=150,
+            )
+
         if "explainer_history" not in st.session_state:
             st.session_state["explainer_history"] = []
 
@@ -927,7 +1073,7 @@ with tab_explainer:
             with st.chat_message("assistant"):
                 with st.spinner("Consultando a Groq..."):
                     try:
-                        answer = explain_question(question, config, api_key=groq_api_key)
+                        answer = explain_question(question, config, api_key=groq_api_key, news_text=news_text)
                     except Exception as exc:  # noqa: BLE001 -- mostramos cualquier error de API al usuario
                         answer = f"Error al consultar el modelo: {exc}"
                 st.markdown(answer)

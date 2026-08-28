@@ -1,9 +1,8 @@
 import { api } from "../api.js";
-import { card, el, statGrid, dataTable, glossaryExpander, emptyState } from "../ui.js";
+import { card, el, statGrid, dataTable, glossaryExpander, emptyState, skeleton } from "../ui.js";
 
 export async function render(container) {
-  container.replaceChildren();
-  container.append(el("div", { class: "caption" }, "Cargando campeones…"));
+  container.replaceChildren(skeleton(["title", "short"]), skeleton());
 
   let data;
   try {

@@ -1,9 +1,8 @@
 import { api } from "../api.js";
-import { card, el, dataTable, emptyState } from "../ui.js";
+import { card, el, dataTable, emptyState, skeleton } from "../ui.js";
 
 export async function render(container) {
-  container.replaceChildren();
-  container.append(el("div", { class: "caption" }, "Cargando sinergia…"));
+  container.replaceChildren(skeleton());
 
   let data;
   try {

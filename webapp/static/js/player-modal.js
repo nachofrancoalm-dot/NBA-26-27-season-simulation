@@ -74,7 +74,7 @@ export async function openPlayerModal(playerId, teamId) {
   } catch (err) {
     dialog.replaceChildren(
       el("div", { style: "padding: 24px;" }, [
-        el("button", { class: "modal-close", onclick: () => dialog.close() }, "✕"),
+        el("button", { class: "modal-close", "aria-label": "Cerrar", onclick: () => dialog.close() }, "✕"),
         emptyState(err.message),
       ])
     );
@@ -84,7 +84,7 @@ export async function openPlayerModal(playerId, teamId) {
   let mode = "per_game";
   const seasonsBox = el("div");
 
-  const header = el("div", { style: "display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 10px;" }, [
+  const header = el("div", { class: "card-header-row", style: "margin: 24px 0 10px;" }, [
     el("h3", { style: "margin: 0;" }, "Trayectoria por temporada"),
     data.seasons.length
       ? pillToggle(
@@ -107,7 +107,7 @@ export async function openPlayerModal(playerId, teamId) {
 
   dialog.replaceChildren(
     el("div", { class: "detail-modal-body" }, [
-      el("button", { class: "modal-close", onclick: () => dialog.close() }, "✕"),
+      el("button", { class: "modal-close", "aria-label": "Cerrar", onclick: () => dialog.close() }, "✕"),
       el("div", { class: "detail-modal-header" }, [
         playerPhoto(data.player_id, data.name, 96),
         teamBadge(teamId, null, 56),

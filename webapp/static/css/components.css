@@ -14,6 +14,23 @@
   margin: 0 0 4px;
 }
 
+/* Fila de cabecera de card: título + control (toggle, botón...) a la
+   derecha. Sin flex-wrap, un título largo + un segmented control no caben
+   en el ancho de un móvil y el control se sale de la card (bug real visto
+   en Roster y en el explorador de equipo de Liga NBA a 390px). Envolver
+   dentro deja el control debajo del título en vez de desbordar. */
+.card-header-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 12px;
+}
+
+.card-header-row h2 {
+  margin: 0;
+}
+
 .card h3 {
   font-size: 0.95rem;
   margin: 24px 0 10px;
@@ -33,6 +50,28 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* El logo/nombre de la topbar es también el botón "volver a Inicio" --
+   patrón estándar de logo-en-cabecera=home. Solo el `<button>` de la
+   topbar lleva esta clase; el mismo bloque visual reutilizado dentro del
+   explorador de equipo de Liga NBA sigue siendo un div normal, no
+   clicable. */
+.team-identity-home {
+  appearance: none;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px;
+  margin: -4px;
+  border-radius: 8px;
+}
+
+.team-identity-home:hover {
+  background: var(--surface-card);
 }
 
 .team-badge {
@@ -165,6 +204,75 @@
      visualmente la tabla del resto de la sección en vez de fundirse con
      el mismo tono de fondo. */
   background: color-mix(in srgb, var(--surface-page) 45%, var(--surface-card));
+}
+
+/* Sombra de scroll horizontal (roster, standings, backtest sweep... --
+   cualquier tabla más ancha que su card). Tiene que vivir en un elemento
+   HERMANO de .table-wrap, no dentro de él: las filas de la tabla tienen
+   fondo opaco (zebra striping), así que cualquier fondo/sombra puesto
+   DETRÁS del contenido (como hijo de .table-wrap) queda tapado sin más --
+   ya se probó y no se veía. dataTable() en ui.js mide scrollWidth vs
+   clientWidth y hace toggle de estas dos capas según la posición de
+   scroll, así la sombra desaparece justo al llegar a cada extremo en vez
+   de sugerir contenido que ya no hay. Es la única pista de que hay más
+   columnas fuera de vista -- antes no había ningún indicio (bug real:
+   columnas cortadas en seco en el borde derecho de la card, ver captura a
+   1440px y, peor, el control "Totales/Por partido" saliéndose de la card
+   a 390px). */
+.table-scroll-region {
+  position: relative;
+}
+
+.scroll-shadow {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 36px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 2;
+  transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+}
+
+/* Un degradado sutil por sí solo se perdía contra un tema ya oscuro (se
+   probó con negro al 40% -- casi invisible sobre --surface-card-alt).
+   Se sube la opacidad Y se añade una flecha, doble refuerzo de la misma
+   señal en vez de depender de un solo indicio débil de contraste. */
+.scroll-shadow-left {
+  left: 1px;
+  justify-content: flex-start;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.65), transparent);
+  border-radius: 8px 0 0 8px;
+}
+
+.scroll-shadow-right {
+  right: 1px;
+  justify-content: flex-end;
+  background: linear-gradient(to left, rgba(0, 0, 0, 0.65), transparent);
+  border-radius: 0 8px 8px 0;
+}
+
+.scroll-shadow.visible {
+  opacity: 1;
+}
+
+.scroll-shadow::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin: 0 8px;
+  border-top: 2px solid var(--text-secondary);
+  border-right: 2px solid var(--text-secondary);
+}
+
+.scroll-shadow-left::after {
+  transform: rotate(-135deg);
+}
+
+.scroll-shadow-right::after {
+  transform: rotate(45deg);
 }
 
 table.data-table {
@@ -447,14 +555,14 @@ svg.chart .gridline {
 
 .modal-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 12px;
+  right: 12px;
   appearance: none;
   border: 1px solid var(--border);
   background: var(--surface-card-alt);
   color: var(--text-secondary);
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   cursor: pointer;
   font-size: 0.9rem;
@@ -667,4 +775,74 @@ svg.chart .gridline {
   padding: 5px 8px;
   background: var(--surface-card-alt);
   min-width: 120px;
+}
+
+/* --- Focus visible ---
+   Ningún elemento interactivo tenía un anillo de foco propio salvo el
+   input del chat -- el resto dependía del outline nativo del navegador,
+   que `appearance: none` en botones puede debilitar o quitar según el
+   navegador (visto en Safari). :focus-visible (no :focus) para no pintar
+   el anillo en un clic de ratón, solo en navegación por teclado. */
+.tab-button:focus-visible,
+.team-rail-item:focus-visible,
+.segmented button:focus-visible,
+.btn:focus-visible,
+.modal-close:focus-visible,
+.cell-clickable:focus-visible,
+td.cell-clickable:focus-visible {
+  outline: 2px solid var(--accent-450);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --- Skeleton loading (shimmer) ---
+   Sustituye el texto plano "Cargando..." como primer render de cada
+   pestaña. Con la vista de Premios individuales tardando ~4s en el
+   backend (compute_awards_summary corre pandas sin caché), un texto fijo
+   sin movimiento no comunica que algo sigue en curso -- ver
+   `progressive-loading` de la skill de UI/UX de este proyecto: para
+   esperas >1s hace falta una señal de progreso, no un spinner opaco ni
+   (peor) texto estático. Barras del tamaño aproximado del contenido real
+   (título + un par de filas) para minimizar el salto de layout cuando
+   llega el dato. */
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  background: linear-gradient(
+    100deg,
+    var(--surface-card-alt) 30%,
+    color-mix(in srgb, var(--surface-card-alt) 55%, var(--text-muted)) 50%,
+    var(--surface-card-alt) 70%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-line.title {
+  height: 20px;
+  width: 45%;
+}
+
+.skeleton-line.short {
+  width: 60%;
+}
+
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
 }

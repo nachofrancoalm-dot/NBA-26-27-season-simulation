@@ -1,10 +1,9 @@
 import { api } from "../api.js";
-import { card, el, statGrid, dataTable, glossaryExpander, emptyState } from "../ui.js";
+import { card, el, statGrid, dataTable, glossaryExpander, emptyState, skeleton } from "../ui.js";
 import { columnChart, lineChart } from "../charts.js";
 
 export async function render(container) {
-  container.replaceChildren();
-  container.append(el("div", { class: "caption" }, "Cargando simulación…"));
+  container.replaceChildren(skeleton(["title", "short"]), skeleton());
 
   let data;
   try {

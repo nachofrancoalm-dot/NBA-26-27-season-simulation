@@ -1,12 +1,11 @@
 import { api } from "../api.js";
-import { card, el, dataTable, emptyState, pillToggle } from "../ui.js";
+import { card, el, dataTable, emptyState, pillToggle, skeleton } from "../ui.js";
 import { openPlayerModal } from "../player-modal.js";
 
 export async function render(container) {
   let mode = "per_game";
 
-  container.replaceChildren();
-  container.append(el("div", { class: "caption" }, "Cargando roster…"));
+  container.replaceChildren(skeleton(["title", "", "", "short"]));
 
   const status = await api.status();
   const teamId = status.team.team_id;
@@ -43,8 +42,8 @@ export async function render(container) {
 
   container.replaceChildren(
     card([
-      el("div", { style: "display: flex; align-items: center; justify-content: space-between; gap: 12px;" }, [
-        el("h2", { style: "margin: 0;" }, "Roster: proyección, riesgo y desgaste por jugador"),
+      el("div", { class: "card-header-row" }, [
+        el("h2", {}, "Roster: proyección, riesgo y desgaste por jugador"),
         toggle,
       ]),
       body,

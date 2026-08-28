@@ -567,10 +567,26 @@ asumen como los minutos/partido REALES de la temporada más reciente de
 cada jugador (continuidad de rol) — una aproximación con datos, no
 inventada.
 
-**Calendario:** como el calendario oficial 2026-27 todavía no existe
-(mismo problema que en `schedule_strength.py`), se genera un round-robin
-equilibrado (método clásico del círculo de torneos) donde cada equipo
-juega contra cada rival ~2-3 veces hasta sumar `games_per_season`.
+**Calendario:** usa el calendario REAL publicado por la NBA
+(`data_pipeline.build_league_schedule_dataset`, dentro de `--league`,
+guardado en `league_schedule_full.csv`) cuando existe -- fechas,
+rivales, descanso (back-to-back real, no sorteado) y ventaja de campo
+(`home_court_advantage`, 2.41 puntos calibrados) reales.
+`league_simulation.real_schedule_to_games` convierte el calendario en
+una lista de partidos con el índice de partido SECUENCIAL de cada
+equipo dentro de su propia temporada -- a diferencia de un round-robin
+sintético, donde "el mismo día" implica que todos los equipos juegan a
+la vez, un calendario real no tiene esa propiedad (el descanso varía
+por equipo), así que cada equipo necesita su propio índice, no uno
+compartido. Limitación temporal real, documentada, no oculta: mientras
+la fase eliminatoria de la NBA Cup no se resuelve del todo, cada equipo
+tiene menos partidos que `games_per_season` (hoy 80 de 82) -- se usan
+tal cual, no se inventan los que faltan. Si `league_schedule_full.csv`
+no existe todavía (temporada sin calendario oficial publicado), cae a
+un round-robin sintético equilibrado (método clásico del círculo de
+torneos, cada equipo contra cada rival ~2-3 veces hasta sumar
+`games_per_season`) -- mismo criterio de "degradar, no fallar" que el
+resto del proyecto.
 
 **Playoffs — formato real, con simplificaciones documentadas:**
 play-in real (7 vs 8, perdedor vs ganador de 9 vs 10), bracket 1v8/4v5/
@@ -1164,6 +1180,23 @@ Cuatro grupos de pestañas:
     **"Simular un bracket de playoffs"** — una realización concreta
     (play-in, ronda 1, semis y finales de conferencia con emparejamiento
     y ganador de cada serie), distinta cada vez que se pulsa.
+    **"Simular calendario de la temporada"** (`league_simulation.run_single_league_season_simulation`)
+    -- lo mismo pero para la temporada regular completa: el resultado de
+    CADA partido de una realización concreta, navegable y filtrable por
+    equipo, con boxscore ILUSTRATIVO por jugador (media por-partido de
+    temporada ya proyectada + ruido, categorías independientes -- no una
+    simulación conjunta jugada a jugada) y un widget de head-to-head
+    entre dos equipos cualesquiera sobre ese mismo calendario. Usa el
+    calendario REAL publicado por la NBA cuando existe
+    (`data_pipeline.build_league_schedule_dataset`, dentro de
+    `--league`) -- fechas, rivales, descanso y ventaja de campo reales;
+    si no, cae a un calendario sintético round-robin (día 1 a N, sin
+    fechas reales). Esto también alimenta standings/playoffs
+    (`build_league_simulation_dataset`): con calendario real, cada
+    equipo juega los partidos que de verdad tiene programados (hoy 80 de
+    82 -- quedan 2 plazas de la fase eliminatoria de la NBA Cup por
+    resolver más adelante en la temporada, no se inventan), en las
+    fechas reales, con la ventaja de jugar en casa aplicada de verdad.
   - **Premios individuales** — heurísticas de MVP, DPOY, 6.º Hombre,
     ROY, MIP y (si hay datos de los 30 equipos) COY sobre las
     proyecciones ya calculadas, vía `src/awards_projection.py`. **NO son
@@ -1186,6 +1219,21 @@ Cuatro grupos de pestañas:
   sustituye ningún cálculo existente — solo narra sobre lo ya calculado.
   Requiere la variable de entorno `GROQ_API_KEY`; sin ella, la pestaña
   muestra un aviso y no intenta llamar a la API.
+
+  **RAG de noticias recientes (opcional, dos fases):** el pipeline
+  estadístico no puede ver noticias del día (lesiones de última hora,
+  cambios de entrenador) porque no viene de ningún CSV calculado. Fase 1:
+  un cuadro de texto donde pegar artículos/titulares a mano — TF-IDF
+  (`src/llm_explainer.py::retrieve_relevant_news_snippets`, sin
+  dependencias nuevas) recupera los fragmentos relevantes a la pregunta y
+  los añade al prompt en una sección claramente etiquetada como NO
+  verificada, nunca mezclada con los datos del pipeline. Fase 2: un botón
+  "Buscar noticias recientes" (`src/news_search.py`, API de Tavily) que
+  rellena ese mismo cuadro bajo demanda explícita del usuario — es la
+  ÚNICA llamada de red en vivo del proyecto fuera de `nba_api`, nunca
+  automática. Requiere `TAVILY_API_KEY`; sin ella, ese botón concreto
+  avisa pero se puede seguir pegando texto a mano (fase 1 no depende de
+  esta variable).
 
 La lógica de carga/combinación de datos vive en `dashboard/data_loader.py`
 (testeable, `tests/test_dashboard_data_loader.py`); `app.py` solo
@@ -1227,8 +1275,10 @@ duplicaba exactamente los mismos 4 datos ya visibles en Simulación, sin
 aportar nada propio): 🏀 Mi equipo (Roster, Simulación Monte Carlo con
 los botones en vivo, Sinergia de alineación, Backtesting — incluido el
 sweep de 450+ casos), 🏆 Liga NBA (Liga y Playoffs con explorador de
-equipo, selector de escenario con/sin lesiones y simulador de bracket
-con árbol visual, Premios individuales, Campeones reales) y 🤖
+equipo, selector de escenario con/sin lesiones, simulador de bracket
+con árbol visual, calendario de temporada navegable con boxscore por
+partido y head-to-head entre equipos, Premios individuales, Campeones
+reales) y 🤖
 Explicador (IA, chat contra Groq). Los gráficos (histogramas, línea de
 Net Rating,
 scatter de calibración) son SVG hecho a mano, sin librería externa. Los
@@ -1253,7 +1303,10 @@ Edita `.env` y rellena `GROQ_API_KEY` con tu key de
 [console.groq.com/keys](https://console.groq.com/keys). El archivo `.env`
 está en `.gitignore` -- nunca se versiona. Sin esta variable, el resto
 del dashboard funciona igual; solo la pestaña "Explicador (IA)" queda
-deshabilitada.
+deshabilitada. `TAVILY_API_KEY` ([tavily.com](https://tavily.com)) es
+opcional dentro de esa misma pestaña -- sin ella, el botón "Buscar
+noticias recientes" avisa pero se puede seguir pegando texto de noticias
+a mano.
 
 ## Uso: descargar los datos
 
@@ -1345,7 +1398,9 @@ nba-superteam-sim/
 │       ├── team_quality_uncertainty.py   # calibración de la incertidumbre de calidad de equipo
 │       ├── hustle_stats_signal.py        # descartado: hustle stats no aportan señal
 │       ├── pt_defend_signal.py           # defensa por tracking -- integrada en advanced_impact.py
-│       └── injury_survival_model.py      # descartado: Cox no mejora el heurístico de injury_model.py
+│       ├── injury_survival_model.py      # descartado: Cox no mejora el heurístico de injury_model.py
+│       ├── game_win_predictor.py         # descartado: GBT no mejora la logística de compute_win_probabilities
+│       └── game_win_predictor_injury_signal.py  # positivo: disponibilidad de jugadores clave mejora el Brier score, incluso en versión pregame desplegable
 ├── notebooks/                      # exploración y prototipado de modelos
 ├── dashboard/
 │   ├── app.py                      # dashboard Streamlit (4 pestañas)
@@ -1372,8 +1427,8 @@ backtesting → visualización). Quedan dos direcciones razonables:
    capture esto directamente, pero podría explorarse una señal
    indirecta (volatilidad de rendimiento partido a partido de las
    estrellas, por ejemplo) antes de asumir que no se puede modelar.
-2. **Re-seeding real entre rondas de playoffs y calendario oficial** —
-   `league_simulation.py` documenta explícitamente estas dos
-   simplificaciones (bracket fijo, calendario round-robin en vez del
-   oficial); cuando la NBA publique el calendario 2026-27 completo, se
-   puede sustituir sin tocar el motor.
+2. **Re-seeding real entre rondas de playoffs** — `league_simulation.py`
+   sigue usando un bracket FIJO (sin resiembra tras cada ronda, a
+   diferencia de la NBA real). El calendario oficial 2026-27 ya se
+   integró (`real_schedule_to_games`, ver sección de arriba) -- este es
+   ahora el único de los dos pendientes.

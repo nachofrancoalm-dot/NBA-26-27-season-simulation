@@ -47,6 +47,49 @@ export async function render(container) {
     { once: false }
   );
 
+  // Texto de noticias pegado por el usuario -- vive solo en memoria del
+  // modulo (como `history`), se pierde al recargar. Nunca se manda a
+  // ningun sitio salvo /explainer/ask, y solo si no esta vacio.
+  const newsDetails = el("details", { class: "glossary" }, [
+    el("summary", {}, "Opcional: pegar noticias recientes (lesiones, fichajes, cambios de entrenador...)"),
+  ]);
+  const newsTextarea = el("textarea", {
+    placeholder:
+      "Pega aqui texto de articulos o titulares recientes, o usa el buscador de abajo. El modelo " +
+      "lo usara como contexto adicional NO verificado -- lo marcara explicitamente como tal en " +
+      "sus respuestas, nunca lo mezclara con los datos calculados por el pipeline.",
+    rows: "5",
+    style: "width: 100%; resize: vertical;",
+  });
+  const searchQueryInput = el("input", {
+    type: "text",
+    placeholder: "Ej: lesiones Philadelphia 76ers",
+    style: "flex: 1;",
+  });
+  const searchButton = el("button", { class: "btn" }, "Buscar noticias recientes");
+  const searchStatus = el("span", { class: "caption" }, "");
+  const searchRow = el("div", { class: "chat-input-row" }, [searchQueryInput, searchButton]);
+  newsDetails.append(newsTextarea, searchRow, searchStatus);
+
+  const searchNews = async () => {
+    const query = searchQueryInput.value.trim();
+    if (!query) return;
+    searchButton.disabled = true;
+    searchStatus.textContent = "Buscando…";
+    try {
+      const { news_text } = await api.explainerSearchNews(query);
+      newsTextarea.value = news_text || "";
+      searchStatus.textContent = news_text ? "" : "Sin resultados para esa búsqueda.";
+    } catch (err) {
+      searchStatus.textContent = err.message;
+    }
+    searchButton.disabled = false;
+  };
+  searchButton.addEventListener("click", searchNews);
+  searchQueryInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") searchNews();
+  });
+
   const log = el("div", { class: "chat-log", id: "chat-log" });
   const input = el("input", {
     type: "text",
@@ -66,6 +109,7 @@ export async function render(container) {
           "responde SOLO a partir de esos datos -- no inventa cifras ni corre simulaciones nuevas."
       ),
       contextDetails,
+      newsDetails,
       log,
       form,
     ])
@@ -82,7 +126,7 @@ export async function render(container) {
     history.push({ role: "user", content: question });
     renderHistory();
     try {
-      const { answer } = await api.explainerAsk(question);
+      const { answer } = await api.explainerAsk(question, newsTextarea.value);
       history.push({ role: "assistant", content: answer });
     } catch (err) {
       history.push({ role: "assistant", content: `Error al consultar el modelo: ${err.message}` });

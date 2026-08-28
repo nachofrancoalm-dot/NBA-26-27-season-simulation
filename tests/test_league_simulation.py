@@ -19,15 +19,21 @@ from league_simulation import (  # noqa: E402
     _play_in_with_detail,
     _sample_team_game_score,
     build_round_robin_schedule,
+    compute_head_to_head_record,
     load_and_project_all_teams,
     project_own_team_for_league,
     project_team_roster,
+    real_schedule_to_games,
     resolve_play_in,
     simulate_conference_bracket,
     simulate_league_regular_season,
+    simulate_league_regular_season_real_schedule,
     simulate_playoff_game,
     simulate_playoffs_once,
     simulate_series,
+    simulate_single_league_season_game_log,
+    simulate_single_league_season_game_log_real_schedule,
+    simulate_single_league_season_player_box_scores,
 )
 
 
@@ -39,6 +45,20 @@ def _team_proj(game_score: float, n_players: int = 5, fatigue: float = 0.0, risk
         "risk_scores": np.full(n_players, risk),
         "fatigue_scores": np.full(n_players, fatigue),
         "synergy_matrix": None,
+    }
+
+
+def _team_proj_with_player_rows(player_id: int, player_name: str, pts_projected: float, games_per_season: int) -> dict:
+    """Como _team_proj pero con UN jugador y player_rows -- lo que
+    necesita simulate_single_league_season_player_box_scores (que no lee
+    game_score_per36/risk_scores, solo player_rows)."""
+    return {
+        "player_ids": [player_id],
+        "player_rows": [{
+            "player_id": player_id, "player_name": player_name,
+            "PTS_projected": pts_projected, "REB_projected": 0.0, "AST_projected": 0.0,
+            "STL_projected": 0.0, "BLK_projected": 0.0, "TOV_projected": 0.0, "FG3M_projected": 0.0,
+        }],
     }
 
 
@@ -783,3 +803,222 @@ def test_exported_player_row_carries_the_same_metric_the_simulation_uses():
     assert exported["game_score_per36"] == pytest.approx(result["game_score_per36"][0])
     # Y el Game Score de caja puro sigue disponible para comparar.
     assert exported["game_score_per36_box"] < exported["game_score_per36"]
+
+
+def test_simulate_single_league_season_game_log_each_team_plays_games_per_season():
+    team_ids = [1, 2, 3, 4]
+    team_abbrev_by_id = {1: "AAA", 2: "BBB", 3: "CCC", 4: "DDD"}
+    projections = {tid: _team_proj(game_score=10.0 + tid) for tid in team_ids}
+    schedule = build_round_robin_schedule(team_ids, games_per_season=6, rng=np.random.default_rng(1))
+
+    game_log, availability_by_team = simulate_single_league_season_game_log(
+        projections, schedule, team_abbrev_by_id, games_per_season=6,
+        mc_config=DEFAULT_MONTE_CARLO_CONFIG, random_seed=7,
+    )
+
+    games_played = game_log["home_team_id"].value_counts().add(game_log["away_team_id"].value_counts(), fill_value=0)
+    assert (games_played == 6).all()
+    # El ganador de cada partido es SIEMPRE uno de los dos equipos que lo jugaron.
+    assert all(
+        row.winner_team_id in (row.home_team_id, row.away_team_id) for row in game_log.itertuples()
+    )
+    for tid in team_ids:
+        assert availability_by_team[tid].shape == (6, 5)  # n_players=5 por defecto en _team_proj
+
+
+def test_simulate_single_league_season_game_log_is_deterministic_with_same_seed():
+    team_ids = [1, 2]
+    team_abbrev_by_id = {1: "AAA", 2: "BBB"}
+    projections = {1: _team_proj(20.0), 2: _team_proj(10.0)}
+    schedule = build_round_robin_schedule(team_ids, games_per_season=4, rng=np.random.default_rng(1))
+
+    log1, _ = simulate_single_league_season_game_log(
+        projections, schedule, team_abbrev_by_id, 4, DEFAULT_MONTE_CARLO_CONFIG, random_seed=99
+    )
+    log2, _ = simulate_single_league_season_game_log(
+        projections, schedule, team_abbrev_by_id, 4, DEFAULT_MONTE_CARLO_CONFIG, random_seed=99
+    )
+    pd.testing.assert_frame_equal(log1, log2)
+
+
+def test_simulate_single_league_season_game_log_favors_stronger_team():
+    team_ids = [1, 2]
+    team_abbrev_by_id = {1: "AAA", 2: "BBB"}
+    projections = {1: _team_proj(30.0), 2: _team_proj(2.0)}
+    schedule = build_round_robin_schedule(team_ids, games_per_season=40, rng=np.random.default_rng(1))
+
+    game_log, _ = simulate_single_league_season_game_log(
+        projections, schedule, team_abbrev_by_id, 40, DEFAULT_MONTE_CARLO_CONFIG, random_seed=5
+    )
+    assert (game_log["winner_team_id"] == 1).sum() > (game_log["winner_team_id"] == 2).sum()
+
+
+def test_simulate_single_league_season_player_box_scores_zeroes_out_unavailable_players():
+    """Un jugador NO disponible ese partido (misma máscara que decidió el
+    resultado) aparece en 0 en TODAS las categorías -- nunca se sortea
+    una disponibilidad aparte para el boxscore."""
+    game_log = pd.DataFrame([
+        {"game_id": 0, "day": 0, "home_team_id": 1, "home_game_index": 0, "away_team_id": 2, "away_game_index": 0}
+    ])
+    team_projections = {
+        1: _team_proj_with_player_rows(100, "Ausente", pts_projected=82 * 20.0, games_per_season=82),
+        2: _team_proj_with_player_rows(200, "Disponible", pts_projected=82 * 20.0, games_per_season=82),
+    }
+    availability_by_team = {1: np.array([[False]]), 2: np.array([[True]])}
+
+    box_scores = simulate_single_league_season_player_box_scores(
+        team_projections, game_log, availability_by_team, games_per_season=82, random_seed=0
+    )
+
+    absent_row = box_scores[box_scores["player_id"] == 100].iloc[0]
+    present_row = box_scores[box_scores["player_id"] == 200].iloc[0]
+    for stat in ["PTS", "REB", "AST", "STL", "BLK", "TOV", "3PM"]:
+        assert absent_row[stat] == 0.0
+    # Disponible, con media de 20 PPG -- debe dar algo cercano a esa media, no 0.
+    assert present_row["PTS"] > 10.0
+
+
+def test_simulate_single_league_season_player_box_scores_centers_on_season_per_game_mean():
+    """Sin varianza en la 'ausencia' (siempre disponible), promediando
+    muchos partidos sintéticos el boxscore debe converger a la media
+    por-partido de temporada YA proyectada (PTS_projected / games_per_season)."""
+    games_per_season = 82
+    n_games = 500
+    game_log = pd.DataFrame([
+        {
+            "game_id": i, "day": i % games_per_season,
+            "home_team_id": 1, "home_game_index": i % games_per_season,
+            "away_team_id": 2, "away_game_index": i % games_per_season,
+        }
+        for i in range(n_games)
+    ])
+    team_projections = {
+        1: _team_proj_with_player_rows(100, "A", pts_projected=games_per_season * 20.0, games_per_season=games_per_season),
+        2: _team_proj_with_player_rows(200, "B", pts_projected=games_per_season * 8.0, games_per_season=games_per_season),
+    }
+    availability_by_team = {
+        1: np.ones((games_per_season, 1), dtype=bool),
+        2: np.ones((games_per_season, 1), dtype=bool),
+    }
+
+    box_scores = simulate_single_league_season_player_box_scores(
+        team_projections, game_log, availability_by_team, games_per_season, random_seed=1
+    )
+
+    assert box_scores[box_scores["player_id"] == 100]["PTS"].mean() == pytest.approx(20.0, abs=1.0)
+    assert box_scores[box_scores["player_id"] == 200]["PTS"].mean() == pytest.approx(8.0, abs=1.0)
+
+
+def test_compute_head_to_head_record_counts_wins_and_ignores_other_matchups():
+    game_log = pd.DataFrame([
+        {"game_id": 0, "day": 0, "home_team_id": 1, "away_team_id": 2, "winner_team_id": 1},
+        {"game_id": 1, "day": 10, "home_team_id": 2, "away_team_id": 1, "winner_team_id": 2},
+        # Partido contra un TERCER equipo -- no debe contar en el H2H de 1 vs 2.
+        {"game_id": 2, "day": 20, "home_team_id": 1, "away_team_id": 3, "winner_team_id": 1},
+    ])
+
+    record = compute_head_to_head_record(game_log, 1, 2)
+
+    assert record["team_a_wins"] == 1
+    assert record["team_b_wins"] == 1
+    assert len(record["games"]) == 2
+
+
+def test_real_schedule_to_games_assigns_per_team_sequential_indices_and_sorts_chronologically():
+    abbreviation_to_team_id = {"AAA": 1, "BBB": 2, "CCC": 3}
+    # A proposito fuera de orden cronologico en el DataFrame de entrada.
+    schedule_df = pd.DataFrame([
+        {"gameDate": "2026-10-23", "homeTeam_teamTricode": "AAA", "awayTeam_teamTricode": "CCC"},
+        {"gameDate": "2026-10-20", "homeTeam_teamTricode": "AAA", "awayTeam_teamTricode": "BBB"},
+        {"gameDate": "2026-10-21", "homeTeam_teamTricode": "BBB", "awayTeam_teamTricode": "CCC"},
+    ])
+
+    games = real_schedule_to_games(schedule_df, abbreviation_to_team_id)
+
+    assert len(games) == 3
+    # Orden cronologico, no el orden de entrada.
+    assert [g["date"] for g in games] == sorted(g["date"] for g in games)
+
+    game_20, game_21, game_23 = games
+    # AAA vs BBB el 10-20 -- primer partido de ambos, sin historial previo.
+    assert game_20["home_team_id"] == 1 and game_20["home_game_index"] == 0
+    assert game_20["away_team_id"] == 2 and game_20["away_game_index"] == 0
+    assert not game_20["is_b2b_home"] and not game_20["is_b2b_away"]
+
+    # BBB vs CCC el 10-21 -- BBB jugo el dia anterior (back-to-back real);
+    # CCC juega su primer partido (no back-to-back).
+    assert game_21["home_team_id"] == 2 and game_21["home_game_index"] == 1
+    assert game_21["is_b2b_home"] is True
+    assert game_21["away_team_id"] == 3 and game_21["away_game_index"] == 0
+    assert not game_21["is_b2b_away"]
+
+    # AAA vs CCC el 10-23 -- ambos con 2+ dias de descanso, ningun back-to-back.
+    # Cada equipo tiene su PROPIO indice secuencial (2o partido para los tres).
+    assert game_23["home_team_id"] == 1 and game_23["home_game_index"] == 1
+    assert not game_23["is_b2b_home"]
+    assert game_23["away_team_id"] == 3 and game_23["away_game_index"] == 1
+    assert not game_23["is_b2b_away"]
+
+
+def _real_game(date, home_id, home_idx, away_id, away_idx, b2b_home=False, b2b_away=False):
+    return {
+        "date": pd.Timestamp(date), "home_team_id": home_id, "home_game_index": home_idx, "is_b2b_home": b2b_home,
+        "away_team_id": away_id, "away_game_index": away_idx, "is_b2b_away": b2b_away,
+    }
+
+
+def test_simulate_league_regular_season_real_schedule_favors_stronger_team():
+    team_ids = [1, 2]
+    projections = {1: _team_proj(game_score=30.0), 2: _team_proj(game_score=2.0)}
+    games = [
+        _real_game(f"2026-10-{20 + i}", 1, i, 2, i) if i % 2 == 0 else _real_game(f"2026-10-{20 + i}", 2, i, 1, i)
+        for i in range(10)
+    ]
+
+    wins = simulate_league_regular_season_real_schedule(
+        projections, games, n_seasons=500, mc_config=DEFAULT_MONTE_CARLO_CONFIG, random_seed=1
+    )
+    assert wins[1].mean() > wins[2].mean()
+
+
+def test_simulate_league_regular_season_real_schedule_is_deterministic_with_same_seed():
+    projections = {1: _team_proj(20.0), 2: _team_proj(10.0)}
+    games = [_real_game("2026-10-20", 1, 0, 2, 0), _real_game("2026-10-22", 2, 1, 1, 1)]
+
+    wins1 = simulate_league_regular_season_real_schedule(projections, games, 200, DEFAULT_MONTE_CARLO_CONFIG, random_seed=7)
+    wins2 = simulate_league_regular_season_real_schedule(projections, games, 200, DEFAULT_MONTE_CARLO_CONFIG, random_seed=7)
+    np.testing.assert_array_equal(wins1[1], wins2[1])
+
+
+def test_simulate_league_regular_season_real_schedule_applies_home_court_advantage():
+    """Dos equipos IDENTICOS salvo quien juega en casa -- con ventaja de
+    campo activa, el local debe ganar mas que sin ella. Antes de esta
+    funcion, league_simulation.py nunca aplicaba home_court_advantage
+    (confirmado por grep) aunque el dato de local/visitante ya existiera."""
+    projections = {1: _team_proj(game_score=15.0), 2: _team_proj(game_score=15.0)}
+    games = [_real_game("2026-10-20", 1, 0, 2, 0)]  # equipo 1 SIEMPRE local aqui
+
+    with_hca = simulate_league_regular_season_real_schedule(
+        projections, games, n_seasons=5000,
+        mc_config={**DEFAULT_MONTE_CARLO_CONFIG, "home_court_advantage": 5.0}, random_seed=3,
+    )
+    without_hca = simulate_league_regular_season_real_schedule(
+        projections, games, n_seasons=5000,
+        mc_config={**DEFAULT_MONTE_CARLO_CONFIG, "home_court_advantage": 0.0}, random_seed=3,
+    )
+    assert with_hca[1].mean() > without_hca[1].mean()
+
+
+def test_simulate_single_league_season_game_log_real_schedule_uses_real_dates_and_indices():
+    team_abbrev_by_id = {1: "AAA", 2: "BBB"}
+    projections = {1: _team_proj(20.0), 2: _team_proj(10.0)}
+    games = [_real_game("2026-10-20", 1, 0, 2, 0), _real_game("2026-10-22", 2, 1, 1, 1)]
+
+    game_log, availability_by_team = simulate_single_league_season_game_log_real_schedule(
+        projections, games, team_abbrev_by_id, DEFAULT_MONTE_CARLO_CONFIG, random_seed=9
+    )
+
+    assert len(game_log) == 2
+    assert game_log.iloc[0]["day"] == "2026-10-20"  # fecha REAL, no un entero sintetico
+    assert game_log.iloc[1]["home_team_id"] == 2 and game_log.iloc[1]["home_game_index"] == 1
+    assert 1 in availability_by_team and 2 in availability_by_team

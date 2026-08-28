@@ -96,6 +96,7 @@ from simulation import (  # noqa: E402
 )
 from context.injury_model import compute_risk_score  # noqa: E402
 from context.fatigue_accumulation import compute_fatigue_score  # noqa: E402
+from context.opponent_weighting import ABBREVIATION_TO_TEAM_ID  # noqa: E402
 
 # Conferencia de cada franquicia -- hecho de liga estable, no específico
 # de ningún equipo/jugador simulado (igual que ABBREVIATION_TO_TEAM_ID en
@@ -404,6 +405,59 @@ def build_round_robin_schedule(
     return schedule
 
 
+def _build_team_game_score_arrays(
+    team_projections: Dict[int, Dict[str, Any]],
+    n_seasons: int,
+    games_per_season_by_team: Dict[int, int],
+    mc_config: Dict[str, float],
+    rng: np.random.Generator,
+    is_back_to_back_by_team: Optional[Dict[int, np.ndarray]] = None,
+) -> Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray]]:
+    """
+    Disponibilidad + contribución por jugador + sinergia, por equipo --
+    núcleo COMPARTIDO entre `simulate_league_regular_season` (calendario
+    SINTÉTICO, back-to-back sorteado por partido/temporada simulada,
+    mismo nº de partidos para todos), `simulate_league_regular_season_real_schedule`
+    y `simulate_single_league_season_game_log_real_schedule` (calendario
+    REAL, back-to-back ya es un HECHO fijo del calendario -- no se
+    sortea -- y cada equipo puede tener su propio nº de partidos).
+    Devuelve `(team_game_scores, availability_by_team)`, ambos
+    `{team_id: array (n_seasons, games_per_season_de_ESE_equipo, ...)}`
+    -- el segundo lo necesita `simulate_single_league_season_player_box_scores`
+    para saber quién jugó cada partido.
+
+    `is_back_to_back_by_team`: si se pasa, usa ese array FIJO por equipo
+    (shape `(1, n_partidos)`, hace broadcast contra cualquier n_seasons)
+    -- calendario real. Si no, sortea uno por partido/temporada simulada,
+    idéntico al comportamiento de siempre -- calendario sintético.
+    """
+    team_game_scores: Dict[int, np.ndarray] = {}
+    availability_by_team: Dict[int, np.ndarray] = {}
+    for team_id, proj in team_projections.items():
+        games_per_season = games_per_season_by_team[team_id]
+        available = sample_injury_absences(
+            proj["risk_scores"], n_seasons, games_per_season, rng, mc_config["injury_dispersion"]
+        )
+        if is_back_to_back_by_team is not None:
+            is_back_to_back = is_back_to_back_by_team[team_id]
+        else:
+            is_back_to_back = rng.random((n_seasons, games_per_season)) < mc_config["b2b_probability"]
+            is_back_to_back[:, 0] = False
+
+        contributions = compute_player_contributions(
+            proj["game_score_per36"], proj["minutes_projection"], proj["fatigue_scores"],
+            available, is_back_to_back, rng, mc_config,
+        )
+        team_game_score = contributions.sum(axis=2)
+
+        if proj.get("synergy_matrix") is not None:
+            team_game_score = team_game_score + compute_game_synergy_adjustment(available, proj["synergy_matrix"])
+
+        team_game_scores[team_id] = team_game_score
+        availability_by_team[team_id] = available
+    return team_game_scores, availability_by_team
+
+
 def simulate_league_regular_season(
     team_projections: Dict[int, Dict[str, Any]],
     schedule: List[Tuple[int, int, int]],
@@ -414,12 +468,13 @@ def simulate_league_regular_season(
 ) -> Dict[int, np.ndarray]:
     """
     Simula la temporada regular completa para todos los equipos en
-    team_projections a la vez (vectorizado por equipo sobre n_seasons).
-    Devuelve {team_id: wins_array(n_seasons,)}.
+    team_projections a la vez (vectorizado por equipo sobre n_seasons),
+    sobre un calendario SINTÉTICO (`build_round_robin_schedule`) -- ver
+    `simulate_league_regular_season_real_schedule` para el calendario
+    real. Devuelve {team_id: wins_array(n_seasons,)}.
     """
     rng = np.random.default_rng(random_seed)
 
-    team_game_scores: Dict[int, np.ndarray] = {}
     # Incertidumbre de calidad de equipo -- ver simulation.sample_team_quality_noise:
     # un valor por (equipo, temporada simulada), constante en los 82
     # partidos de esa temporada. Desactivado por defecto (std=0.0). Ya en
@@ -432,23 +487,10 @@ def simulate_league_regular_season(
         ).ravel()
         for team_id in team_projections
     }
-    for team_id, proj in team_projections.items():
-        available = sample_injury_absences(
-            proj["risk_scores"], n_seasons, games_per_season, rng, mc_config["injury_dispersion"]
-        )
-        is_back_to_back = rng.random((n_seasons, games_per_season)) < mc_config["b2b_probability"]
-        is_back_to_back[:, 0] = False
-
-        contributions = compute_player_contributions(
-            proj["game_score_per36"], proj["minutes_projection"], proj["fatigue_scores"],
-            available, is_back_to_back, rng, mc_config,
-        )
-        team_game_score = contributions.sum(axis=2)
-
-        if proj.get("synergy_matrix") is not None:
-            team_game_score = team_game_score + compute_game_synergy_adjustment(available, proj["synergy_matrix"])
-
-        team_game_scores[team_id] = team_game_score
+    games_per_season_by_team = {team_id: games_per_season for team_id in team_projections}
+    team_game_scores, _availability_by_team = _build_team_game_score_arrays(
+        team_projections, n_seasons, games_per_season_by_team, mc_config, rng
+    )
 
     wins = {team_id: np.zeros(n_seasons, dtype=int) for team_id in team_projections}
     for day, team_a, team_b in schedule:
@@ -465,6 +507,464 @@ def simulate_league_regular_season(
         wins[team_b] += ~team_a_wins
 
     return wins
+
+
+def real_schedule_to_games(
+    schedule_df: pd.DataFrame, abbreviation_to_team_id: Dict[str, int]
+) -> List[Dict[str, Any]]:
+    """
+    Convierte el calendario REAL (gameDate, homeTeam_teamTricode,
+    awayTeam_teamTricode -- ver data_pipeline.build_league_schedule_dataset)
+    en una lista de partidos ordenados cronológicamente, cada uno con el
+    índice de partido SECUENCIAL de cada equipo dentro de su propia
+    temporada (0-indexado) y si es back-to-back REAL para cada lado
+    (partido anterior de ESE equipo exactamente un día antes).
+
+    A diferencia del calendario sintético (`build_round_robin_schedule`,
+    donde "el mismo día" implica que TODOS los equipos juegan, así que un
+    único índice compartido sirve para los dos lados de cada partido), en
+    un calendario real el descanso varía por equipo -- cada equipo
+    necesita su PROPIO índice de partido, nunca uno compartido (ver
+    docstring del módulo).
+    """
+    df = schedule_df.copy()
+    df["gameDate"] = pd.to_datetime(df["gameDate"])
+    df = df.sort_values("gameDate").reset_index(drop=True)
+
+    game_index_by_team: Dict[int, int] = {}
+    last_date_by_team: Dict[int, pd.Timestamp] = {}
+    games: List[Dict[str, Any]] = []
+
+    for row in df.itertuples():
+        home_id = abbreviation_to_team_id[row.homeTeam_teamTricode]
+        away_id = abbreviation_to_team_id[row.awayTeam_teamTricode]
+
+        home_idx = game_index_by_team.get(home_id, 0)
+        away_idx = game_index_by_team.get(away_id, 0)
+        one_day = pd.Timedelta(days=1)
+        is_b2b_home = last_date_by_team.get(home_id) == row.gameDate - one_day
+        is_b2b_away = last_date_by_team.get(away_id) == row.gameDate - one_day
+
+        games.append({
+            "date": row.gameDate,
+            "home_team_id": home_id, "home_game_index": home_idx, "is_b2b_home": is_b2b_home,
+            "away_team_id": away_id, "away_game_index": away_idx, "is_b2b_away": is_b2b_away,
+        })
+
+        game_index_by_team[home_id] = home_idx + 1
+        game_index_by_team[away_id] = away_idx + 1
+        last_date_by_team[home_id] = row.gameDate
+        last_date_by_team[away_id] = row.gameDate
+
+    return games
+
+
+def _load_real_schedule_games(config: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """
+    Carga `league_schedule_full.csv` (data_pipeline.build_league_schedule_dataset)
+    y lo convierte con `real_schedule_to_games` -- `None` si el CSV no
+    existe todavía (temporada sin calendario real publicado, o
+    simplemente no se ha corrido `data_pipeline.py --league` con esta
+    versión del proyecto). Punto de entrada ÚNICO para "¿hay calendario
+    real disponible?" -- lo usan tanto `build_league_simulation_dataset`
+    como `run_single_league_season_simulation`, así los dos caen al
+    mismo criterio de degradar al calendario sintético si falta.
+    """
+    paths = get_paths(config)
+    schedule_path = paths["processed"] / "league_schedule_full.csv"
+    if not schedule_path.exists() or schedule_path.stat().st_size == 0:
+        return None
+    schedule_df = pd.read_csv(schedule_path)
+    return real_schedule_to_games(schedule_df, ABBREVIATION_TO_TEAM_ID)
+
+
+def simulate_league_regular_season_real_schedule(
+    team_projections: Dict[int, Dict[str, Any]],
+    games: List[Dict[str, Any]],
+    n_seasons: int,
+    mc_config: Dict[str, float],
+    random_seed: int,
+) -> Dict[int, np.ndarray]:
+    """
+    Igual que `simulate_league_regular_season` pero sobre el calendario
+    REAL (`real_schedule_to_games`): cada equipo tiene su propio nº de
+    partidos (hoy 80, no 82 -- ver docstring de
+    `data_pipeline.build_league_schedule_dataset`, limitación temporal
+    real mientras la NBA Cup no se resuelve del todo), el back-to-back es
+    un HECHO del calendario (no se sortea) y se aplica
+    `home_court_advantage` (ya calibrado en `simulation.py`, 2.41 puntos)
+    al equipo local -- ambos datos son reales aquí, a diferencia del
+    calendario sintético, donde "local" era arbitrario y por eso nunca se
+    aplicaba.
+    """
+    rng = np.random.default_rng(random_seed)
+
+    games_per_season_by_team: Dict[int, int] = {}
+    for game in games:
+        for side in ("home", "away"):
+            team_id, idx = game[f"{side}_team_id"], game[f"{side}_game_index"]
+            games_per_season_by_team[team_id] = max(games_per_season_by_team.get(team_id, 0), idx + 1)
+
+    is_back_to_back_by_team = {
+        team_id: np.zeros((1, n_games), dtype=bool) for team_id, n_games in games_per_season_by_team.items()
+    }
+    for game in games:
+        is_back_to_back_by_team[game["home_team_id"]][0, game["home_game_index"]] = game["is_b2b_home"]
+        is_back_to_back_by_team[game["away_team_id"]][0, game["away_game_index"]] = game["is_b2b_away"]
+
+    team_quality_noise = {
+        team_id: sample_team_quality_noise(
+            n_seasons, mc_config.get("team_quality_uncertainty_std", 0.0), rng
+        ).ravel()
+        for team_id in team_projections
+    }
+    team_game_scores, _availability_by_team = _build_team_game_score_arrays(
+        team_projections, n_seasons, games_per_season_by_team, mc_config, rng,
+        is_back_to_back_by_team=is_back_to_back_by_team,
+    )
+
+    hca = mc_config.get("home_court_advantage", 0.0)
+    wins = {team_id: np.zeros(n_seasons, dtype=int) for team_id in team_projections}
+    for game in games:
+        team_a, idx_a = game["home_team_id"], game["home_game_index"]
+        team_b, idx_b = game["away_team_id"], game["away_game_index"]
+        score_a = team_game_scores[team_a][:, idx_a]
+        score_b = team_game_scores[team_b][:, idx_b]
+        point_differential = (score_a - score_b) * mc_config["game_score_to_net_rating_scale"] + hca
+        point_differential = point_differential + (team_quality_noise[team_a] - team_quality_noise[team_b])
+        win_prob_a = 1 / (1 + np.exp(-point_differential / mc_config["outcome_variance_scale"]))
+        team_a_wins = rng.random(n_seasons) < win_prob_a
+        wins[team_a] += team_a_wins
+        wins[team_b] += ~team_a_wins
+
+    return wins
+
+
+# Fracción de la media por-partido usada como sigma del ruido gaussiano
+# de cada categoría de boxscore -- un jugador de más volumen tiene más
+# varianza ABSOLUTA de forma proporcional (20 PPG de media varía más en
+# términos absolutos que 5 PPG), no un sigma fijo para toda la liga.
+DEFAULT_BOX_SCORE_NOISE_STD_FRACTION = 0.35
+
+# <stat de boxscore> -> columna de TOTAL de temporada ya proyectada
+# (player_rows, de project_team_roster/project_own_team_for_league) --
+# dividida entre games_per_season da la media por-partido, la misma
+# base que ya usa build_league_simulation_dataset para las columnas
+# PPG/RPG/etc. mostradas en cualquier tabla de roster.
+BOX_SCORE_STAT_COLUMNS: Dict[str, str] = {
+    "PTS": "PTS_projected", "REB": "REB_projected", "AST": "AST_projected",
+    "STL": "STL_projected", "BLK": "BLK_projected", "TOV": "TOV_projected",
+    "3PM": "FG3M_projected",
+}
+
+
+def simulate_single_league_season_game_log(
+    team_projections: Dict[int, Dict[str, Any]],
+    schedule: List[Tuple[int, int, int]],
+    team_abbrev_by_id: Dict[int, str],
+    games_per_season: int,
+    mc_config: Dict[str, float],
+    random_seed: int,
+) -> Tuple[pd.DataFrame, Dict[int, np.ndarray]]:
+    """
+    Igual que `simulate_league_regular_season` -- MISMA matemática exacta
+    (mismas funciones, mismo orden: disponibilidad, contribución por
+    jugador, sinergia, escala calibrada, logística) -- pero para UNA
+    temporada concreta (no vectorizada sobre miles de réplicas Monte
+    Carlo) y grabando el resultado de CADA partido en vez de solo
+    acumular victorias. Mismo principio que
+    `simulation.simulate_single_season_player_log`: no es un modelo
+    paralelo, es la misma mecánica con n_seasons=1.
+
+    Devuelve `(game_log, availability_by_team)`: `game_log` una fila por
+    partido (`game_id`, `day`, equipos, resultado, y
+    `home_game_index`/`away_game_index` -- aquí siempre iguales a `day`,
+    ver por qué en `simulate_single_league_season_game_log_real_schedule`);
+    `availability_by_team` -- `{team_id: bool array (games_per_season,
+    n_players)}`, la MISMA máscara de disponibilidad ya usada para
+    decidir el resultado de cada partido, para que
+    `simulate_single_league_season_player_box_scores` reutilice
+    exactamente esas ausencias en vez de sortearlas de nuevo (un jugador
+    de baja en el resultado del partido también aparece en 0 en su
+    boxscore, de forma consistente).
+    """
+    rng = np.random.default_rng(random_seed)
+
+    team_quality_noise = {
+        team_id: sample_team_quality_noise(
+            1, mc_config.get("team_quality_uncertainty_std", 0.0), rng
+        ).ravel()[0]
+        for team_id in team_projections
+    }
+
+    team_game_scores: Dict[int, np.ndarray] = {}
+    availability_by_team: Dict[int, np.ndarray] = {}
+    for team_id, proj in team_projections.items():
+        available = sample_injury_absences(
+            proj["risk_scores"], 1, games_per_season, rng, mc_config["injury_dispersion"]
+        )
+        is_back_to_back = rng.random((1, games_per_season)) < mc_config["b2b_probability"]
+        is_back_to_back[:, 0] = False
+
+        contributions = compute_player_contributions(
+            proj["game_score_per36"], proj["minutes_projection"], proj["fatigue_scores"],
+            available, is_back_to_back, rng, mc_config,
+        )
+        team_game_score = contributions.sum(axis=2)
+
+        if proj.get("synergy_matrix") is not None:
+            team_game_score = team_game_score + compute_game_synergy_adjustment(available, proj["synergy_matrix"])
+
+        team_game_scores[team_id] = team_game_score[0]
+        availability_by_team[team_id] = available[0]
+
+    rows = []
+    for game_id, (day, team_a, team_b) in enumerate(schedule):
+        score_a = float(team_game_scores[team_a][day])
+        score_b = float(team_game_scores[team_b][day])
+        point_differential = (score_a - score_b) * mc_config["game_score_to_net_rating_scale"]
+        point_differential += team_quality_noise[team_a] - team_quality_noise[team_b]
+        win_prob_a = 1 / (1 + np.exp(-point_differential / mc_config["outcome_variance_scale"]))
+        team_a_wins = bool(rng.random() < win_prob_a)
+        winner_team_id = team_a if team_a_wins else team_b
+
+        rows.append({
+            "game_id": game_id,
+            "day": day,
+            "home_team_id": team_a,
+            "home_abbreviation": team_abbrev_by_id[team_a],
+            "home_game_index": day,
+            "away_team_id": team_b,
+            "away_abbreviation": team_abbrev_by_id[team_b],
+            "away_game_index": day,
+            "home_score": score_a,
+            "away_score": score_b,
+            "point_differential": float(point_differential),
+            "winner_team_id": winner_team_id,
+            "winner_abbreviation": team_abbrev_by_id[winner_team_id],
+        })
+
+    return pd.DataFrame(rows), availability_by_team
+
+
+def simulate_single_league_season_game_log_real_schedule(
+    team_projections: Dict[int, Dict[str, Any]],
+    games: List[Dict[str, Any]],
+    team_abbrev_by_id: Dict[int, str],
+    mc_config: Dict[str, float],
+    random_seed: int,
+) -> Tuple[pd.DataFrame, Dict[int, np.ndarray]]:
+    """
+    Igual que `simulate_single_league_season_game_log` pero sobre el
+    calendario REAL (`real_schedule_to_games`) -- misma matemática que
+    `simulate_league_regular_season_real_schedule` con n_seasons=1,
+    grabando cada partido en vez de solo acumular victorias. La columna
+    `day` pasa a ser la FECHA real (no un entero sintético 0-81), y se
+    aplica `home_court_advantage` al equipo local -- mismo motivo que en
+    la versión agregada.
+
+    Devuelve el MISMO esquema que `simulate_single_league_season_game_log`
+    (mismas columnas, incluidos `home_game_index`/`away_game_index`) --
+    `simulate_single_league_season_player_box_scores` funciona sin
+    cambios sobre cualquiera de los dos.
+    """
+    rng = np.random.default_rng(random_seed)
+
+    games_per_season_by_team: Dict[int, int] = {}
+    for game in games:
+        for side in ("home", "away"):
+            team_id, idx = game[f"{side}_team_id"], game[f"{side}_game_index"]
+            games_per_season_by_team[team_id] = max(games_per_season_by_team.get(team_id, 0), idx + 1)
+
+    is_back_to_back_by_team = {
+        team_id: np.zeros((1, n_games), dtype=bool) for team_id, n_games in games_per_season_by_team.items()
+    }
+    for game in games:
+        is_back_to_back_by_team[game["home_team_id"]][0, game["home_game_index"]] = game["is_b2b_home"]
+        is_back_to_back_by_team[game["away_team_id"]][0, game["away_game_index"]] = game["is_b2b_away"]
+
+    team_quality_noise = {
+        team_id: sample_team_quality_noise(
+            1, mc_config.get("team_quality_uncertainty_std", 0.0), rng
+        ).ravel()[0]
+        for team_id in team_projections
+    }
+    team_game_scores, availability_by_team_raw = _build_team_game_score_arrays(
+        team_projections, 1, games_per_season_by_team, mc_config, rng,
+        is_back_to_back_by_team=is_back_to_back_by_team,
+    )
+    # squeeze la dimensión n_seasons=1 -- mismo shape (games, n_players) que
+    # devuelve simulate_single_league_season_game_log, para que
+    # simulate_single_league_season_player_box_scores funcione igual con
+    # cualquiera de los dos calendarios.
+    availability_by_team = {team_id: arr[0] for team_id, arr in availability_by_team_raw.items()}
+
+    hca = mc_config.get("home_court_advantage", 0.0)
+    rows = []
+    for game_id, game in enumerate(games):
+        team_a, idx_a = game["home_team_id"], game["home_game_index"]
+        team_b, idx_b = game["away_team_id"], game["away_game_index"]
+        score_a = float(team_game_scores[team_a][0, idx_a])
+        score_b = float(team_game_scores[team_b][0, idx_b])
+        point_differential = (score_a - score_b) * mc_config["game_score_to_net_rating_scale"] + hca
+        point_differential += team_quality_noise[team_a] - team_quality_noise[team_b]
+        win_prob_a = 1 / (1 + np.exp(-point_differential / mc_config["outcome_variance_scale"]))
+        team_a_wins = bool(rng.random() < win_prob_a)
+        winner_team_id = team_a if team_a_wins else team_b
+
+        rows.append({
+            "game_id": game_id,
+            "day": game["date"].strftime("%Y-%m-%d"),
+            "home_team_id": team_a,
+            "home_abbreviation": team_abbrev_by_id[team_a],
+            "home_game_index": idx_a,
+            "away_team_id": team_b,
+            "away_abbreviation": team_abbrev_by_id[team_b],
+            "away_game_index": idx_b,
+            "home_score": score_a,
+            "away_score": score_b,
+            "point_differential": float(point_differential),
+            "winner_team_id": winner_team_id,
+            "winner_abbreviation": team_abbrev_by_id[winner_team_id],
+        })
+
+    return pd.DataFrame(rows), availability_by_team
+
+
+def simulate_single_league_season_player_box_scores(
+    team_projections: Dict[int, Dict[str, Any]],
+    game_log: pd.DataFrame,
+    availability_by_team: Dict[int, np.ndarray],
+    games_per_season: int,
+    random_seed: int,
+) -> pd.DataFrame:
+    """
+    Boxscore ILUSTRATIVO por jugador y partido -- NO una simulación
+    conjunta/correlacionada de categorías reales (más puntos no implica
+    menos asistencias de forma realista, por ejemplo: cada categoría se
+    sortea de forma independiente). Se deriva de la media por-partido de
+    temporada YA proyectada (`<stat>_projected / games_per_season`,
+    mismos totales que ya alimentan las columnas PPG/RPG/etc. en
+    `build_league_simulation_dataset`) más ruido gaussiano (ver
+    `DEFAULT_BOX_SCORE_NOISE_STD_FRACTION`), recortado en 0. Mismo
+    espíritu honesto que `simulation.DEFAULT_INJURY_TYPE_CATEGORIES`:
+    una aproximación ilustrativa, no un boxscore realista jugada a
+    jugada.
+
+    Un jugador NO disponible ese partido (`availability_by_team`, la
+    MISMA máscara que ya decidió el resultado del partido en
+    `simulate_single_league_season_game_log`) aparece en 0 en todas las
+    categorías -- consistente con que no contribuyó al Game Score de su
+    equipo ese partido.
+    """
+    rng = np.random.default_rng(random_seed)
+    rows = []
+    for game in game_log.itertuples():
+        sides = ((game.home_team_id, game.home_game_index), (game.away_team_id, game.away_game_index))
+        for team_id, game_index in sides:
+            proj = team_projections[team_id]
+            available_this_game = availability_by_team[team_id][game_index]
+            for player_index, player_row in enumerate(proj["player_rows"]):
+                box_row = {
+                    "game_id": game.game_id,
+                    "day": game.day,
+                    "team_id": team_id,
+                    "player_id": player_row.get("player_id"),
+                    "player_name": player_row.get("player_name"),
+                }
+                is_available = bool(available_this_game[player_index])
+                for stat, total_col in BOX_SCORE_STAT_COLUMNS.items():
+                    if not is_available:
+                        box_row[stat] = 0.0
+                        continue
+                    per_game_mean = (player_row.get(total_col) or 0.0) / games_per_season
+                    noise = rng.normal(0, per_game_mean * DEFAULT_BOX_SCORE_NOISE_STD_FRACTION)
+                    box_row[stat] = max(0.0, per_game_mean + noise)
+                rows.append(box_row)
+    return pd.DataFrame(rows)
+
+
+def compute_head_to_head_record(game_log: pd.DataFrame, team_a_id: int, team_b_id: int) -> Dict[str, Any]:
+    """
+    Récord entre dos equipos en la temporada regular de `game_log` (de
+    `simulate_single_league_season_game_log`). Función pura, sin
+    aleatoriedad -- toda la incertidumbre ya está fijada en el game log
+    que recibe.
+    """
+    mask = (
+        ((game_log["home_team_id"] == team_a_id) & (game_log["away_team_id"] == team_b_id))
+        | ((game_log["home_team_id"] == team_b_id) & (game_log["away_team_id"] == team_a_id))
+    )
+    matchups = game_log[mask].sort_values("day")
+    return {
+        "team_a_id": team_a_id,
+        "team_b_id": team_b_id,
+        "team_a_wins": int((matchups["winner_team_id"] == team_a_id).sum()),
+        "team_b_wins": int((matchups["winner_team_id"] == team_b_id).sum()),
+        "games": matchups.to_dict("records"),
+    }
+
+
+def run_single_league_season_simulation(
+    config: Dict[str, Any], scenario: str = SCENARIO_WITH_INJURIES, random_seed: Optional[int] = None
+) -> Dict[str, pd.DataFrame]:
+    """
+    Orquestador de UNA temporada concreta con calendario, resultado de
+    cada partido y boxscore por jugador -- mismo patrón que
+    `build_league_simulation_dataset` pero sin Monte Carlo agregado
+    (sería carísimo simular miles de réplicas con detalle partido a
+    partido). `random_seed=None` (por defecto): seed nuevo basado en el
+    reloj, re-lanzable -- mismo criterio que
+    `simulation.simulate_single_season_player_log` vía
+    `dashboard.data_loader.run_single_season_player_log_simulation` (a
+    diferencia de `simulate_single_bracket`, que reutiliza
+    `config["simulation"]["random_seed"]` fijo: aquí interesa una
+    temporada NUEVA cada vez que se pulsa el botón, no reproducir
+    siempre la misma).
+
+    Guarda `league_single_season_game_log{suffix}.csv` y
+    `league_single_season_player_box_scores{suffix}.csv` (mismo
+    `_scenario_suffix` que el resto del módulo).
+    """
+    paths = get_paths(config)
+    suffix = _scenario_suffix(scenario)
+    seed = int(random_seed if random_seed is not None else np.random.default_rng().integers(0, 2**31 - 1))
+
+    team_ids, team_abbrev_by_id, _team_conference, team_projections = load_and_project_all_teams(config)
+    team_projections = _apply_scenario(team_projections, scenario)
+
+    games_per_season = config["simulation"]["games_per_season"]
+    mc_config = {**DEFAULT_MONTE_CARLO_CONFIG, **config.get("monte_carlo", {})}
+
+    real_games = _load_real_schedule_games(config)
+    if real_games is not None:
+        print(f"  Calendario REAL ({len(real_games)} partidos) -- corre `data_pipeline.py --league` para refrescarlo.")
+        game_log, availability_by_team = simulate_single_league_season_game_log_real_schedule(
+            team_projections, real_games, team_abbrev_by_id, mc_config, seed
+        )
+        box_scores = simulate_single_league_season_player_box_scores(
+            team_projections, game_log, availability_by_team, games_per_season, seed + 1
+        )
+    else:
+        print("  Aviso: no se encontró league_schedule_full.csv -- usando calendario SINTÉTICO "
+              "(corre `data_pipeline.py --league` para el real).")
+        schedule_rng = np.random.default_rng(seed)
+        schedule = build_round_robin_schedule(team_ids, games_per_season, schedule_rng)
+        game_log, availability_by_team = simulate_single_league_season_game_log(
+            team_projections, schedule, team_abbrev_by_id, games_per_season, mc_config, seed
+        )
+        box_scores = simulate_single_league_season_player_box_scores(
+            team_projections, game_log, availability_by_team, games_per_season, seed + 1
+        )
+
+    game_log_path = paths["processed"] / f"league_single_season_game_log{suffix}.csv"
+    box_scores_path = paths["processed"] / f"league_single_season_player_box_scores{suffix}.csv"
+    game_log.to_csv(game_log_path, index=False)
+    box_scores.to_csv(box_scores_path, index=False)
+    print(f"Guardado: {game_log_path} ({len(game_log)} partidos)")
+    print(f"Guardado: {box_scores_path} ({len(box_scores)} líneas de boxscore)")
+
+    return {"game_log": game_log, "player_box_scores": box_scores}
 
 
 def _sample_team_game_score(proj: Dict[str, Any], rng: np.random.Generator, mc_config: Dict[str, float]) -> float:
@@ -1162,12 +1662,20 @@ def build_league_simulation_dataset(
     n_seasons = league_cfg.get("n_seasons", DEFAULT_LEAGUE_N_SEASONS)
     random_seed = config["simulation"]["random_seed"]
 
-    schedule_rng = np.random.default_rng(random_seed)
-    schedule = build_round_robin_schedule(team_ids, games_per_season, schedule_rng)
-
-    wins_by_team_arrays = simulate_league_regular_season(
-        team_projections, schedule, n_seasons, games_per_season, mc_cfg, random_seed
-    )
+    real_games = _load_real_schedule_games(config)
+    if real_games is not None:
+        print(f"Calendario REAL ({len(real_games)} partidos) -- corre `data_pipeline.py --league` para refrescarlo.")
+        wins_by_team_arrays = simulate_league_regular_season_real_schedule(
+            team_projections, real_games, n_seasons, mc_cfg, random_seed
+        )
+    else:
+        print("Aviso: no se encontró league_schedule_full.csv -- usando calendario SINTÉTICO "
+              "(corre `data_pipeline.py --league` para el real).")
+        schedule_rng = np.random.default_rng(random_seed)
+        schedule = build_round_robin_schedule(team_ids, games_per_season, schedule_rng)
+        wins_by_team_arrays = simulate_league_regular_season(
+            team_projections, schedule, n_seasons, games_per_season, mc_cfg, random_seed
+        )
 
     regular_season_rows = [
         {

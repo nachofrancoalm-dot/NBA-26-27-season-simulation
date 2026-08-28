@@ -14,6 +14,8 @@ import os
 import sys
 from pathlib import Path
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -24,12 +26,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from config_loader import load_config  # noqa: E402
 from llm_explainer import build_context_snapshot, explain_question  # noqa: E402
+from news_search import search_recent_news  # noqa: E402
 
 router = APIRouter(prefix="/explainer")
 
 
 class AskRequest(BaseModel):
     question: str
+    # Texto pegado por el usuario (noticias, injury reports, rumores) --
+    # opcional, ver news_text en llm_explainer.explain_question. Nunca
+    # viene de una llamada de red del servidor, solo de lo que el
+    # usuario pega en el textarea del frontend.
+    news_text: Optional[str] = None
 
 
 def _require_api_key() -> str:
@@ -56,7 +64,32 @@ def post_ask(body: AskRequest):
     api_key = _require_api_key()
     config = load_config()
     try:
-        answer = explain_question(body.question, config, api_key=api_key)
+        answer = explain_question(body.question, config, api_key=api_key, news_text=body.news_text)
     except Exception as exc:  # noqa: BLE001 -- mismo criterio que dashboard/app.py: mostrar cualquier error de API
         answer = f"Error al consultar el modelo: {exc}"
     return {"answer": answer}
+
+
+@router.get("/search-news")
+def get_search_news(query: str):
+    """
+    Fase 2 del RAG (ver news_search.py) -- solo se llama cuando el
+    usuario pulsa el botón de buscar en el frontend, nunca automático.
+    El texto devuelto rellena el mismo textarea que en fase 1 se llena a
+    mano; de ahí en adelante sigue el mismo camino (TF-IDF, etiquetado).
+    """
+    api_key = os.environ.get("TAVILY_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No se encontró la variable de entorno TAVILY_API_KEY. Copia .env.example a .env "
+                "en la raíz del proyecto y rellena tu API key de https://tavily.com para activar "
+                "la búsqueda de noticias -- puedes seguir pegando texto a mano mientras tanto."
+            ),
+        )
+    try:
+        news_text = search_recent_news(query, api_key=api_key)
+    except Exception as exc:  # noqa: BLE001 -- mismo criterio que post_ask: mostrar cualquier error de API
+        raise HTTPException(status_code=502, detail=f"Error al buscar noticias: {exc}")
+    return {"news_text": news_text}

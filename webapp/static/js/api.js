@@ -40,16 +40,26 @@ export const api = {
   leagueBracket: (scenario = "with_injuries") => request(`/league/bracket?scenario=${scenario}`, { method: "POST" }),
   leagueSimulate: (scenario) => request(`/league/simulate?scenario=${scenario}`, { method: "POST" }),
 
+  leagueSimulateSeasonLog: (scenario = "with_injuries") =>
+    request(`/league/simulate-season-log?scenario=${scenario}`, { method: "POST" }),
+  leagueSchedule: (team, scenario = "with_injuries") =>
+    request(`/league/schedule?scenario=${scenario}${team ? `&team=${team}` : ""}`),
+  leagueBoxscore: (gameId, scenario = "with_injuries") =>
+    request(`/league/boxscore/${gameId}?scenario=${scenario}`),
+  leagueHeadToHead: (teamA, teamB, scenario = "with_injuries") =>
+    request(`/league/head-to-head?team_a=${teamA}&team_b=${teamB}&scenario=${scenario}`),
+
   awards: (scenario = "with_injuries") => request(`/awards?scenario=${scenario}`),
   champions: () => request("/champions"),
 
   player: (playerId) => request(`/player/${playerId}`),
 
   explainerContext: () => request("/explainer/context"),
-  explainerAsk: (question) =>
+  explainerAsk: (question, newsText) =>
     request("/explainer/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, news_text: newsText || null }),
     }),
+  explainerSearchNews: (query) => request(`/explainer/search-news?query=${encodeURIComponent(query)}`),
 };

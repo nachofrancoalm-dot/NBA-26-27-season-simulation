@@ -13,7 +13,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from llm_explainer import build_context_snapshot, explain_question  # noqa: E402
+from llm_explainer import (  # noqa: E402
+    NEWS_SECTION_LABEL,
+    build_context_snapshot,
+    build_news_section,
+    explain_question,
+    retrieve_relevant_news_snippets,
+)
 
 
 @pytest.fixture
@@ -145,6 +151,123 @@ def test_explain_question_grounds_the_prompt_with_the_snapshot(config, monkeypat
         "role": "user",
         "content": "¿Cuántas victorias medias tiene el equipo?",
     }
+
+
+def test_retrieve_relevant_news_snippets_returns_empty_without_news_text():
+    assert retrieve_relevant_news_snippets("", "¿Que le paso a Embiid?") == []
+
+
+def test_retrieve_relevant_news_snippets_returns_empty_when_nothing_overlaps():
+    # Cero solapamiento lexico (ni siquiera stopwords compartidas) --
+    # no hay que forzar un fragmento irrelevante en el contexto.
+    snippets = retrieve_relevant_news_snippets("Trueno relampago tormenta.", "Presupuesto anual empresa")
+    assert snippets == []
+
+
+def test_retrieve_relevant_news_snippets_ranks_the_relevant_paragraph_first():
+    news_text = (
+        "Embiid se lesiono la rodilla en el partido de ayer y es duda para esta noche.\n\n"
+        "El presupuesto del equipo crecio este año fiscal segun el informe contable."
+    )
+    snippets = retrieve_relevant_news_snippets(news_text, "¿Que le paso a Embiid en la rodilla?")
+    assert snippets
+    assert "Embiid" in snippets[0]
+
+
+def test_retrieve_relevant_news_snippets_falls_back_to_line_splitting():
+    # Un unico bloque sin parrafos (lista de titulares, una noticia por
+    # linea) -- debe trocearse por linea, no tratarse como un solo
+    # fragmento gigante donde una noticia irrelevante "contamina" a la
+    # relevante.
+    news_text = "Embiid fuera por molestias en la rodilla\nCurry con esguince de tobillo leve"
+    snippets = retrieve_relevant_news_snippets(news_text, "¿Que lesion tiene Curry?")
+    assert snippets
+    assert "Curry" in snippets[0]
+
+
+def test_build_news_section_empty_without_news_text():
+    assert build_news_section("", "¿Que le paso a Embiid?") == ""
+
+
+def test_build_news_section_empty_when_nothing_relevant():
+    assert build_news_section("Trueno relampago tormenta.", "Presupuesto anual empresa") == ""
+
+
+def test_build_news_section_labels_the_section_explicitly():
+    section = build_news_section(
+        "Embiid se lesiono la rodilla en el partido de ayer.", "¿Que le paso a Embiid en la rodilla?"
+    )
+    assert section.startswith(NEWS_SECTION_LABEL)
+    assert "Embiid" in section
+
+
+def test_explain_question_appends_news_section_when_relevant(config, monkeypatch):
+    captured = {}
+
+    class _FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="ok"))]
+            )
+
+    class _FakeChat:
+        def __init__(self):
+            self.completions = _FakeCompletions()
+
+    class _FakeClient:
+        def __init__(self, api_key=None):
+            self.chat = _FakeChat()
+
+    monkeypatch.setattr("groq.Groq", _FakeClient)
+
+    explain_question(
+        "¿Que le paso a Embiid en la rodilla?",
+        config,
+        api_key="test-key",
+        context_snapshot="## Simulacion Monte Carlo de temporada propia\n- Victorias medias: 52.5",
+        news_text="Embiid se lesiono la rodilla en el partido de ayer.",
+    )
+
+    system_message = captured["messages"][0]["content"]
+    assert NEWS_SECTION_LABEL in system_message
+    assert "Embiid" in system_message
+
+
+def test_explain_question_omits_news_section_when_nothing_relevant(config, monkeypatch):
+    captured = {}
+
+    class _FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="ok"))]
+            )
+
+    class _FakeChat:
+        def __init__(self):
+            self.completions = _FakeCompletions()
+
+    class _FakeClient:
+        def __init__(self, api_key=None):
+            self.chat = _FakeChat()
+
+    monkeypatch.setattr("groq.Groq", _FakeClient)
+
+    explain_question(
+        "Presupuesto anual empresa",
+        config,
+        api_key="test-key",
+        context_snapshot="## Simulacion Monte Carlo de temporada propia\n- Victorias medias: 52.5",
+        news_text="Trueno relampago tormenta.",
+    )
+
+    # El SYSTEM_PROMPT menciona la etiqueta una vez al explicar el
+    # criterio -- lo que no debe pasar es que APARIEZCA COMO SECCION
+    # (con las noticias pegadas debajo) cuando nada es relevante.
+    system_message = captured["messages"][0]["content"]
+    assert system_message.count(NEWS_SECTION_LABEL) == 1
+    assert "Trueno" not in system_message
 
 
 def test_explain_question_handles_content_filter_finish_reason(config, monkeypatch):

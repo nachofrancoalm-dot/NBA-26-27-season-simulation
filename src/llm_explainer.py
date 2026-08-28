@@ -23,8 +23,9 @@ python-dotenv si existe.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -35,6 +36,16 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 MODEL_ID = "llama-3.3-70b-versatile"
 
+# Etiqueta obligatoria de la seccion de noticias pegadas por el usuario --
+# nunca se mezcla sin marcar con las secciones de datos validados del
+# pipeline (ver build_news_section). Se referencia tambien desde el
+# system prompt para reforzar el criterio en la propia respuesta del modelo.
+NEWS_SECTION_LABEL = (
+    "## Noticias recientes (pegadas por el usuario, NO verificadas por el "
+    "pipeline ni por el modelo -- pueden estar desactualizadas, incompletas "
+    "o ser inexactas)"
+)
+
 SYSTEM_PROMPT = (
     "Eres un asistente que explica los resultados de un simulador Monte Carlo "
     "de baloncesto NBA a su usuario. Se te proporciona un snapshot de texto con "
@@ -44,7 +55,12 @@ SYSTEM_PROMPT = (
     "jugadores, ni resultados que no aparezcan en el contexto. Si una seccion "
     "aparece marcada como NO DISPONIBLE y la pregunta depende de ella, dilo "
     "explicitamente y sugiere que parte del pipeline habria que correr para "
-    "tenerla, en vez de adivinar. Responde en espanol, de forma clara y "
+    "tenerla, en vez de adivinar. Si el contexto incluye la seccion "
+    f"'{NEWS_SECTION_LABEL}', puedes usarla para dar contexto cualitativo "
+    "reciente, pero deja siempre claro en tu respuesta que es informacion "
+    "pegada por el usuario, no verificada ni calculada por el pipeline, y "
+    "nunca la combines con las demas cifras como si tuviera el mismo nivel "
+    "de fiabilidad. Responde en espanol, de forma clara y "
     "concisa, como lo haria un analista explicando un informe a alguien que no "
     "es experto en estadistica."
 )
@@ -189,17 +205,88 @@ def build_context_snapshot(config: Dict[str, Any]) -> str:
     return "\n\n".join(sections)
 
 
+def _split_into_snippets(news_text: str) -> List[str]:
+    """
+    Trocea el texto pegado por el usuario en fragmentos recuperables.
+    Primero intenta por parrafo (linea en blanco de separacion, el caso
+    tipico al pegar varios articulos o titulares); si el texto es un
+    unico bloque sin parrafos, cae a una linea por fragmento.
+    """
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", news_text) if p.strip()]
+    if len(paragraphs) > 1:
+        return paragraphs
+    return [line.strip() for line in news_text.splitlines() if line.strip()]
+
+
+def retrieve_relevant_news_snippets(news_text: str, question: str, top_k: int = 3) -> List[str]:
+    """
+    RAG minimo: TF-IDF + similitud coseno entre `question` y cada
+    fragmento de `news_text`, sin embeddings ni dependencias nuevas
+    (scikit-learn ya es dependencia principal del proyecto). Con el
+    volumen de texto que un usuario pega a mano (unos pocos articulos,
+    no un corpus masivo) es suficiente -- ver discusion de diseno.
+
+    Solo devuelve fragmentos con similitud > 0 (algo de solapamiento
+    lexico con la pregunta) -- si el texto pegado no tiene relacion con
+    lo que se pregunta, no se inyecta nada en el contexto.
+    """
+    if not news_text.strip() or not question.strip():
+        return []
+
+    snippets = _split_into_snippets(news_text)
+    if not snippets:
+        return []
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    try:
+        vectorizer = TfidfVectorizer()
+        matrix = vectorizer.fit_transform(snippets + [question])
+    except ValueError:
+        # Vocabulario vacio (p.ej. texto pegado son solo simbolos) -- no
+        # hay nada recuperable, mejor omitir la seccion que fallar.
+        return []
+
+    similarities = cosine_similarity(matrix[-1], matrix[:-1])[0]
+    ranked = sorted(zip(snippets, similarities), key=lambda pair: pair[1], reverse=True)
+    return [snippet for snippet, score in ranked[:top_k] if score > 0]
+
+
+def build_news_section(news_text: str, question: str) -> str:
+    """
+    Construye la seccion de contexto etiquetada con los fragmentos de
+    `news_text` relevantes para `question`, o "" si no hay texto pegado
+    o ningun fragmento resulta relevante (en ese caso se omite -- no se
+    fuerza contexto irrelevante en el prompt).
+    """
+    snippets = retrieve_relevant_news_snippets(news_text, question)
+    if not snippets:
+        return ""
+    lines = [NEWS_SECTION_LABEL] + [f"- {snippet}" for snippet in snippets]
+    return "\n".join(lines)
+
+
 def explain_question(
     question: str,
     config: Dict[str, Any],
     api_key: Optional[str] = None,
     context_snapshot: Optional[str] = None,
+    news_text: Optional[str] = None,
 ) -> str:
     """
     Responde `question` usando Groq, grounded en context_snapshot (si no
     se pasa, se construye uno con build_context_snapshot(config)). Lanza
     RuntimeError si no hay API key disponible -- la capa de dashboard lo
     captura para mostrar un aviso amigable en vez de un traceback.
+
+    `news_text` es opcional: texto pegado por el usuario (noticias,
+    injury reports, rumores de traspaso) que el pipeline no puede ver
+    porque no viene de ningun CSV calculado. Si se pasa, se recuperan
+    (RAG por TF-IDF) los fragmentos relevantes a `question` y se anaden
+    al contexto en una seccion claramente etiquetada como no verificada
+    -- ver build_news_section y NEWS_SECTION_LABEL. Nunca se mezcla con
+    context_snapshot sin esa etiqueta.
     """
     import groq
 
@@ -212,6 +299,10 @@ def explain_question(
         )
 
     snapshot = context_snapshot if context_snapshot is not None else build_context_snapshot(config)
+    if news_text:
+        news_section = build_news_section(news_text, question)
+        if news_section:
+            snapshot = snapshot + "\n\n" + news_section
 
     client = groq.Groq(api_key=key)
     response = client.chat.completions.create(

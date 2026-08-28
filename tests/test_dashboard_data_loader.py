@@ -29,6 +29,8 @@ from data_loader import (  # noqa: E402
     load_league_playoff_summary,
     load_league_player_projections,
     load_league_regular_season_summary,
+    load_league_single_season_game_log,
+    load_league_single_season_player_box_scores,
     load_lineup_synergy_pairs,
     load_roster_overview,
     load_simulation_results,
@@ -229,6 +231,28 @@ def test_load_league_player_projections_reads_existing_csv(config):
     result = load_league_player_projections(config)
     assert result is not None
     assert result.iloc[0]["team_abbreviation"] == "BOS"
+
+
+def test_load_league_single_season_data_returns_none_when_missing(config):
+    assert load_league_single_season_game_log(config) is None
+    assert load_league_single_season_player_box_scores(config) is None
+
+
+def test_load_league_single_season_data_reads_existing_csv_and_respects_scenario(config):
+    processed = Path(config["paths"]["processed_data_dir"])
+    pd.DataFrame([{"game_id": 0, "day": 0, "home_team_id": 1, "away_team_id": 2, "winner_team_id": 1}]).to_csv(
+        processed / "league_single_season_game_log.csv", index=False
+    )
+    pd.DataFrame([{"game_id": 0, "team_id": 1, "player_id": 100, "PTS": 20.0}]).to_csv(
+        processed / "league_single_season_player_box_scores.csv", index=False
+    )
+
+    game_log = load_league_single_season_game_log(config)
+    box_scores = load_league_single_season_player_box_scores(config)
+    assert game_log is not None and game_log.iloc[0]["winner_team_id"] == 1
+    assert box_scores is not None and box_scores.iloc[0]["PTS"] == 20.0
+    # Sin CSV del escenario "no_injuries" todavia -- None, no revienta.
+    assert load_league_single_season_game_log(config, scenario="no_injuries") is None
 
 
 def test_select_roster_view_totals_mode_uses_clean_column_names():

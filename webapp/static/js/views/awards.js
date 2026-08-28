@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { card, el, dataTable, glossaryExpander, emptyState } from "../ui.js";
+import { card, el, dataTable, glossaryExpander, emptyState, skeleton } from "../ui.js";
 import { openPlayerModal } from "../player-modal.js";
 import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
@@ -34,8 +34,12 @@ function awardBlock(emoji, title, records, teamIds) {
 }
 
 export async function render(container) {
-  container.replaceChildren();
-  container.append(el("div", { class: "caption" }, "Cargando premios…"));
+  // Este endpoint es el más lento de la app con diferencia (~4s,
+  // compute_awards_summary corre pandas sin caché) -- de todas las vistas
+  // es donde más importa un esqueleto con movimiento en vez de texto
+  // estático, para que quede claro que sigue cargando y no que se quedó
+  // colgado.
+  container.replaceChildren(skeleton(["title", "short"]), skeleton(["", "", "", ""]));
 
   const status = await api.status();
   const bar = scenarioBar(status, () => render(container));
