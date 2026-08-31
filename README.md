@@ -54,9 +54,13 @@ examples:
 
 Every one of these investigations lives in the repo as a runnable,
 tested script (`scripts/experiments/`) plus a written account of the
-result — including the ones that came back negative.
+result — including the ones that came back negative. Three of them also
+have a curated, visual notebook: [`notebooks/`](notebooks/).
 
-**Screenshots** (web app, `webapp/`):
+**Demo** (web app, `webapp/`): splash → roster projections → Monte Carlo
+distribution → league standings → individual awards.
+
+![Demo](docs/screenshots/demo.gif)
 
 | Roster & projections | Monte Carlo distribution |
 |---|---|
@@ -65,6 +69,17 @@ result — including the ones that came back negative.
 | League standings & playoff odds | Individual awards |
 |---|---|
 | ![League](docs/screenshots/04_liga.png) | ![Awards](docs/screenshots/05_premios.png) |
+
+| Real shot chart (player detail popup) |
+|---|
+| ![Shot chart](docs/screenshots/06_shot_chart.png) |
+
+**Pipeline:** every stage below reuses the one before it — the full
+30-team league simulation and backtesting call the *same*
+projection/risk/synergy functions as the single-team engine, never a
+re-implementation. Full diagram (all intermediate files): [`ARQUITECTURA.md`](ARQUITECTURA.md).
+
+![Architecture](docs/screenshots/architecture.png)
 
 **Stack:** Python (pandas, numpy, scipy, statsmodels/scikit-learn) for
 the modeling · `nba_api` for real data · FastAPI + vanilla JS for the
@@ -1225,7 +1240,15 @@ Tres pestañas de primer nivel:
     `minutes_projection`, que es el minutaje ASUMIDO para la temporada
     simulada. Incluye el roster hipotético editable (añadir/quitar/
     sustituir cualquier jugador de los 30 equipos, ver sección de
-    arriba sobre el sandbox de liga).
+    arriba sobre el sandbox de liga). El popup de detalle de cada
+    jugador (doble clic en su nombre) incluye un **mapa de tiros real**
+    sobre una media cancha dibujada en SVG (`webapp/static/js/court.js`,
+    sin librería externa): ubicación exacta de cada tiro de su temporada
+    real más reciente (`ShotChartDetail` vía
+    `data_pipeline.build_roster_shot_charts_dataset`), verde/rojo por
+    anotado/fallado. Cacheado en `data/processed/roster_shot_charts.csv`
+    -- el router nunca llama a `nba_api` desde un request HTTP (mismo
+    principio que el resto de `webapp/routers/players.py`).
   - **Simulación Monte Carlo** — distribución de victorias y Net Rating
     de `simulation_results.csv`.
   - **Sinergia de alineación** — tabla completa de
@@ -1417,7 +1440,7 @@ nba-superteam-sim/
 │       ├── injury_survival_model.py      # descartado: Cox no mejora el heurístico de injury_model.py
 │       ├── game_win_predictor.py         # descartado: GBT no mejora la logística de compute_win_probabilities
 │       └── game_win_predictor_injury_signal.py  # positivo: disponibilidad de jugadores clave mejora el Brier score, incluso en versión pregame desplegable
-├── notebooks/                      # exploración y prototipado de modelos
+├── notebooks/                      # 3 investigaciones narradas visualmente (complementan, no sustituyen, scripts/experiments/)
 ├── dashboard/
 │   └── data_loader.py              # carga/combinación de CSV, testeable -- capa de datos de webapp/ (el dashboard Streamlit que vivió aquí se retiró)
 ├── webapp/                         # única interfaz del proyecto: HTML/CSS/JS + FastAPI
