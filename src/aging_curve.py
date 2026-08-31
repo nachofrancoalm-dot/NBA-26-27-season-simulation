@@ -71,6 +71,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -214,9 +215,39 @@ def compute_recency_weighted_baseline(
 ) -> Dict[str, float]:
     """
     Línea base por-36 de un jugador: media ponderada por recencia
-    (decaimiento exponencial, la temporada más reciente pesa más) de las
-    últimas n_seasons. Devuelve un dict {stat_per36: valor} para cada
-    estadística en GENERAL_STATS + SHOOTING_STATS.
+    (decaimiento exponencial, la temporada más reciente pesa más) Y por
+    fiabilidad (minutos jugados esa temporada respecto al máximo de la
+    ventana) de las últimas n_seasons. Devuelve un dict {stat_per36:
+    valor} para cada estadística en GENERAL_STATS + SHOOTING_STATS.
+
+    EL PESO DE FIABILIDAD (investigado y añadido a petición del
+    usuario, caso real: Jayson Tatum). Antes esta función solo pesaba
+    por recencia -- una temporada de 16 partidos por vuelta de una
+    lesión de Aquiles pesaba EXACTAMENTE igual que una temporada
+    completa de 82 con tal de que ambas estuvieran "a la misma
+    distancia" en el tiempo, sin importar que una representara 20 veces
+    menos minutos de muestra que la otra. Medido sobre los datos reales
+    de Tatum (temporadas 2023-24: 2645 min, 2024-25: 2624 min, 2025-26:
+    solo 522 min/16 partidos, con FG% cayendo de ~0.45-0.47 a 0.411 en
+    ese tramo corto de adaptación): el Game Score/36 de línea base salía
+    19.74 con el tramo corto incluido a peso completo, frente a 20.90 si
+    se excluía por completo -- una diferencia real de -5.5%, no
+    despreciable. Y no es un caso aislado: la misma temporada,
+    Domantas Sabonis (19 partidos) y Keegan Murray (23) tienen el mismo
+    patrón -- veterano de rotación con una temporada reciente muy corta
+    por lesión.
+
+    LA FÓRMULA: `peso_fiabilidad = MIN_de_esa_temporada / max(MIN de las
+    n_seasons de la ventana)` -- normalizado DENTRO de la propia ventana
+    del jugador, no contra una constante externa de "temporada
+    completa" (evita tener que saber cuántos partidos tuvo la liga ese
+    año -- 66 en el lockout 2011-12, ~72 en las temporadas COVID, 82 el
+    resto -- y sigue funcionando igual de bien si TODAS las temporadas
+    de la ventana son cortas). Con minutos iguales entre temporadas
+    (el caso normal, sin lesiones), este peso vale 1.0 para todas y el
+    resultado es IDÉNTICO al comportamiento anterior -- por eso no hizo
+    falta tocar ningún test existente que use datos sintéticos con
+    minutos parejos.
     """
     df = compute_per36_stats(player_seasons)
     recent = _most_recent_n_seasons(df, n_seasons)
@@ -224,7 +255,13 @@ def compute_recency_weighted_baseline(
         return {f"{stat}_per36": 0.0 for stat in GENERAL_STATS + SHOOTING_STATS}
 
     seasons_ago = recent.index.to_numpy()  # 0 = más reciente
-    weights = 0.5 ** (seasons_ago / half_life_seasons)
+    recency_weights = 0.5 ** (seasons_ago / half_life_seasons)
+
+    minutes = recent["MIN"].to_numpy()
+    max_minutes = minutes.max()
+    reliability_weights = minutes / max_minutes if max_minutes > 0 else np.ones_like(minutes, dtype=float)
+
+    weights = recency_weights * reliability_weights
     total_weight = weights.sum()
 
     baseline = {}

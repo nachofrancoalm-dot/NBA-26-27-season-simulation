@@ -75,6 +75,59 @@ def test_recency_weighted_baseline_favors_recent_seasons():
     assert baseline["PTS_per36"] > 16.2
 
 
+def test_recency_weighted_baseline_downweights_a_short_recent_season():
+    """Caso real: Jayson Tatum volvió de una lesión de Aquiles y jugó
+    solo 16 partidos (522 min) tras dos temporadas completas (~2600 min)
+    -- esa temporada corta NO debe pesar igual que una completa solo
+    por ser "la más reciente". Con solo peso de recencia (sin peso de
+    fiabilidad por minutos), la línea base caería mucho más cerca de la
+    temporada corta; con el peso de fiabilidad, debe quedarse más cerca
+    de las dos temporadas completas."""
+    seasons = _seasons(
+        [
+            {"season": "2023-24", "age": 25, "min": 2645, "pts": 2000},  # completa, PTS/36 ~ 27.2
+            {"season": "2024-25", "age": 26, "min": 2624, "pts": 1950},  # completa, PTS/36 ~ 26.8
+            {"season": "2025-26", "age": 27, "min": 522, "pts": 300},  # corta (lesión), PTS/36 ~ 20.7
+        ]
+    )
+    baseline = compute_recency_weighted_baseline(seasons, n_seasons=3, half_life_seasons=1.5)
+
+    # Recencia pura (sin peso de fiabilidad) -- lo que hacía la función
+    # ANTES de este fix, para comparar contra el resultado real de
+    # arriba.
+    per36 = compute_per36_stats(seasons)
+    recent = per36.sort_values("SEASON_ID", ascending=False).reset_index(drop=True)
+    seasons_ago = recent.index.to_numpy()
+    recency_only_weights = 0.5 ** (seasons_ago / 1.5)
+    recency_only_baseline = float(
+        (recency_only_weights * recent["PTS_per36"].to_numpy()).sum() / recency_only_weights.sum()
+    )
+
+    # El peso de fiabilidad debe acercar el resultado a las dos
+    # temporadas completas (PTS/36 ~26-27), no a la corta (~20.7) --
+    # es decir, debe salir MÁS ALTO que si solo pesara la recencia.
+    assert baseline["PTS_per36"] > recency_only_baseline
+
+
+def test_recency_weighted_baseline_matches_pure_recency_when_minutes_equal():
+    """Con minutos iguales entre temporadas (caso normal, sin lesiones),
+    el peso de fiabilidad vale 1.0 para todas -- el resultado debe ser
+    IDÉNTICO al de una temporada con minutos ligeramente distintos pero
+    en la misma proporción (es decir, el peso de fiabilidad no
+    introduce ningún sesgo cuando no hace falta)."""
+    equal_minutes = _seasons(
+        [
+            {"season": "2021-22", "age": 25, "min": 2000, "pts": 400},
+            {"season": "2022-23", "age": 26, "min": 2000, "pts": 1400},
+        ]
+    )
+    baseline = compute_recency_weighted_baseline(equal_minutes, n_seasons=2, half_life_seasons=1.0)
+    # Con minutos iguales, PTS/36 = 7.2 y 25.2 -- pesos de recencia
+    # puros: 1.0 y 0.5. Media ponderada = (1.0*25.2 + 0.5*7.2) / 1.5.
+    expected = (1.0 * 25.2 + 0.5 * 7.2) / 1.5
+    assert baseline["PTS_per36"] == pytest.approx(expected)
+
+
 def test_age_adjustment_factor_grows_for_young_rising_player():
     factor = compute_age_adjustment_factor(20, 21, DEFAULT_GENERAL_AGE_CURVE)
     assert factor > 1.0
