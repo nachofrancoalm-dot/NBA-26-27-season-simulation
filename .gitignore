@@ -4,9 +4,12 @@ __pycache__/
 .pytest_cache/
 data/raw/*.csv
 data/raw/**/*.csv
-data/processed/*.csv
-data/processed/*.json
-data/processed/*.nc
+# data/processed/ SÍ se versiona a propósito (a diferencia de data/raw/):
+# es el output ya calculado que necesitan webapp/ y dashboard/ para
+# funcionar en un despliegue limpio (git clone + pip install, sin volver
+# a llamar a nba_api ni recalcular nada) -- ~50MB, dentro de límites
+# normales de GitHub. data/raw/ sigue sin versionarse porque SÍ es
+# reproducible desde cero vía `python -m data_pipeline` (ver README).
 .env
 CLAUDE.md
 .claude/

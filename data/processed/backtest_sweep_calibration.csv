@@ -1,0 +1,2 @@
+n_cases,pct_within_p10_p90,mean_percentile,median_percentile,mean_absolute_error_wins,mean_error_wins,correlation_actual_vs_predicted
+480,61.25000000000001,52.0716875,54.605000000000004,6.777200833333334,-0.036330416666666664,0.7491529687371189

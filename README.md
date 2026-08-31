@@ -9,6 +9,70 @@ Nets 2020-21, Suns 2022-23).
 específico del roster vive en `config/team_config.yaml`, nunca en el
 código.
 
+[![Tests](https://github.com/nachofrancoalm-dot/NBA-26-27-season-simulation/actions/workflows/tests.yml/badge.svg)](https://github.com/nachofrancoalm-dot/NBA-26-27-season-simulation/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Tests](https://img.shields.io/badge/tests-465%20passing-brightgreen)
+
+🔗 **Live demo:** _deploying — link coming soon_ · 📄 [Full architecture walkthrough](ARQUITECTURA.md)
+
+## What this is
+
+A Monte Carlo simulation engine that projects how an NBA roster —
+including hypothetical ones you build yourself — would perform over a
+full season and playoffs: individual player projections (aging curves,
+injury risk, fatigue), lineup synergy, a full 30-team regular season +
+playoffs simulation, and MVP/DPOY/All-NBA style awards, all served
+through a self-built FastAPI + vanilla JS web app.
+
+What makes this more than a stats toy is the validation discipline
+behind it: every modeling assumption gets checked against real
+historical data before it's trusted, and **assumptions that don't hold
+up get documented and thrown out, not quietly kept**. A few concrete
+examples:
+
+- **Calibrated against 480 real season-long cases** (30 teams × 16
+  seasons, via `nba_api`), not eyeballed. The projected win total
+  correlates **0.75** with actual wins, MAE **6.78 wins/season** — down
+  from an initial MAE of 13.2 wins before two calibration bugs were
+  found and fixed (see the "Backtesting" section below).
+- **Investigated whether a "lineup synergy" bonus (usage clash,
+  playmaking + spacing, and three more candidates: post scorer +
+  creator, on/off-ball shooters, drive + interior presence) actually
+  predicts real 2-man lineup net rating.** Tested all 5 against
+  `leaguedashlineups`/tracking data with leave-one-season-out
+  validation. Result: none of them hold up (R² ≈ 0.02, wrong sign in
+  most folds) — reported as a negative result instead of forcing it in.
+- **Investigated the "contract year" effect** (do players statistically
+  outperform in the final year of their contract?) using real
+  salary/contract data. Paired comparison + player-fixed-effects
+  regression on 126 contracts found no measurable effect
+  (coefficient ≈ 0, p = 0.89) — not incorporated into the model.
+- **Found and fixed a real bug via user-reported inconsistency**: a
+  hypothetical-roster simulation reported 26 average wins through one
+  code path and 42 through another, for the *same* roster — traced to
+  an inconsistent synergy baseline between the two simulation modes.
+
+Every one of these investigations lives in the repo as a runnable,
+tested script (`scripts/experiments/`) plus a written account of the
+result — including the ones that came back negative.
+
+**Screenshots** (web app, `webapp/`):
+
+| Roster & projections | Monte Carlo distribution |
+|---|---|
+| ![Roster](docs/screenshots/02_roster.png) | ![Monte Carlo](docs/screenshots/03_simulacion.png) |
+
+| League standings & playoff odds | Individual awards |
+|---|---|
+| ![League](docs/screenshots/04_liga.png) | ![Awards](docs/screenshots/05_premios.png) |
+
+**Stack:** Python (pandas, numpy, scipy, statsmodels/scikit-learn) for
+the modeling · `nba_api` for real data · FastAPI + vanilla JS for the
+web app (also ships a Streamlit dashboard) · pytest (465 tests) + GitHub
+Actions CI.
+
+---
+
 > **¿Primera vez en el proyecto?** Este README explica *qué* es cada
 > pieza y *por qué* está diseñada así. Para el flujo completo de punta a
 > punta — diagrama, orden exacto de comandos, y cómo se simula un

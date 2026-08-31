@@ -1,0 +1,64 @@
+TeamID,SEASON,LeagueID,PLAYER,NICKNAME,PLAYER_SLUG,NUM,POSITION,HEIGHT,WEIGHT,BIRTH_DATE,AGE,EXP,SCHOOL,PLAYER_ID,HOW_ACQUIRED,SUPPLEMENTAL_STATUS,comparable_name,season
+1610612748,2010,0,Mike Bibby,Mike,mike-bibby,0,G,6-2,195,"MAY 13, 1978",33.0,12,Arizona,1710,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Chris Bosh,Chris,chris-bosh,1,F,6-11,235,"MAR 24, 1984",27.0,7,Georgia Tech,2547,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Dwyane Wade,Dwyane,dwyane-wade,3,G,6-4,220,"JAN 17, 1982",29.0,7,Marquette,2548,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Juwan Howard,Juwan,juwan-howard,5,F,6-9,250,"FEB 07, 1973",38.0,16,Michigan,436,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,LeBron James,LeBron,lebron-james,6,F,6-8,250,"DEC 30, 1984",26.0,7,St. Vincent-St. Mary HS (OH),2544,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Zydrunas Ilgauskas,Zydrunas,zydrunas-ilgauskas,11,C,7-3,260,"JUN 05, 1975",36.0,12,Atletas Kaunas,980,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Mike Miller,Mike,mike-miller,13,F,6-8,218,"FEB 19, 1980",31.0,10,Florida,2034,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Mario Chalmers,Mario,mario-chalmers,15,G,6-2,190,"MAY 19, 1986",25.0,2,Kansas,201596,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Jamaal Magloire,Jamaal,jamaal-magloire,21,C,6-11,255,"MAY 21, 1978",33.0,10,Kentucky,2048,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,James Jones,James,james-jones,22,F,6-8,215,"OCT 04, 1980",30.0,7,Miami,2592,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Erick Dampier,Erick,erick-dampier,25,C,6-11,265,"JUL 14, 1975",35.0,14,Mississippi State,956,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Udonis Haslem,Udonis,udonis-haslem,40,F,6-8,235,"JUN 09, 1980",31.0,7,Florida,2617,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Dexter Pittman,Dexter,dexter-pittman,45,C,6-11,308,"MAR 02, 1988",23.0,R,Texas,202354,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Joel Anthony,Joel,joel-anthony,50,C,6-9,245,"AUG 09, 1982",28.0,3,UNLV,201202,,0.0,Miami Heat 2010-11,2010-11
+1610612748,2010,0,Eddie House,Eddie,eddie-house,55,G,6-1,190,"MAY 14, 1978",33.0,10,Arizona State,2067,,0.0,Miami Heat 2010-11,2010-11
+1610612744,2016,0,Patrick McCaw,Patrick,patrick-mccaw,0,G,6-7,185,"OCT 25, 1995",21.0,R,UNLV,1627775,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,JaVale McGee,JaVale,javale-mcgee,1,C,7-0,270,"JAN 19, 1988",29.0,8,Nevada,201580,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,David West,David,david-west,3,F,6-9,250,"AUG 29, 1980",36.0,13,Xavier,2561,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Kevon Looney,Kevon,kevon-looney,5,F,6-9,220,"FEB 06, 1996",21.0,1,UCLA,1626172,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Andre Iguodala,Andre,andre-iguodala,9,G-F,6-6,215,"JAN 28, 1984",33.0,12,Arizona,2738,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Klay Thompson,Klay,klay-thompson,11,G,6-7,215,"FEB 08, 1990",27.0,5,Washington State,202691,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Damian Jones,Damian,damian-jones,15,C,7-0,245,"JUN 30, 1995",22.0,R,Vanderbilt,1627745,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,James Michael McAdoo,James Michael,james-michael-mcadoo,20,F,6-9,240,"JAN 04, 1993",24.0,2,North Carolina,203949,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Ian Clark,Ian,ian-clark,21,G,6-3,175,"MAR 07, 1991",26.0,3,Belmont,203546,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Matt Barnes,Matt,matt-barnes,22,F,6-7,226,"MAR 09, 1980",37.0,13,UCLA,2440,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Draymond Green,Draymond,draymond-green,23,F,6-7,230,"MAR 04, 1990",27.0,4,Michigan State,203110,#35 Pick in 2012 Draft,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Zaza Pachulia,Zaza,zaza-pachulia,27,C,6-11,275,"FEB 10, 1984",33.0,13,Ulkerspor,2585,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Stephen Curry,Stephen,stephen-curry,30,G,6-3,190,"MAR 14, 1988",29.0,7,Davidson,201939,#7 Pick in 2009 Draft,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Shaun Livingston,Shaun,shaun-livingston,34,G,6-7,192,"SEP 11, 1985",31.0,11,Peoria Central HS (IL),2733,,,Golden State Warriors 2016-17,2016-17
+1610612744,2016,0,Kevin Durant,Kevin,kevin-durant,35,F,6-9,240,"SEP 29, 1988",28.0,9,Texas,201142,,,Golden State Warriors 2016-17,2016-17
+1610612751,2020,0,Reggie Perry,Reggie,reggie-perry,0,F-C,6-8,250,"MAR 21, 2000",21.0,R,Mississippi State,1629617,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Bruce Brown,Bruce,bruce-brown,1,G-F,6-4,202,"AUG 15, 1996",24.0,2,Miami,1628971,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Blake Griffin,Blake,blake-griffin,2,F,6-9,250,"MAR 16, 1989",32.0,10,Oklahoma,201933,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Chris Chiozza,Chris,chris-chiozza,4,G,5-11,175,"NOV 21, 1995",25.0,2,Florida,1629185,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,DeAndre Jordan,DeAndre,deandre-jordan,6,C,6-11,265,"JUL 21, 1988",32.0,12,Texas A&M,201599,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Kevin Durant,Kevin,kevin-durant,7,F,6-10,240,"SEP 29, 1988",32.0,13,Texas,201142,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Jeff Green,Jeff,jeff-green,8,F,6-8,235,"AUG 28, 1986",34.0,13,Georgetown,201145,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Timothe Luwawu-Cabarrot,Timothe,timothe-luwawu-cabarrot,9,G-F,6-7,220,"MAY 09, 1995",26.0,4,Mega Basket,1627789,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Tyler Johnson,Tyler,tyler-johnson,10,G,6-3,186,"MAY 07, 1992",29.0,6,Fresno State,204020,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Kyrie Irving,Kyrie,kyrie-irving,11,G,6-2,195,"MAR 23, 1992",29.0,9,Duke,202681,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Joe Harris,Joe,joe-harris,12,G-F,6-6,220,"SEP 06, 1991",29.0,6,Virginia,203925,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,James Harden,James,james-harden,13,G,6-5,220,"AUG 26, 1989",31.0,11,Arizona State,201935,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Landry Shamet,Landry,landry-shamet,20,G,6-4,190,"MAR 13, 1997",24.0,2,Wichita State,1629013,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Alize Johnson,Alize,alize-johnson,24,F,6-7,212,"APR 22, 1996",25.0,2,Missouri State,1628993,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Spencer Dinwiddie,Spencer,spencer-dinwiddie,26,G,6-5,215,"APR 06, 1993",28.0,6,Colorado,203915,,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Nic Claxton,Nic,nic-claxton,33,F-C,6-11,215,"APR 17, 1999",22.0,1,Georgia,1629651,#31 Pick in 2019 Draft,,Brooklyn Nets 2020-21,2020-21
+1610612751,2020,0,Mike James,Mike,mike-james,55,G,6-1,175,"AUG 18, 1990",30.0,1,Lamar,1628455,,,Brooklyn Nets 2020-21,2020-21
+1610612756,2022,0,Torrey Craig,Torrey,torrey-craig,0,F,6-7,221,"DEC 19, 1990",32.0,5,South Carolina Upstate,1628470,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Devin Booker,Devin,devin-booker,1,G,6-5,206,"OCT 30, 1996",26.0,7,Kentucky,1626164,#13 Pick in 2015 Draft,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Josh Okogie,Josh,josh-okogie,2,G,6-4,213,"SEP 01, 1998",24.0,4,Georgia Tech,1629006,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Chris Paul,Chris,chris-paul,3,G,6-0,175,"MAY 06, 1985",38.0,17,Wake Forest,101108,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Terrence Ross,Terrence,terrence-ross,8,G-F,6-7,206,"FEB 05, 1991",32.0,10,Washington,203082,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Damion Lee,Damion,damion-lee,10,G-F,6-5,210,"OCT 21, 1992",30.0,5,Drexel,1627814,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Jock Landale,Jock,jock-landale,11,C,6-11,255,"OCT 25, 1995",27.0,1,St. Mary's,1629111,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Ish Wainright,Ish,ish-wainright,12,F,6-5,250,"SEP 12, 1994",28.0,1,Baylor,1630688,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Landry Shamet,Landry,landry-shamet,14,G,6-4,190,"MAR 13, 1997",26.0,4,Wichita State,1629013,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Cameron Payne,Cameron,cameron-payne,15,G,6-1,183,"AUG 08, 1994",28.0,7,Murray State,1626166,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Bismack Biyombo,Bismack,bismack-biyombo,18,C,6-8,255,"AUG 28, 1992",30.0,11,Baloncesto Fuenlabrada,202687,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,T.J. Warren,T.J.,tj-warren,21,F,6-8,220,"SEP 05, 1993",29.0,7,North Carolina State,203933,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Deandre Ayton,Deandre,deandre-ayton,22,C,7-0,250,"JUL 23, 1998",24.0,4,Arizona,1629028,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Kevin Durant,Kevin,kevin-durant,35,F,6-10,240,"SEP 29, 1988",34.0,15,Texas,201142,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Saben Lee,Saben,saben-lee,38,G,6-2,183,"JUN 23, 1999",24.0,2,Vanderbilt,1630240,,,Phoenix Suns 2022-23,2022-23
+1610612756,2022,0,Darius Bazley,Darius,darius-bazley,55,F,6-9,216,"JUN 12, 2000",23.0,3,Princeton HS (OH),1629647,,,Phoenix Suns 2022-23,2022-23

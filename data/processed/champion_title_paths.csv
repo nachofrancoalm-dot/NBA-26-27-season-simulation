@@ -1,0 +1,17 @@
+season,team_abbreviation,seed,regular_season_wins,playoff_games,playoff_wins,opponents_faced,seeds_beaten
+2010-11,DAL,3,57,21,16,POR → LAL → OKC → MIA,6 → 2 → 4 → 2
+2011-12,MIA,2,46,23,16,NYK → IND → BOS → OKC,7 → 3 → 4 → 2
+2012-13,MIA,1,66,23,16,MIL → CHI → IND → SAS,8 → 5 → 3 → 2
+2013-14,SAS,1,62,23,16,DAL → POR → OKC → MIA,8 → 5 → 2 → 2
+2014-15,GSW,1,67,21,16,NOP → MEM → HOU → CLE,8 → 5 → 2 → 2
+2015-16,CLE,1,57,21,16,DET → ATL → TOR → GSW,8 → 4 → 2 → 1
+2016-17,GSW,1,67,17,16,POR → UTA → SAS → CLE,8 → 5 → 2 → 2
+2017-18,GSW,2,58,21,16,SAS → NOP → HOU → CLE,7 → 6 → 1 → 4
+2018-19,TOR,2,58,24,16,ORL → PHI → MIL → GSW,7 → 3 → 1 → 1
+2019-20,LAL,1,52,21,16,POR → HOU → DEN → MIA,8 → 4 → 3 → 5
+2020-21,MIL,3,46,23,16,MIA → BKN → ATL → PHX,6 → 2 → 5 → 2
+2021-22,GSW,3,53,22,16,DEN → MEM → DAL → BOS,6 → 2 → 4 → 2
+2022-23,DEN,1,53,20,16,MIN → PHX → LAL → MIA,8 → 4 → 7 → 7
+2023-24,BOS,1,64,19,16,MIA → CLE → IND → DAL,8 → 4 → 6 → 5
+2024-25,OKC,1,68,23,16,MEM → DEN → MIN → IND,8 → 4 → 6 → 4
+2025-26,NYK,3,53,19,16,ATL → PHI → CLE → SAS,6 → 7 → 4 → 2

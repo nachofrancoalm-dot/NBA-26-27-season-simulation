@@ -1,0 +1,21 @@
+# Render Blueprint (https://render.com/docs/blueprint-spec) para
+# desplegar webapp/ (FastAPI) en el plan gratuito. Con este archivo en
+# la raíz del repo, "New > Blueprint" en Render lo detecta solo -- no
+# hace falta configurar nada a mano salvo conectar el repo de GitHub.
+#
+# No necesita variables de entorno para funcionar: GROQ_API_KEY y
+# TAVILY_API_KEY (ver .env.example) son opcionales -- sin ellas, la
+# pestaña "Explicador (IA)" avisa mediante un mensaje pero el resto de
+# la app funciona igual. Los datos que sirve (data/processed/) ya están
+# versionados en el repo, así que no hace falta ningún paso de ingesta
+# en el build.
+services:
+  - type: web
+    name: nba-superteam-sim
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn webapp.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
