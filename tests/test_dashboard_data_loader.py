@@ -595,8 +595,11 @@ def test_select_roster_view_replaces_gp_mpg_with_simulated_values_when_games_per
 
     # GP simulado = 82 * (1 - 0.5) = 41, NO el histórico real (70).
     assert view.iloc[0]["GP"] == 41
-    # MPG simulado = 30.0 * (1 - 0.5) = 15.0, NO el histórico real (28.0).
-    assert view.iloc[0]["MPG"] == pytest.approx(15.0)
+    # MPG = minutes_projection tal cual (30.0), NO el histórico real (28.0)
+    # y SIN descontar por risk_score (representa el ritmo cuando juega, no
+    # la carga de temporada -- ver docstring de
+    # _apply_simulated_games_and_minutes).
+    assert view.iloc[0]["MPG"] == pytest.approx(30.0)
 
 
 def test_select_roster_view_keeps_real_gp_mpg_without_games_per_season():

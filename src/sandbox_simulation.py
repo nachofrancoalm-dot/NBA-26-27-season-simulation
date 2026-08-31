@@ -51,7 +51,6 @@ from config_loader import get_paths
 from simulation import (
     DEFAULT_MONTE_CARLO_CONFIG,
     DEFAULT_ROTATION_SIZE,
-    compute_expected_effective_minutes_per_game,
     compute_expected_games_played,
     compute_league_average_game_score_per36,
     normalize_rotation_minutes,
@@ -142,12 +141,14 @@ def compute_roster_player_stats(config: Dict[str, Any], player_ids: List[int], m
     reflejan los minutos REALES de cada jugador en SU equipo real, no el
     papel que tendría en el roster que acabas de montar -- aquí se
     recalculan las tasas por-36 (que sí son independientes del equipo)
-    contra los minutos NUEVOS normalizados a 240 de `build_roster`, con
-    la misma fórmula de disponibilidad esperada
-    (`compute_expected_games_played`/`compute_expected_effective_minutes_per_game`)
-    que ya usa el roster real de "Mi equipo". `mode`: "per_game" (PPG/RPG/...)
-    o "totals" (PTS/REB/..., temporada completa) -- mismo toggle que
-    `/api/roster`.
+    contra los minutos NUEVOS normalizados a 240 de `build_roster`. GP =
+    partidos esperados (`compute_expected_games_played`, sí depende del
+    riesgo de lesión); MPG = los minutos normalizados tal cual, sin
+    descontar por riesgo -- representa el ritmo cuando el jugador juega,
+    no la carga de temporada (mismo criterio que
+    `dashboard.data_loader._apply_simulated_games_and_minutes`). `mode`:
+    "per_game" (PPG/RPG/...) o "totals" (PTS/REB/..., temporada
+    completa) -- mismo toggle que `/api/roster`.
     """
     if mode not in ("per_game", "totals"):
         raise SandboxRosterError('mode debe ser "per_game" o "totals".')
@@ -167,7 +168,7 @@ def compute_roster_player_stats(config: Dict[str, Any], player_ids: List[int], m
             "game_score_per36": roster["game_score_per36"].fillna(0.0).to_numpy(),
             "risk_score": risk_scores,
             "GP": compute_expected_games_played(risk_scores, games_per_season).round(0),
-            "MPG": compute_expected_effective_minutes_per_game(minutes_projection, risk_scores).round(1),
+            "MPG": minutes_projection.round(1),
         }
     )
 

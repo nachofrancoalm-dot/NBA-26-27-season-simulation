@@ -131,7 +131,7 @@ ROSTER_STAT_GLOSSARY: Dict[str, str] = {
     "minutes_projection": "Minutos por partido asumidos (para el roster propio: dato de team_config.yaml; para el resto de la liga: minutos/partido reales de la temporada más reciente de cada jugador)",
     "conference": "Conferencia de la franquicia (Este/Oeste)",
     "GP": "Partidos jugados ESPERADOS en la temporada simulada -- games_per_season × (1 − risk_score), la media exacta del modelo de riesgo de lesión (simulation.compute_expected_games_played), no el dato histórico de la temporada pasada",
-    "MPG": "Minutos por partido EFECTIVOS de la temporada simulada -- minutes_projection × (1 − risk_score): el promedio de minutos/partido a lo largo de TODA la temporada, contando como 0 los partidos que se espera perder por lesión (simulation.compute_expected_effective_minutes_per_game)",
+    "MPG": "Minutos por partido asumidos los partidos en que el jugador SÍ juega (minutes_projection, el input curado del roster) -- no se descuenta por riesgo de lesión, a diferencia de GP: representa el ritmo de juego, no la carga total de temporada",
 }
 
 SIMULATION_GLOSSARY: Dict[str, str] = {
@@ -258,14 +258,26 @@ def _apply_simulated_games_and_minutes(
 ) -> pd.DataFrame:
     """
     Sustituye `games_played_last_season`/`minutes_per_game_last_season`
-    (dato histórico REAL) por sus versiones SIMULADAS -- partidos jugados
-    esperados y minutos/partido efectivos de la temporada que se está
-    simulando, según el propio modelo de riesgo de lesión (ver
-    simulation.compute_expected_games_played /
-    compute_expected_effective_minutes_per_game). Fila por fila: donde
-    falte `risk_score` o `minutes_projection` se conserva el valor
+    (dato histórico REAL) por sus versiones SIMULADAS. Fila por fila:
+    donde falte `risk_score` o `minutes_projection` se conserva el valor
     histórico de esa fila en vez de dejarlo en blanco -- degradar así es
     más útil que perder el dato por completo.
+
+    GP = partidos jugados ESPERADOS en la temporada simulada
+    (`simulation.compute_expected_games_played`, games_per_season ×
+    (1 − risk_score)) -- SÍ depende del riesgo de lesión.
+
+    MPG = `minutes_projection` tal cual, el input curado del roster --
+    los minutos que se asumen los partidos en que el jugador SÍ juega.
+    A propósito NO se descuenta por risk_score (antes se mostraba
+    minutes_projection × (1 − risk_score), la carga efectiva a lo largo
+    de TODA la temporada contando 0 en partidos perdidos -- cambiado
+    porque en pantalla, para un jugador de alto riesgo como Embiid,
+    salía una cifra como "9 MPG" que parecía un error: nadie juega 9
+    minutos cuando sale a cancha, ese número mezclaba "minutos por
+    partido" con "carga de temporada" en una sola cifra confusa. El
+    usuario prefirió separar los dos conceptos: MPG = ritmo cuando
+    juega, GP = para cuántos partidos se espera que esté disponible).
 
     También escala los TOTALES de temporada (columnas `TOTAL_STATS`:
     PTS_projected, REB_projected...) por el mismo factor de
@@ -300,7 +312,7 @@ def _apply_simulated_games_and_minutes(
     """
     if games_per_season is None or "risk_score" not in overview.columns:
         return overview
-    from simulation import compute_expected_effective_minutes_per_game, compute_expected_games_played
+    from simulation import compute_expected_games_played
 
     overview = overview.copy()
     has_risk = overview["risk_score"].notna()
@@ -315,10 +327,7 @@ def _apply_simulated_games_and_minutes(
 
     if "minutes_per_game_last_season" in overview.columns and "minutes_projection" in overview.columns:
         has_minutes = has_risk & overview["minutes_projection"].notna()
-        simulated_mpg = compute_expected_effective_minutes_per_game(
-            overview["minutes_projection"].fillna(0).to_numpy(), overview["risk_score"].fillna(0).to_numpy()
-        )
-        overview.loc[has_minutes, "minutes_per_game_last_season"] = simulated_mpg[has_minutes.to_numpy()]
+        overview.loc[has_minutes, "minutes_per_game_last_season"] = overview.loc[has_minutes, "minutes_projection"]
 
     availability = (1 - overview["risk_score"].fillna(0)).to_numpy()
     for total_col in TOTAL_STATS:
