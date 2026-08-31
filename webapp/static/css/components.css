@@ -1004,3 +1004,30 @@ td.cell-clickable:focus-visible {
 .court-swatch-missed {
   background: var(--status-critical);
 }
+
+/* Quinteto sobre la cancha (court.js::courtLineup) -- capa HTML absoluta
+   de fotos de jugador superpuesta al SVG de líneas, ver el comentario
+   junto a LINEUP_SLOT_COORDS en court.js sobre por qué no es
+   `<foreignObject>`. */
+.court-lineup-wrap {
+  position: relative;
+}
+
+.court-lineup-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.court-lineup-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}

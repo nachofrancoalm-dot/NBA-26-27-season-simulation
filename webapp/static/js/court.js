@@ -8,7 +8,7 @@
 // devuelve `ShotChartDetail`, así que los puntos se colocan
 // directamente sin reescalar.
 
-import { el } from "./ui.js";
+import { el, playerPhoto } from "./ui.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -82,4 +82,68 @@ export function courtShotChart(shots, { title } = {}) {
       el("span", { class: "caption" }, `${pct}% de acierto sobre ${shots.length} tiros`),
     ]),
   ]);
+}
+
+// Posiciones fijas del quinteto clásico 2-2-1 (G-G-F-F-C) sobre la media
+// cancha -- NO son las 5 posiciones reales (base/escolta/alero/ala-pívot/
+// pívot): `awards_projection._pick_positional_teams` solo distingue 3
+// grupos (G, F, C, 2+2+1), así que dentro de cada grupo el orden es
+// simplemente "de mayor a menor valor de temporada" (ver
+// compute_all_nba_teams/compute_all_defensive_teams), no una posición
+// concreta. Colocar al primer G a la izquierda y al segundo a la
+// derecha es una decisión puramente visual, no una afirmación de que
+// uno es base y el otro escolta.
+const LINEUP_SLOT_COORDS = {
+  C: [[0, 55]],
+  F: [
+    [-115, 175],
+    [115, 175],
+  ],
+  G: [
+    [-95, 305],
+    [95, 305],
+  ],
+};
+
+/** `records`: 5 filas de un quinteto (all_nba/all_defensive), cada una
+ * con player_id, player_name, position_slot ("G"/"F"/"C"). Dibuja la
+ * misma media cancha que courtShotChart() (SVG, coordenadas físicas
+ * reales) y coloca la foto real de cada jugador (playerPhoto(), mismo
+ * hotlink + fallback a iniciales que el resto de la app) encima, vía
+ * `<div>` posicionados en % sobre el mismo viewBox -- mezclar HTML
+ * dentro de un SVG (`<foreignObject>`) es más frágil entre navegadores
+ * que superponer una capa HTML absoluta sobre el SVG. */
+export function courtLineup(records, { title } = {}) {
+  const svg = svgEl("svg", {
+    viewBox: "-250 -60 500 500",
+    class: "court-chart",
+    role: "img",
+    "aria-label": title || "Quinteto sobre la cancha",
+  });
+  svg.append(courtLines());
+
+  const wrap = el("div", { class: "court-chart-wrap court-lineup-wrap" }, [svg]);
+
+  const used = {};
+  for (const rec of records) {
+    const slot = rec.position_slot;
+    const options = LINEUP_SLOT_COORDS[slot] || [[0, 200]];
+    const idx = used[slot] || 0;
+    used[slot] = idx + 1;
+    const [x, y] = options[Math.min(idx, options.length - 1)];
+
+    // viewBox = "-250 -60 500 500" -> % = (coord - min) / tamaño * 100.
+    const leftPct = ((x + 250) / 500) * 100;
+    const topPct = ((y + 60) / 500) * 100;
+    const lastName = (rec.player_name || "?").trim().split(" ").slice(-1)[0];
+
+    wrap.append(
+      el(
+        "div",
+        { class: "court-lineup-marker", style: `left: ${leftPct}%; top: ${topPct}%;`, title: rec.player_name },
+        [playerPhoto(rec.player_id, rec.player_name, 44), el("span", { class: "court-lineup-label" }, lastName)]
+      )
+    );
+  }
+  return wrap;
 }

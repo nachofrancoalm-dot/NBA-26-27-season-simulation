@@ -57,22 +57,25 @@ tested script (`scripts/experiments/`) plus a written account of the
 result — including the ones that came back negative. Three of them also
 have a curated, visual notebook: [`notebooks/`](notebooks/).
 
-**Demo** (web app, `webapp/`): splash → roster projections → Monte Carlo
-distribution → league standings → individual awards.
+**Screenshots** (web app, `webapp/`):
 
-![Demo](docs/screenshots/demo.gif)
-
-| Roster & projections | Monte Carlo distribution |
+| Splash | Roster & projections |
 |---|---|
-| ![Roster](docs/screenshots/02_roster.png) | ![Monte Carlo](docs/screenshots/03_simulacion.png) |
+| ![Splash](docs/screenshots/01_splash.png) | ![Roster](docs/screenshots/02_roster.png) |
 
-| League standings & playoff odds | Individual awards |
+| Monte Carlo distribution | League standings & playoff odds |
 |---|---|
-| ![League](docs/screenshots/04_liga.png) | ![Awards](docs/screenshots/05_premios.png) |
+| ![Monte Carlo](docs/screenshots/03_simulacion.png) | ![League](docs/screenshots/04_liga.png) |
 
-| Real shot chart (player detail popup) |
-|---|
-| ![Shot chart](docs/screenshots/06_shot_chart.png) |
+| Individual awards | Real shot chart (player detail popup) |
+|---|---|
+| ![Awards](docs/screenshots/05_premios.png) | ![Shot chart](docs/screenshots/06_shot_chart.png) |
+
+**All-NBA / All-Defensive teams on a real half court** — each 5-man
+lineup drawn with real player photos in a classic 2-2-1 formation
+(`webapp/static/js/court.js::courtLineup`), not just a table:
+
+![All-NBA lineups on the court](docs/screenshots/07_all_nba_courts.png)
 
 **Pipeline:** every stage below reuses the one before it — the full
 30-team league simulation and backtesting call the *same*
@@ -1283,7 +1286,14 @@ Tres pestañas de primer nivel:
     últimas temporadas para MIP, equipo que más superó su récord real
     del año anterior como proxy de COY porque este proyecto no modela
     entrenadores...) está documentada con sus limitaciones en el
-    docstring del módulo.
+    docstring del módulo. Los quintetos **All-NBA** y **All-Defensive**
+    (`compute_all_nba_teams`/`compute_all_defensive_teams`, formato
+    clásico 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot) se dibujan
+    además sobre una media cancha real (`court.js::courtLineup`, misma
+    media cancha con medidas físicas reales que el mapa de tiros) con la
+    foto de cada jugador -- la posición exacta dentro de cada grupo G/F
+    es solo ilustrativa (el modelo no distingue base de escolta ni alero
+    de ala-pívot, ver el aviso en la propia pestaña).
   - **Campeones reales** — comparables históricos (`champion_profiles.py`).
 - **🤖 Explicador (IA)** — chat en lenguaje natural sobre TODOS los datos
   ya calculados en las otras pestañas (`src/llm_explainer.py`, vía la

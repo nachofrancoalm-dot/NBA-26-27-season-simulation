@@ -4,6 +4,7 @@ import { openPlayerModal } from "../player-modal.js";
 import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
 import { getHypotheticalLeague, clearHypotheticalLeague, hypotheticalBanner } from "../hypothetical-league.js";
+import { courtLineup } from "../court.js";
 
 /** Doble clic en jugador Y en equipo para cualquier tabla de premios --
  * dataTable() ya soporta varias columnas con doble clic a la vez (ver
@@ -159,11 +160,19 @@ function allTeamSection(title, records, teamIds) {
   const teams = [...new Set(records.map((r) => r.team))];
   return el("div", {}, [
     el("h2", {}, title),
-    ...teams.map((team) =>
-      el("div", { style: "margin-bottom: 10px;" }, [
-        el("h3", {}, team),
-        dataTable(records.filter((r) => r.team === team), {}, awardsInteractions(teamIds)),
-      ])
+    el(
+      "p",
+      { class: "caption", style: "margin: 0 0 10px;" },
+      "El quinteto es 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot (formato clásico 2-2-1) -- " +
+        "la posición sobre la cancha es solo ilustrativa dentro de cada grupo (G/F/C), no una asignación " +
+        "real de base vs. escolta o alero vs. ala-pívot."
     ),
+    ...teams.map((team) => {
+      const teamRecords = records.filter((r) => r.team === team);
+      return el("div", { class: "grid-2", style: "margin-bottom: 18px; align-items: start;" }, [
+        el("div", {}, [el("h3", {}, team), dataTable(teamRecords, {}, awardsInteractions(teamIds))]),
+        courtLineup(teamRecords, { title: team }),
+      ]);
+    }),
   ]);
 }
