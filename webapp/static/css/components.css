@@ -1020,6 +1020,18 @@ td.cell-clickable:focus-visible {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.court-lineup-marker:hover .player-photo,
+.court-lineup-marker:focus-visible .player-photo {
+  outline: 2px solid var(--accent-450);
+  outline-offset: 2px;
 }
 
 .court-lineup-label {
@@ -1030,4 +1042,85 @@ td.cell-clickable:focus-visible {
   padding: 1px 6px;
   border-radius: 6px;
   white-space: nowrap;
+}
+
+/* Ranking de un premio (leaderboard.js) -- foto + barra en vez de
+   tabla. La fila entera es un <button> (clic abre el popup de
+   jugador). */
+.leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.leaderboard-row:hover,
+.leaderboard-row:focus-visible {
+  background: var(--surface-card-alt);
+}
+
+.leaderboard-rank {
+  width: 18px;
+  flex: 0 0 18px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.leaderboard-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 0 0 130px;
+}
+
+.leaderboard-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leaderboard-team {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.leaderboard-bar-track {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-card-alt);
+  overflow: hidden;
+}
+
+.leaderboard-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-450);
+  transition: width 0.25s ease;
+}
+
+.leaderboard-value {
+  flex: 0 0 46px;
+  text-align: right;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }

@@ -102,6 +102,16 @@
   min-width: 0;
 }
 
+/* Quintetos All-NBA/All-Defensive (awards.js::allTeamSection): solo el
+   gráfico de cancha, sin tabla al lado -- ver court.js. minmax más
+   ancho que .grid porque una cancha con 5 fotos necesita más sitio que
+   un stat tile. */
+.court-lineup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
 /* Explorador de equipo (Liga y Playoffs): rail lateral de equipos +
  * detalle, en vez de un <select> nativo. */
 .team-explorer {

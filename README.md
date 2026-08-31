@@ -73,7 +73,10 @@ have a curated, visual notebook: [`notebooks/`](notebooks/).
 
 **All-NBA / All-Defensive teams on a real half court** — each 5-man
 lineup drawn with real player photos in a classic 2-2-1 formation
-(`webapp/static/js/court.js::courtLineup`), not just a table:
+(`webapp/static/js/court.js::courtLineup`), no table at all: click a
+player (or hover for a quick stat line) to open their full profile.
+MVP/DPOY/ROY/MIP/6th Man dropped their tables too, in favor of a
+ranked leaderboard (`leaderboard.js`) — see the awards screenshot above.
 
 ![All-NBA lineups on the court](docs/screenshots/07_all_nba_courts.png)
 
@@ -1286,14 +1289,22 @@ Tres pestañas de primer nivel:
     últimas temporadas para MIP, equipo que más superó su récord real
     del año anterior como proxy de COY porque este proyecto no modela
     entrenadores...) está documentada con sus limitaciones en el
-    docstring del módulo. Los quintetos **All-NBA** y **All-Defensive**
+    docstring del módulo. MVP/DPOY/ROY/MIP/6.º Hombre se muestran como
+    un **ranking visual** (`leaderboard.js`, foto real + barra
+    proporcional al valor de temporada, sin tabla) -- clic en
+    cualquier fila abre el popup de detalle del jugador, pasar el
+    ratón muestra sus stats rápidas (PPG/RPG/APG o el proxy defensivo
+    según el premio). COY sigue en tabla (es un premio de equipo, sin
+    jugador). Los quintetos **All-NBA** y **All-Defensive**
     (`compute_all_nba_teams`/`compute_all_defensive_teams`, formato
-    clásico 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot) se dibujan
-    además sobre una media cancha real (`court.js::courtLineup`, misma
-    media cancha con medidas físicas reales que el mapa de tiros) con la
-    foto de cada jugador -- la posición exacta dentro de cada grupo G/F
-    es solo ilustrativa (el modelo no distingue base de escolta ni alero
-    de ala-pívot, ver el aviso en la propia pestaña).
+    clásico 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot) se
+    dibujan directamente sobre una media cancha real
+    (`court.js::courtLineup`, misma media cancha con medidas físicas
+    reales que el mapa de tiros) con la foto de cada jugador -- sin
+    tabla al lado, mismo patrón de clic/hover que el leaderboard. La
+    posición exacta dentro de cada grupo G/F es solo ilustrativa (el
+    modelo no distingue base de escolta ni alero de ala-pívot, ver el
+    aviso en la propia pestaña).
   - **Campeones reales** — comparables históricos (`champion_profiles.py`).
 - **🤖 Explicador (IA)** — chat en lenguaje natural sobre TODOS los datos
   ya calculados en las otras pestañas (`src/llm_explainer.py`, vía la

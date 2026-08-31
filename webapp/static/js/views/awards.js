@@ -5,6 +5,7 @@ import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
 import { getHypotheticalLeague, clearHypotheticalLeague, hypotheticalBanner } from "../hypothetical-league.js";
 import { courtLineup } from "../court.js";
+import { leaderboardChart } from "../leaderboard.js";
 
 /** Doble clic en jugador Y en equipo para cualquier tabla de premios --
  * dataTable() ya soporta varias columnas con doble clic a la vez (ver
@@ -26,13 +27,54 @@ function awardsInteractions(teamIds) {
   };
 }
 
-function awardBlock(emoji, title, records, teamIds) {
-  return el("div", {}, [
-    el("h3", {}, `${emoji} ${title}`),
+function offenseSubtitle(record) {
+  return [
+    record.PPG != null ? `${record.PPG} PPG` : null,
+    record.RPG != null ? `${record.RPG} RPG` : null,
+    record.APG != null ? `${record.APG} APG` : null,
+    record.team_record,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Config de leaderboardChart() por premio -- qué columna manda el
+ * largo de la barra (ver los `sort_values(...)` de
+ * src/awards_projection.py, la misma columna que ya ordenaba la tabla)
+ * y qué stats rápidas mostrar en el tooltip al pasar el ratón. */
+const LEADERBOARD_CONFIG = {
+  mvp: { valueKey: "mvp_score", subtitleFn: offenseSubtitle },
+  dpoy: {
+    valueKey: "dpoy_score",
+    subtitleFn: (r) =>
+      [r.SPG != null ? `${r.SPG} SPG` : null, r.BPG != null ? `${r.BPG} BPG` : null, r.RPG != null ? `${r.RPG} RPG` : null, r.team_record]
+        .filter(Boolean)
+        .join(" · "),
+  },
+  roy: { valueKey: "season_value", subtitleFn: offenseSubtitle },
+  sixth_man: { valueKey: "season_value", subtitleFn: offenseSubtitle },
+  mip: {
+    valueKey: "improvement",
+    valueFormat: (v) => (typeof v === "number" ? `+${v.toFixed(1)}` : "—"),
+    subtitleFn: (r) =>
+      `Game Score/36: ${r.previous_game_score_per36?.toFixed(1)} → ${r.latest_game_score_per36?.toFixed(1)} (${r.latest_season})`,
+  },
+};
+
+/** Ranking visual (foto + barra, ver leaderboard.js) para los premios
+ * individuales con una columna de "valor" clara -- reemplaza la tabla
+ * a petición del usuario ("más minimalista y visual"). COY sigue en
+ * tabla: es un premio de EQUIPO (sin player_name/player_id), no encaja
+ * en un ranking de jugadores. */
+function awardBlock(emoji, title, records, teamIds, configKey) {
+  const config = LEADERBOARD_CONFIG[configKey];
+  const body =
     records && records.length
-      ? dataTable(records, {}, awardsInteractions(teamIds))
-      : el("p", { class: "caption" }, "Sin candidatos."),
-  ]);
+      ? config
+        ? leaderboardChart(records, { ...config, teamIds })
+        : dataTable(records, {}, awardsInteractions(teamIds))
+      : el("p", { class: "caption" }, "Sin candidatos.");
+  return el("div", {}, [el("h3", {}, `${emoji} ${title}`), body]);
 }
 
 export async function render(container) {
@@ -72,7 +114,8 @@ export async function render(container) {
     el(
       "p",
       { class: "caption" },
-      "Heurísticas sobre la proyección -- NO son una predicción de la votación real de los medios. Doble clic en un jugador o equipo para ver su detalle."
+      "Heurísticas sobre la proyección -- NO son una predicción de la votación real de los medios. " +
+        "Clic en un jugador (o pasa el ratón para ver sus stats rápidas) para ver su detalle completo."
     ),
   ];
   if (data.scope === "own") {
@@ -83,15 +126,15 @@ export async function render(container) {
   cards.push(
     card([
       el("div", { class: "grid-2" }, [
-        awardBlock("🏆", "MVP", data.mvp, teamIds),
-        awardBlock("🛡️", "DPOY", data.dpoy, teamIds),
+        awardBlock("🏆", "MVP", data.mvp, teamIds, "mvp"),
+        awardBlock("🛡️", "DPOY", data.dpoy, teamIds, "dpoy"),
       ]),
       el("div", { class: "grid-2", style: "margin-top: 16px;" }, [
-        awardBlock("🌟", "Rookie del Año", data.roy, teamIds),
-        awardBlock("🔥", "Más Mejorado", data.mip, teamIds),
+        awardBlock("🌟", "Rookie del Año", data.roy, teamIds, "roy"),
+        awardBlock("🔥", "Más Mejorado", data.mip, teamIds, "mip"),
       ]),
       el("div", { class: "grid-2", style: "margin-top: 16px;" }, [
-        awardBlock("🎖️", "6.º Hombre", data.sixth_man, teamIds),
+        awardBlock("🎖️", "6.º Hombre", data.sixth_man, teamIds, "sixth_man"),
         awardBlock("📋", "Entrenador del Año", data.coy, teamIds),
       ]),
       glossaryExpander(Object.entries(data.glossary), "Leyenda de columnas"),
@@ -165,14 +208,15 @@ function allTeamSection(title, records, teamIds) {
       { class: "caption", style: "margin: 0 0 10px;" },
       "El quinteto es 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot (formato clásico 2-2-1) -- " +
         "la posición sobre la cancha es solo ilustrativa dentro de cada grupo (G/F/C), no una asignación " +
-        "real de base vs. escolta o alero vs. ala-pívot."
+        "real de base vs. escolta o alero vs. ala-pívot. Clic en un jugador (o pasa el ratón) para ver su detalle."
     ),
-    ...teams.map((team) => {
-      const teamRecords = records.filter((r) => r.team === team);
-      return el("div", { class: "grid-2", style: "margin-bottom: 18px; align-items: start;" }, [
-        el("div", {}, [el("h3", {}, team), dataTable(teamRecords, {}, awardsInteractions(teamIds))]),
-        courtLineup(teamRecords, { title: team }),
-      ]);
-    }),
+    el(
+      "div",
+      { class: "court-lineup-grid" },
+      teams.map((team) => {
+        const teamRecords = records.filter((r) => r.team === team);
+        return el("div", {}, [el("h3", { style: "margin: 0 0 8px; text-align: center;" }, team), courtLineup(teamRecords, { title: team, teamIds })]);
+      })
+    ),
   ]);
 }

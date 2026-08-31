@@ -4,6 +4,8 @@
 // hue secuencial (azul), tooltip al pasar el ratón, un único eje siempre
 // (nunca doble eje Y).
 
+import { showTooltip, hideTooltip } from "./ui.js";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 const WIDTH = 640;
 const HEIGHT = 260;
@@ -17,22 +19,6 @@ function svgEl(tag, attrs = {}) {
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function tooltipEl() {
-  return document.getElementById("chart-tooltip");
-}
-
-function showTooltip(event, text) {
-  const tip = tooltipEl();
-  tip.textContent = text;
-  tip.style.left = `${event.clientX}px`;
-  tip.style.top = `${event.clientY}px`;
-  tip.classList.add("visible");
-}
-
-function hideTooltip() {
-  tooltipEl().classList.remove("visible");
 }
 
 function baseSvg() {

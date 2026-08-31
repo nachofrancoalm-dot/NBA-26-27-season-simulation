@@ -8,7 +8,8 @@
 // devuelve `ShotChartDetail`, así que los puntos se colocan
 // directamente sin reescalar.
 
-import { el, playerPhoto } from "./ui.js";
+import { el, playerPhoto, showTooltip, hideTooltip } from "./ui.js";
+import { openPlayerModal } from "./player-modal.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -106,14 +107,18 @@ const LINEUP_SLOT_COORDS = {
 };
 
 /** `records`: 5 filas de un quinteto (all_nba/all_defensive), cada una
- * con player_id, player_name, position_slot ("G"/"F"/"C"). Dibuja la
- * misma media cancha que courtShotChart() (SVG, coordenadas físicas
- * reales) y coloca la foto real de cada jugador (playerPhoto(), mismo
- * hotlink + fallback a iniciales que el resto de la app) encima, vía
- * `<div>` posicionados en % sobre el mismo viewBox -- mezclar HTML
- * dentro de un SVG (`<foreignObject>`) es más frágil entre navegadores
- * que superponer una capa HTML absoluta sobre el SVG. */
-export function courtLineup(records, { title } = {}) {
+ * con player_id, player_name, position_slot ("G"/"F"/"C"), y
+ * season_value o defensive_value según el premio. Dibuja la misma
+ * media cancha que courtShotChart() (SVG, coordenadas físicas reales)
+ * y coloca la foto real de cada jugador (playerPhoto(), mismo hotlink +
+ * fallback a iniciales que el resto de la app) encima, vía `<div>`
+ * posicionados en % sobre el mismo viewBox -- mezclar HTML dentro de un
+ * SVG (`<foreignObject>`) es más frágil entre navegadores que
+ * superponer una capa HTML absoluta sobre el SVG. Cada foto es
+ * clicable (abre el popup de detalle del jugador, mismo que el resto
+ * de la app) y al pasar el ratón muestra un resumen rápido -- así el
+ * gráfico basta por sí solo, sin necesitar la tabla de al lado. */
+export function courtLineup(records, { title, teamIds = {} } = {}) {
   const svg = svgEl("svg", {
     viewBox: "-250 -60 500 500",
     class: "court-chart",
@@ -136,14 +141,27 @@ export function courtLineup(records, { title } = {}) {
     const leftPct = ((x + 250) / 500) * 100;
     const topPct = ((y + 60) / 500) * 100;
     const lastName = (rec.player_name || "?").trim().split(" ").slice(-1)[0];
+    const value = rec.season_value ?? rec.defensive_value;
+    const tooltipText = [
+      rec.player_name,
+      rec.team_abbreviation,
+      Number.isFinite(rec.games_played_expected) ? `${Math.round(rec.games_played_expected)} PJ esperados` : null,
+      Number.isFinite(value) ? `valor de temporada ${Math.round(value)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" -- ");
 
-    wrap.append(
-      el(
-        "div",
-        { class: "court-lineup-marker", style: `left: ${leftPct}%; top: ${topPct}%;`, title: rec.player_name },
-        [playerPhoto(rec.player_id, rec.player_name, 44), el("span", { class: "court-lineup-label" }, lastName)]
-      )
+    const marker = el(
+      "button",
+      { type: "button", class: "court-lineup-marker", style: `left: ${leftPct}%; top: ${topPct}%;` },
+      [playerPhoto(rec.player_id, rec.player_name, 44), el("span", { class: "court-lineup-label" }, lastName)]
     );
+    marker.addEventListener("click", () => openPlayerModal(rec.player_id, teamIds[rec.team_abbreviation]));
+    marker.addEventListener("mousemove", (event) => showTooltip(event, tooltipText));
+    marker.addEventListener("mouseleave", hideTooltip);
+    marker.addEventListener("focus", (event) => showTooltip(event, tooltipText));
+    marker.addEventListener("blur", hideTooltip);
+    wrap.append(marker);
   }
   return wrap;
 }

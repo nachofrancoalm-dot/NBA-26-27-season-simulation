@@ -17,6 +17,23 @@ export function el(tag, attrs = {}, children = []) {
   return node;
 }
 
+/** Tooltip compartido (#chart-tooltip en index.html, un único nodo para
+ * toda la app) -- usado por charts.js, court.js y leaderboard.js. Un
+ * solo sitio para esta lógica en vez de triplicarla en cada archivo de
+ * visualización. */
+export function showTooltip(event, text) {
+  if (!text) return;
+  const tip = document.getElementById("chart-tooltip");
+  tip.textContent = text;
+  tip.style.left = `${event.clientX}px`;
+  tip.style.top = `${event.clientY}px`;
+  tip.classList.add("visible");
+}
+
+export function hideTooltip() {
+  document.getElementById("chart-tooltip").classList.remove("visible");
+}
+
 export function clear(container) {
   container.replaceChildren();
 }
