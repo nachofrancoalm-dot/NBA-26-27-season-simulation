@@ -27,7 +27,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.types import Receive, Scope, Send  # noqa: E402
 
-from webapp.routers import awards, champions, explainer, league, players, status, team  # noqa: E402
+from webapp.routers import awards, champions, explainer, league, players, sandbox, status, team  # noqa: E402
 
 
 class RevalidatingStaticFiles(StaticFiles):
@@ -60,5 +60,6 @@ app.include_router(awards.router, prefix="/api")
 app.include_router(champions.router, prefix="/api")
 app.include_router(explainer.router, prefix="/api")
 app.include_router(players.router, prefix="/api")
+app.include_router(sandbox.router, prefix="/api")
 
 app.mount("/", RevalidatingStaticFiles(directory=PROJECT_ROOT / "webapp" / "static", html=True), name="static")

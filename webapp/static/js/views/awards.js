@@ -3,6 +3,7 @@ import { card, el, dataTable, glossaryExpander, emptyState, skeleton } from "../
 import { openPlayerModal } from "../player-modal.js";
 import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
+import { getHypotheticalLeague, clearHypotheticalLeague, hypotheticalBanner } from "../hypothetical-league.js";
 
 /** Doble clic en jugador Y en equipo para cualquier tabla de premios --
  * dataTable() ya soporta varias columnas con doble clic a la vez (ver
@@ -42,11 +43,21 @@ export async function render(container) {
   container.replaceChildren(skeleton(["title", "short"]), skeleton(["", "", "", ""]));
 
   const status = await api.status();
-  const bar = scenarioBar(status, () => render(container));
+  const hypothetical = getHypotheticalLeague();
+  const bar = hypothetical
+    ? hypotheticalBanner(() => {
+        clearHypotheticalLeague();
+        render(container);
+      })
+    : scenarioBar(status, () => render(container));
 
   let data;
   try {
-    data = await api.awards(getScenario());
+    // Con un roster hipotético activo, los premios vienen del mismo
+    // POST /api/sandbox/league que ya calculó standings/playoffs (ver
+    // league.js) -- misma forma exacta que /api/awards, así que el resto
+    // de esta función no necesita ramificar por fuente.
+    data = hypothetical ? hypothetical.result.awards : await api.awards(getScenario());
   } catch (err) {
     container.replaceChildren(bar, card([el("h2", {}, "Premios individuales"), emptyState(err.message)]));
     return;

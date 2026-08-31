@@ -151,11 +151,33 @@ function prettifyLabel(col) {
     .join(" ");
 }
 
+/** Compara dos valores de celda para ordenar: numérico si los dos son
+ * number, alfabético (localeCompare es-ES, sensible a números embebidos
+ * p.ej. "Jugador 9" antes que "Jugador 10") en cualquier otro caso.
+ * null/undefined siempre al final, sea cual sea la dirección -- ordenar
+ * por una columna con huecos no debe esconder las filas completas ni
+ * mezclarlas de forma rara al invertir. */
+function compareCellValues(a, b) {
+  const aMissing = a == null;
+  const bMissing = b == null;
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), "es", { numeric: true, sensitivity: "base" });
+}
+
 /** Tabla con tooltip nativo (title=) por columna documentada en el glosario
  * + un <details> con el texto completo debajo -- mismo patrón que
- * render_glossary_expander() de dashboard/app.py. */
+ * render_glossary_expander() de dashboard/app.py. Ordenable por columna
+ * por defecto (clic en la cabecera -- asc / desc / vuelta al orden
+ * original): un <button> dentro de cada <th>, no el <th> mismo, para que
+ * quede alcanzable por teclado y con foco visible sin reinventar el rol
+ * ARIA de una celda de cabecera. `options.sortable: false` lo desactiva
+ * para una tabla concreta (p.ej. donde el orden de fila ya es el dato,
+ * como un log de partidos por día) sin tocar las demás. */
 export function dataTable(records, glossary = {}, options = {}) {
-  const { formatters = {}, maxRows = null, hiddenColumns = [], doubleClick = null, rowClass = null } = options;
+  const { formatters = {}, maxRows = null, hiddenColumns = [], doubleClick = null, rowClass = null, sortable = true } = options;
   // doubleClick acepta un único {column, onOpen} o varios a la vez
   // (p.ej. Premios individuales: doble clic en el jugador Y en el
   // equipo de la misma tabla) -- se normaliza a un Map columna -> onOpen.
@@ -166,21 +188,14 @@ export function dataTable(records, glossary = {}, options = {}) {
     return emptyState("No hay filas para mostrar.");
   }
   const columns = Object.keys(records[0]).filter((c) => !hiddenColumns.includes(c));
-  const rows = maxRows ? records.slice(0, maxRows) : records;
+  const baseRows = maxRows ? records.slice(0, maxRows) : records;
 
-  const headerRow = el(
-    "tr",
-    {},
-    columns.map((col) =>
-      el("th", glossary[col] ? { title: glossary[col] } : {}, [
-        prettifyLabel(col),
-        glossary[col] ? el("span", { class: "info-icon" }, "ⓘ") : null,
-      ])
-    )
-  );
+  let sortColumn = null;
+  let sortDirection = null; // "asc" | "desc" | null (null = orden original)
+  const headerCellByColumn = new Map();
 
-  const bodyRows = rows.map((record) =>
-    el(
+  function buildRow(record) {
+    return el(
       "tr",
       rowClass && rowClass(record) ? { class: rowClass(record) } : {},
       columns.map((col) => {
@@ -197,10 +212,72 @@ export function dataTable(records, glossary = {}, options = {}) {
           formatted
         );
       })
-    )
-  );
+    );
+  }
 
-  const table = el("table", { class: "data-table" }, [el("thead", {}, headerRow), el("tbody", {}, bodyRows)]);
+  const tbody = el("tbody", {});
+
+  function renderBody() {
+    const rows =
+      sortColumn == null
+        ? baseRows
+        : [...baseRows].sort((a, b) => {
+            const cmp = compareCellValues(a[sortColumn], b[sortColumn]);
+            return sortDirection === "desc" ? -cmp : cmp;
+          });
+    tbody.replaceChildren(...rows.map(buildRow));
+  }
+
+  function updateHeaderIndicators() {
+    for (const [col, th] of headerCellByColumn) {
+      const active = col === sortColumn;
+      th.setAttribute("aria-sort", active ? (sortDirection === "desc" ? "descending" : "ascending") : "none");
+      const arrow = th.querySelector(".th-sort-arrow");
+      if (arrow) arrow.textContent = active ? (sortDirection === "desc" ? "▼" : "▲") : "";
+    }
+  }
+
+  function headerCell(col) {
+    const labelChildren = [
+      el("span", { class: "th-label" }, prettifyLabel(col)),
+      glossary[col] ? el("span", { class: "info-icon" }, "ⓘ") : null,
+    ];
+    if (!sortable) {
+      return el("th", glossary[col] ? { title: glossary[col] } : {}, labelChildren);
+    }
+    const th = el("th", { "aria-sort": "none", ...(glossary[col] ? { title: glossary[col] } : {}) }, [
+      el(
+        "button",
+        {
+          type: "button",
+          class: "th-sort-btn",
+          onclick: () => {
+            if (sortColumn === col) {
+              // asc -> desc -> orden original, en vez de solo alternar
+              // entre asc/desc para siempre -- deja volver al orden que
+              // trajo la tabla (p.ej. ya ordenada por relevancia desde el
+              // backend) sin tener que recargar la vista entera.
+              sortDirection = sortDirection === "asc" ? "desc" : sortDirection === "desc" ? null : "asc";
+              if (sortDirection === null) sortColumn = null;
+            } else {
+              sortColumn = col;
+              sortDirection = "asc";
+            }
+            updateHeaderIndicators();
+            renderBody();
+          },
+        },
+        [...labelChildren, el("span", { class: "th-sort-arrow", "aria-hidden": "true" }, "")]
+      ),
+    ]);
+    headerCellByColumn.set(col, th);
+    return th;
+  }
+
+  const headerRow = el("tr", {}, columns.map(headerCell));
+  renderBody();
+
+  const table = el("table", { class: "data-table" }, [el("thead", {}, headerRow), tbody]);
 
   const wrap = el("div", { class: "table-wrap" }, table);
   const shadowLeft = el("div", { class: "scroll-shadow scroll-shadow-left" });

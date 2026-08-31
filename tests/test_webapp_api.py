@@ -19,6 +19,7 @@ from webapp.routers import champions as champions_router
 from webapp.routers import explainer as explainer_router
 from webapp.routers import league as league_router
 from webapp.routers import players as players_router
+from webapp.routers import sandbox as sandbox_router
 from webapp.routers import status as status_router
 from webapp.routers import team as team_router
 
@@ -46,6 +47,7 @@ def client(config, monkeypatch):
     monkeypatch.setattr(champions_router, "load_config", lambda: config)
     monkeypatch.setattr(explainer_router, "load_config", lambda: config)
     monkeypatch.setattr(players_router, "load_config", lambda: config)
+    monkeypatch.setattr(sandbox_router, "load_config", lambda: config)
     return TestClient(app)
 
 
@@ -715,3 +717,98 @@ def test_league_head_to_head_404_for_unknown_abbreviation(client, config):
     ])
     response = client.get("/api/league/head-to-head?team_a=ZZZ&team_b=BBB")
     assert response.status_code == 404
+
+
+def _write_sandbox_pool(processed_dir, rows):
+    pd.DataFrame(rows).to_csv(processed_dir / "league_player_projections.csv", index=False)
+
+
+def _sandbox_pool_row(player_id, name, team, game_score_per36, mpg, risk=0.2, fatigue=0.2):
+    return {
+        "player_id": player_id,
+        "player_name": name,
+        "team_abbreviation": team,
+        "conference": "East",
+        "position": "G",
+        "current_age": 25,
+        "game_score_per36": game_score_per36,
+        "minutes_projection": mpg,
+        "minutes_per_game_last_season": mpg,
+        "games_played_last_season": 70,
+        "risk_score": risk,
+        "fatigue_score": fatigue,
+        "PPG": 15.0,
+        "RPG": 5.0,
+        "APG": 4.0,
+    }
+
+
+def test_sandbox_players_404_without_league_pipeline(client):
+    response = client.get("/api/sandbox/players")
+    assert response.status_code == 404
+
+
+def test_sandbox_players_returns_pool(client, config):
+    processed_dir = tmp_path_from_config(config)
+    _write_sandbox_pool(processed_dir, [
+        _sandbox_pool_row(10, "Player Ten", "BOS", 18.0, 30.0),
+        _sandbox_pool_row(11, "Player Eleven", "MIA", 12.0, 20.0),
+    ])
+    response = client.get("/api/sandbox/players")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["players"]) == 2
+    assert body["players"][0]["player_name"] == "Player Ten"
+
+
+def test_sandbox_default_returns_config_roster(client, config):
+    response = client.get("/api/sandbox/default")
+    assert response.status_code == 200
+    assert response.json()["player_ids"] == [1]
+
+
+def test_sandbox_simulate_rejects_short_roster(client, config):
+    processed_dir = tmp_path_from_config(config)
+    _write_sandbox_pool(processed_dir, [_sandbox_pool_row(10, "Player Ten", "BOS", 18.0, 30.0)])
+    pd.DataFrame({"WinPCT": [0.5] * 30}).to_csv(processed_dir / "prior_season_standings.csv", index=False)
+
+    response = client.post("/api/sandbox/simulate", json={"player_ids": [10]})
+    assert response.status_code == 400
+
+
+def test_sandbox_simulate_returns_summary_for_custom_roster(client, config):
+    processed_dir = tmp_path_from_config(config)
+    rows = [_sandbox_pool_row(10 + i, f"Player {i}", "BOS", 15.0 + i, 25.0 - i) for i in range(6)]
+    _write_sandbox_pool(processed_dir, rows)
+    pd.DataFrame({"WinPCT": [0.5] * 30}).to_csv(processed_dir / "prior_season_standings.csv", index=False)
+
+    response = client.post("/api/sandbox/simulate", json={"player_ids": [10, 11, 12, 13, 14, 15]})
+    assert response.status_code == 200
+    body = response.json()
+    assert "mean" in body["summary"]
+    assert body["n_seasons"] > 0
+
+
+def test_sandbox_roster_stats_returns_players_for_hypothetical_roster(client, config):
+    processed_dir = tmp_path_from_config(config)
+    rows = []
+    for i in range(6):
+        row = _sandbox_pool_row(10 + i, f"Player {i}", "BOS", 15.0 + i, 25.0 - i)
+        row["PTS_per36_projected"] = 18.0
+        rows.append(row)
+    _write_sandbox_pool(processed_dir, rows)
+    pd.DataFrame({"WinPCT": [0.5] * 30}).to_csv(processed_dir / "prior_season_standings.csv", index=False)
+
+    response = client.post("/api/sandbox/roster-stats", json={"player_ids": [10, 11, 12, 13, 14, 15], "mode": "per_game"})
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["players"]) == 6
+    assert "PPG" in body["players"][0]
+
+
+def test_sandbox_roster_stats_400_for_short_roster(client, config):
+    processed_dir = tmp_path_from_config(config)
+    _write_sandbox_pool(processed_dir, [_sandbox_pool_row(10, "Player Ten", "BOS", 18.0, 30.0)])
+
+    response = client.post("/api/sandbox/roster-stats", json={"player_ids": [10]})
+    assert response.status_code == 400

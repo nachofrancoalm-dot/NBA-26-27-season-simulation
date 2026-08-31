@@ -51,8 +51,8 @@ function motionArcs() {
 }
 
 /** `<div class="hero-stage">` con la foto del jugador + balón animado +
- * sombra en el suelo, reutilizado por el splash y por la transición entre
- * pestañas (ver hero.css). `size` en px para el círculo de la foto. */
+ * sombra en el suelo, reutilizado por la transición entre pestañas (ver
+ * hero.css). `size` en px para el círculo de la foto. */
 export function playerHeroCard(playerId, playerName, { extraClass = "", size = 176 } = {}) {
   const stage = document.createElement("div");
   stage.className = `hero-stage ${extraClass}`.trim();
@@ -69,5 +69,40 @@ export function playerHeroCard(playerId, playerName, { extraClass = "", size = 1
   shadow.className = "dribbler-shadow";
 
   stage.append(motionArcs(), photoWrap, ballWrap, shadow);
+  return stage;
+}
+
+/** Hero de la pantalla de entrada (splash): recorte de cuerpo entero
+ * elegido a mano por el usuario (`webapp/static/img/`), no la foto
+ * circular del roster que usa playerHeroCard() -- este archivo SÍ vive
+ * en el repo (a diferencia de escudos/headshots, que se hotlinkean en
+ * vivo y nunca se guardan, ver el resto de este proyecto), así que si el
+ * repo se sube a GitHub en público, confirmar con el usuario si esta
+ * imagen debe commitearse o quedarse fuera vía .gitignore -- es una foto
+ * real de un jugador real, la misma consideración de derechos de imagen
+ * que ya se aplicó al decidir NO usar una foto de stock sin licencia
+ * para el hero original.
+ *
+ * Sin balón animado a propósito: la foto ya muestra al jugador con un
+ * balón real en la mano -- añadir uno de dibujo al lado se vería
+ * duplicado en vez de complementario (a diferencia de playerHeroCard,
+ * que usa un headshot circular sin balón visible). Se mantiene el bob
+ * suave y la sombra para que no se sienta estática. */
+export function staticHeroImage(src, alt, extraClass = "") {
+  const stage = document.createElement("div");
+  stage.className = `hero-stage hero-stage-photo ${extraClass}`.trim();
+
+  const photoWrap = document.createElement("div");
+  photoWrap.className = "hero-photo-bob hero-photo-bob-tall";
+  const img = document.createElement("img");
+  img.src = src;
+  img.alt = alt;
+  img.className = "hero-static-photo";
+  photoWrap.append(img);
+
+  const shadow = document.createElement("div");
+  shadow.className = "dribbler-shadow";
+
+  stage.append(motionArcs(), photoWrap, shadow);
   return stage;
 }

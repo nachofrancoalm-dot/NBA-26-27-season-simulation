@@ -303,12 +303,53 @@ table.data-table {
   text-transform: uppercase;
   letter-spacing: 0.02em;
   z-index: 1;
+  /* Con .th-sort-btn dentro, el botón ocupa toda la celda y trae su
+     propio padding -- quitarlo aquí evita un doble padding que
+     descentraría el texto respecto a las celdas de datos. */
+  padding: 0;
 }
 
 .data-table th .info-icon {
   cursor: help;
   color: var(--text-muted);
   margin-left: 3px;
+}
+
+/* Ordenar por columna: el <button> (no el <th>) es el elemento
+   interactivo -- alcanzable por Tab, con su propio foco visible, en vez
+   de intentar reinventar ese comportamiento sobre un <th> sin semántica
+   de control. Ocupa toda la celda para que el objetivo de clic/toque sea
+   grande, no solo el texto. */
+.th-sort-btn {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  padding: 8px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.th-sort-btn:hover {
+  color: var(--text-primary);
+}
+
+.th-sort-btn:focus-visible {
+  outline: 2px solid var(--accent-450);
+  outline-offset: -2px;
+}
+
+.th-sort-arrow {
+  font-size: 0.68rem;
+  color: var(--accent-450);
+  min-width: 0.8em;
 }
 
 /* Zebra striping -- sin esto, filas contiguas eran casi indistinguibles
@@ -379,6 +420,34 @@ table.data-table {
 .banner.warning {
   background: color-mix(in srgb, var(--status-warning) 12%, var(--surface-card));
   border-color: color-mix(in srgb, var(--status-warning) 40%, var(--border));
+}
+
+/* Botón secundario sobre una card normal (fondo --surface-card) -- un
+   tono más claro (--surface-card-alt) para no fundirse con la card que
+   lo contiene, a diferencia de .btn (rojo sólido, acción primaria) y
+   .btn-ghost (pensado para el degradado oscuro del hero). */
+.btn-ghost-dark {
+  appearance: none;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-card-alt);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-ghost-dark:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.btn-ghost-dark:hover {
+  border-color: color-mix(in srgb, var(--team-primary) 45%, var(--border));
 }
 
 /* --- Empty / error state --- */

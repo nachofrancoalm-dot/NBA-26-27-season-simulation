@@ -7,15 +7,27 @@
 // misma transición de "jugador cruzando pantalla" que ya usa la
 // navegación entre pestañas) en cuanto el usuario entra por cualquier CTA.
 //
-// Reutiliza /api/status, /api/team/simulation, /api/league/playoffs y
-// /api/roster -- los mismos endpoints que ya consumen Roster/Simulación/
-// Liga, así que no hay lógica de datos nueva, solo composición visual. Se
-// omite /api/awards a propósito (el más lento de la app, ~4s) -- esta
-// pantalla debe sentirse instantánea.
+// Reutiliza /api/status, /api/team/simulation y /api/league/playoffs --
+// los mismos endpoints que ya consumen Roster/Simulación/Liga, así que
+// no hay lógica de datos nueva, solo composición visual. Se omite
+// /api/awards a propósito (el más lento de la app, ~4s) -- esta pantalla
+// debe sentirse instantánea. La foto del hero (staticHeroImage(), ver
+// player-hero.js) es un archivo local elegido a mano por el usuario
+// (webapp/static/img/embiid.png), no datos del roster -- ya NO hace
+// falta pedir /api/roster aquí solo para eso.
+//
+// rosterBuilderCard() (roster-builder.js) convierte el punto de partida de
+// "los 76ers fijos del config" en un roster hipotético editable -- arranca
+// igual (mismos 13 player_id), pero cualquier jugador se puede sustituir
+// por cualquier otro de los 30 equipos reales y volver a simular en vivo
+// (src/sandbox_simulation.py). Es su propia tarjeta autocontenida, no un
+// dato más de este módulo -- ver el comentario junto a `kpis` más abajo
+// sobre por qué no comparte tira de resultados con el hero.
 
 import { api } from "../api.js";
 import { el, skeleton } from "../ui.js";
-import { playerHeroCard } from "../player-hero.js";
+import { staticHeroImage } from "../player-hero.js";
+import { rosterBuilderCard } from "../roster-builder.js";
 
 const QUICK_LINKS = [
   {
@@ -94,11 +106,10 @@ function quickLinkCard(link, enter) {
 export async function render(container, enter) {
   container.replaceChildren(skeleton(["title", "short"]));
 
-  const [statusResult, simResult, playoffsResult, rosterResult] = await Promise.allSettled([
+  const [statusResult, simResult, playoffsResult] = await Promise.allSettled([
     api.status(),
     api.simulation(),
     api.leaguePlayoffs(),
-    api.roster("per_game"),
   ]);
 
   if (statusResult.status !== "fulfilled") {
@@ -109,11 +120,6 @@ export async function render(container, enter) {
   const status = statusResult.value;
   const sim = simResult.status === "fulfilled" ? simResult.value : null;
   const myTeam = playoffsResult.status === "fulfilled" ? playoffsResult.value.my_team : null;
-  // El "jugador destacado" del splash es el primero del roster ya
-  // ordenado por relevancia (mismo orden que la tabla de Roster) -- dato
-  // real del config, nunca un nombre fijado a mano.
-  const featuredPlayer =
-    rosterResult.status === "fulfilled" && rosterResult.value.players.length ? rosterResult.value.players[0] : null;
 
   const hero = el("section", { class: "hero" }, [
     el("div", { class: "hero-copy" }, [
@@ -131,9 +137,23 @@ export async function render(container, enter) {
         el("button", { class: "btn-ghost", onclick: () => enter("liga-nba", "liga") }, "Explorar la liga"),
       ]),
     ]),
-    playerHeroCard(featuredPlayer?.player_id, featuredPlayer?.player_name),
+    staticHeroImage("/img/embiid.png", "Joel Embiid"),
   ]);
 
+  // Estos KPIs siguen leyendo el resultado YA CALCULADO
+  // (simulation_results.csv, 10.000 temporadas, lectura de CSV casi
+  // gratis) del roster curado real -- a propósito NO se sustituyen por
+  // una tirada en vivo del sandbox al cargar la pantalla, ni se
+  // comparten con la tira de resultados de rosterBuilderCard() más
+  // abajo. Dos motivos: (1) esta pantalla debe sentirse instantánea, y
+  // una simulación en vivo (aunque reducida a 2.000 temporadas) tiene
+  // latencia real; (2) el sandbox no modela sinergia de alineación (ver
+  // sandbox_simulation.py), así que aunque el roster editado empiece
+  // siendo idéntico al curado, correrlo por el motor en vivo daría un
+  // número ligeramente distinto al oficial -- mezclarlos en la misma
+  // tira sería confuso. rosterBuilderCard tiene su propia tira de
+  // resultados, etiquetada como "roster editado", justo para no
+  // confundir las dos fuentes.
   const kpis = el("div", { class: "hero-kpis" }, [
     sim
       ? kpi("Victorias medias", fmt1(sim.summary.mean), `P10 ${sim.summary.p10} · P90 ${sim.summary.p90}`, true)
@@ -153,5 +173,5 @@ export async function render(container, enter) {
   const linksCaption = el("p", { class: "caption" }, "Cada sección tiene su propio detalle, gráficos y glosario.");
   const links = el("div", { class: "quick-links" }, QUICK_LINKS.map((link) => quickLinkCard(link, enter)));
 
-  container.replaceChildren(hero, kpis, linksHeading, linksCaption, links);
+  container.replaceChildren(hero, kpis, rosterBuilderCard(enter), linksHeading, linksCaption, links);
 }

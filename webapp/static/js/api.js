@@ -62,4 +62,25 @@ export const api = {
       body: JSON.stringify({ question, news_text: newsText || null }),
     }),
   explainerSearchNews: (query) => request(`/explainer/search-news?query=${encodeURIComponent(query)}`),
+
+  sandboxPlayers: () => request("/sandbox/players"),
+  sandboxDefaultRoster: () => request("/sandbox/default"),
+  sandboxSimulate: (playerIds, mcOverrides) =>
+    request("/sandbox/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player_ids: playerIds, mc_overrides: mcOverrides || null }),
+    }),
+  sandboxRosterStats: (playerIds, mode = "per_game") =>
+    request("/sandbox/roster-stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player_ids: playerIds, mode }),
+    }),
+  sandboxLeague: (playerIds) =>
+    request("/sandbox/league", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player_ids: playerIds }),
+    }),
 };

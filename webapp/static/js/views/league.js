@@ -3,6 +3,7 @@ import { card, el, statGrid, dataTable, emptyState, teamBadge, teamCell, pillTog
 import { openPlayerModal } from "../player-modal.js";
 import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
+import { getHypotheticalLeague, clearHypotheticalLeague, hypotheticalBanner } from "../hypothetical-league.js";
 
 /** `day` es un entero sintetico (0-81, "Dia N") cuando no hay calendario
  * real publicado, o directamente la fecha real ("2026-10-20") cuando sí
@@ -18,14 +19,25 @@ export async function render(container) {
 
   const status = await api.status();
   const scenario = getScenario();
+  const hypothetical = getHypotheticalLeague();
 
+  // Con un roster hipotético activo, standings/playoffs vienen de
+  // POST /api/sandbox/league (ya en memoria, ver roster-builder.js) en
+  // vez de los endpoints reales -- misma forma exacta de respuesta
+  // (src/league_sandbox.py la construye a propósito así), así que el
+  // resto de esta función no necesita saber cuál de las dos fuentes es.
   const [standings, playoffs, teams] = await Promise.allSettled([
-    api.leagueStandings(scenario),
-    api.leaguePlayoffs(scenario),
+    hypothetical ? Promise.resolve(hypothetical.result.standings) : api.leagueStandings(scenario),
+    hypothetical ? Promise.resolve(hypothetical.result.playoffs) : api.leaguePlayoffs(scenario),
     api.leagueTeams(scenario),
   ]);
 
-  const bar = scenarioBar(status, () => render(container));
+  const bar = hypothetical
+    ? hypotheticalBanner(() => {
+        clearHypotheticalLeague();
+        render(container);
+      })
+    : scenarioBar(status, () => render(container));
 
   if (standings.status === "rejected") {
     container.replaceChildren(
@@ -42,7 +54,7 @@ export async function render(container) {
   }
 
   if (teams.status === "fulfilled") {
-    cards.push(teamExplorerCard(teams.value.teams, standings.value.team_ids));
+    cards.push(teamExplorerCard(teams.value.teams, standings.value.team_ids, status.team.abbreviation, hypothetical));
     cards.push(scheduleCard(teams.value.teams));
     cards.push(headToHeadCard(teams.value.teams));
   }
@@ -100,7 +112,7 @@ function playoffsCard(playoffs) {
   return card(children);
 }
 
-function teamExplorerCard(teamAbbrevs, teamIds) {
+function teamExplorerCard(teamAbbrevs, teamIds, myAbbreviation, hypothetical) {
   const detail = el("div", { id: "league-team-detail" });
 
   const railButtons = teamAbbrevs.map((abbr, i) =>
@@ -114,7 +126,7 @@ function teamExplorerCard(teamAbbrevs, teamIds) {
           document
             .querySelectorAll(".team-rail-item")
             .forEach((b) => b.setAttribute("aria-current", String(b === event.currentTarget)));
-          loadTeamDetail(detail, abbr);
+          loadTeamDetail(detail, abbr, myAbbreviation, hypothetical);
         },
       },
       [teamBadge(teamIds[abbr], abbr, 20), abbr]
@@ -122,15 +134,22 @@ function teamExplorerCard(teamAbbrevs, teamIds) {
   );
   const rail = el("div", { class: "team-rail" }, railButtons);
 
-  loadTeamDetail(detail, teamAbbrevs[0]);
+  loadTeamDetail(detail, teamAbbrevs[0], myAbbreviation, hypothetical);
 
   return card([
     el("h2", {}, "Explorar un equipo"),
+    el(
+      "p",
+      { class: "caption" },
+      hypothetical
+        ? `Con tu roster hipotético activo, "${myAbbreviation}" aquí abajo muestra ESE roster (no el real) -- los otros 29 siguen con el suyo.`
+        : null
+    ),
     el("div", { class: "team-explorer" }, [rail, detail]),
   ]);
 }
 
-async function loadTeamDetail(container, abbreviation) {
+async function loadTeamDetail(container, abbreviation, myAbbreviation, hypothetical) {
   let mode = "per_game";
   const scenario = getScenario();
   container.replaceChildren(skeleton());
@@ -139,10 +158,37 @@ async function loadTeamDetail(container, abbreviation) {
   const metricsBox = el("div");
   const tableBox = el("div", { style: "margin-top: 16px;" });
 
+  // Bug real reportado por el usuario: al activar un roster hipotético,
+  // este explorador seguía llamando a /api/league/team/{abbreviation}
+  // (datos REALES) sin importar qué equipo se seleccionara -- así que
+  // elegir tu propio equipo mostraba su roster real de siempre, como si
+  // la sustitución hipotética nunca hubiera pasado. Standings/Playoffs/
+  // Premios sí se habían enganchado a hypothetical-league.js, este
+  // explorador se quedó fuera. Aquí SOLO se desvía cuando el equipo
+  // elegido es el tuyo -- los otros 29 siguen siendo reales, coherente
+  // con el resto de la vista.
   async function loadRoster() {
     let data;
+    const isMyHypotheticalTeam = hypothetical && abbreviation === myAbbreviation;
     try {
-      data = await api.leagueTeam(abbreviation, mode, scenario);
+      if (isMyHypotheticalTeam) {
+        const [statsData, playoffRow, standingsRow] = [
+          await api.sandboxRosterStats(hypothetical.playerIds, mode),
+          hypothetical.result.playoffs.teams.find((t) => t.team_abbreviation === abbreviation),
+          [...hypothetical.result.standings.east, ...hypothetical.result.standings.west].find(
+            (t) => t.team_abbreviation === abbreviation
+          ),
+        ];
+        data = {
+          team_id: playoffRow?.team_id ?? hypothetical.result.playoffs.team_ids?.[abbreviation],
+          regular: { wins_mean: standingsRow?.wins_mean ?? 0 },
+          playoff: playoffRow ?? { playoff_pct: 0, conf_semis_pct: 0, finals_pct: 0, championship_pct: 0 },
+          players: statsData.players,
+          glossary: statsData.glossary,
+        };
+      } else {
+        data = await api.leagueTeam(abbreviation, mode, scenario);
+      }
     } catch (err) {
       container.replaceChildren(emptyState(err.message));
       return;
