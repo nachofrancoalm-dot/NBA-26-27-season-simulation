@@ -1,3 +1,5 @@
+🌐 **English** · [Español](README.es.md)
+
 # Notebooks
 
 Curated, visual narrations of three of the project's investigations. These are companions to the actual

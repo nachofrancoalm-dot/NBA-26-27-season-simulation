@@ -1,13 +1,14 @@
+🌐 **English** · [Español](README.es.md)
+
 # NBA Superteam Simulator
 
-Simulación Monte Carlo del rendimiento esperado de un equipo NBA que
-incorpora múltiples jugadores de alto usage, validada por backtesting
-contra casos históricos comparables (Heat 2010-11, Warriors 2016-17,
-Nets 2020-21, Suns 2022-23).
+Monte Carlo simulation of the expected performance of an NBA team that
+stacks multiple high-usage players, validated by backtesting against
+comparable historical cases (2010-11 Heat, 2016-17 Warriors, 2020-21
+Nets, 2022-23 Suns).
 
-**Diseñado para ser 100% reproducible con cualquier equipo**: todo lo
-específico del roster vive en `config/team_config.yaml`, nunca en el
-código.
+**Designed to be 100% reproducible with any team**: everything
+roster-specific lives in `config/team_config.yaml`, never in the code.
 
 [![Tests](https://github.com/nachofrancoalm-dot/NBA-26-27-season-simulation/actions/workflows/tests.yml/badge.svg)](https://github.com/nachofrancoalm-dot/NBA-26-27-season-simulation/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
@@ -94,87 +95,85 @@ Actions CI.
 
 ---
 
-> **¿Primera vez en el proyecto?** Este README explica *qué* es cada
-> pieza y *por qué* está diseñada así. Para el flujo completo de punta a
-> punta — diagrama, orden exacto de comandos, y cómo se simula un
-> partido paso a paso con las funciones concretas — ver
+> **First time in the project?** This README explains *what* each
+> piece is and *why* it's designed that way. For the full end-to-end
+> flow — diagram, exact command order, and how a game gets simulated
+> step by step with the actual functions — see
 > [`ARQUITECTURA.md`](ARQUITECTURA.md).
 
-## Estado actual
+## Current status
 
-- [x] Estructura del proyecto
-- [x] Config-driven design (`team_config.yaml`), roster completo (titulares + banquillo)
-- [x] Resolución automática de `player_id` sin red (`scripts/resolve_player_ids.py`)
-- [x] Pipeline de ingesta de datos (`src/data_pipeline.py`) vía `nba_api`, offline-first con caché local (temporada regular + playoffs)
-- [x] Capa de contexto de temporada — los 6 submódulos del roadmap implementados y validados contra datos reales (ver detalle abajo)
-- [x] Modelo de aging curve / proyección individual (`src/aging_curve.py`) — ver detalle abajo
-- [x] Modelo de sinergia de alineación (`src/lineup_synergy.py`) — ver detalle abajo
-- [x] Motor de simulación Monte Carlo (`src/simulation.py`) — ver detalle abajo
-- [x] Backtesting contra comparables históricos (`src/backtesting.py`) — ver detalle abajo
-- [x] Frontend web propio (`webapp/`, FastAPI + HTML/CSS/JS) — única interfaz del proyecto, ver detalle abajo
-- [x] Simulación de liga completa (30 equipos reales) + playoffs (`src/league_simulation.py`) — ver detalle abajo
+- [x] Project structure
+- [x] Config-driven design (`team_config.yaml`), full roster (starters + bench)
+- [x] Automatic `player_id` resolution without network calls (`scripts/resolve_player_ids.py`)
+- [x] Data ingestion pipeline (`src/data_pipeline.py`) via `nba_api`, offline-first with local cache (regular season + playoffs)
+- [x] Season context layer — the 6 roadmap submodules implemented and validated against real data (see detail below)
+- [x] Individual aging curve / projection model (`src/aging_curve.py`) — see detail below
+- [x] Lineup synergy model (`src/lineup_synergy.py`) — see detail below
+- [x] Monte Carlo simulation engine (`src/simulation.py`) — see detail below
+- [x] Backtesting against historical comparables (`src/backtesting.py`) — see detail below
+- [x] Web frontend (`webapp/`, FastAPI + HTML/CSS/JS) — the project's only interface, see detail below
+- [x] Full league simulation (30 real teams) + playoffs (`src/league_simulation.py`) — see detail below
 
-## Roadmap: capa de contexto de temporada (`src/context/`)
+## Roadmap: season context layer (`src/context/`)
 
-Un modelo que solo mira medias de carrera es estadísticamente ingenuo.
-Estos sub-módulos se añaden progresivamente, cada uno independiente y
-testeable por separado:
+A model that only looks at career averages is statistically naive.
+These submodules are added progressively, each one independent and
+separately testable:
 
-1. **`schedule_strength.py`** ✅ — `difficulty_score` (0-1) por partido
-   del calendario (no por jugador, a diferencia de los demás submódulos):
-   fuerza del rival, back-to-backs y viaje. Ver detalle más abajo.
-2. **`performance_curve.py`** ✅ — Net Rating estimado en ventanas
-   móviles sobre los comparables históricos (temporada regular +
-   playoffs), para detectar arranques lentos de integración y picos de
-   forma en playoffs. Ver detalle más abajo.
-3. **`injury_model.py`** ✅ — risk_score (0-1) de lesión por jugador,
-   combinando historial de carga de partidos perdidos, un componente de
-   recencia (una ausencia reciente pesa más que una antigua, decaimiento
-   exponencial configurable) y una curva de riesgo por edad. Ver detalle
-   más abajo.
-4. **`fatigue_accumulation.py`** ✅ — fatigue_score (0-1) por desgaste
-   acumulado de minutos: carrera longeva, uso pesado reciente y rachas de
-   temporadas consecutivas sin descanso. Combina temporada regular y
-   playoffs (relevante sobre todo para LeBron, 41 años). Ver detalle más
-   abajo.
-5. **`opponent_weighting.py`** ✅ — pondera partidos contra contenders/
-   rivales directos más que partidos contra equipos en reconstrucción,
-   para el backtesting. Ver detalle más abajo.
-6. **`conference_adjustment.py`** ✅ — normaliza fuerza relativa
-   Este/Oeste por temporada antes de comparar récords entre comparables
-   históricos. Ver detalle más abajo.
+1. **`schedule_strength.py`** ✅ — `difficulty_score` (0-1) per game on
+   the schedule (not per player, unlike the other submodules): opponent
+   strength, back-to-backs, and travel. See detail below.
+2. **`performance_curve.py`** ✅ — estimated Net Rating in rolling
+   windows over the historical comparables (regular season +
+   playoffs), to detect slow integration starts and playoff form
+   peaks. See detail below.
+3. **`injury_model.py`** ✅ — per-player injury `risk_score` (0-1),
+   combining missed-game load history, a recency component (a recent
+   absence weighs more than an old one, configurable exponential
+   decay), and an age-based risk curve. See detail below.
+4. **`fatigue_accumulation.py`** ✅ — `fatigue_score` (0-1) for
+   accumulated minutes wear: a long career, heavy recent usage, and
+   streaks of consecutive seasons without rest. Combines regular
+   season and playoffs (especially relevant for LeBron, 41 years old).
+   See detail below.
+5. **`opponent_weighting.py`** ✅ — weighs games against
+   contenders/direct rivals more than games against rebuilding teams,
+   for backtesting. See detail below.
+6. **`conference_adjustment.py`** ✅ — normalizes relative East/West
+   strength per season before comparing records between historical
+   comparables.
 
-### `injury_model.py` — detalle
+### `injury_model.py` — detail
 
-Calcula, para cada jugador del roster, un `risk_score` entre 0 y 1 a
-partir de `data/processed/roster_career_stats.csv` (generado por
-`data_pipeline.py`). No usa datos de lesión reales porque `nba_api` no
-los expone (`CommonPlayerInfo` solo trae datos biográficos) — en su
-lugar usa como proxy la disponibilidad histórica: partidos jugados (GP)
-frente a partidos de calendario esa temporada (con excepciones
-conocidas: 66 partidos en el lockout de 2011-12, ~72 en las temporadas
-de COVID 2019-20/2020-21).
+Computes, for each player on the roster, a `risk_score` between 0 and 1
+from `data/processed/roster_career_stats.csv` (generated by
+`data_pipeline.py`). It doesn't use real injury data because `nba_api`
+doesn't expose it (`CommonPlayerInfo` only carries biographical data) —
+instead it uses historical availability as a proxy: games played (GP)
+vs. scheduled games that season (with known exceptions: 66 games in the
+2011-12 lockout, ~72 in the 2019-20/2020-21 COVID seasons).
 
-El score combina tres componentes, con pesos configurables en
-`config/team_config.yaml` (bloque `injury_model`), nunca hardcodeados:
+The score combines three components, with weights configurable in
+`config/team_config.yaml` (`injury_model` block), never hardcoded:
 
-| Componente | Peso por defecto | Qué mide |
+| Component | Default weight | What it measures |
 |---|---|---|
-| `historical_load_score` | 0.45 | % medio de partidos perdidos en las últimas N temporadas |
-| `recency_score` | 0.35 | Lo mismo, pero ponderado con decaimiento exponencial: una ausencia reciente pesa más que una antigua |
-| `age_score` | 0.20 | Curva de riesgo por edad — sube y se aplana, no crece sin límite |
+| `historical_load_score` | 0.45 | Average % of games missed over the last N seasons |
+| `recency_score` | 0.35 | The same, but weighted with exponential decay: a recent absence weighs more than an old one |
+| `age_score` | 0.20 | Age-based risk curve — rises and flattens, doesn't grow unbounded |
 
-El peso de edad es deliberadamente bajo frente al historial (0.80 entre
-los otros dos componentes): la evidencia epidemiológica ([Ruddy et al.,
+The age weight is deliberately low relative to history (0.80 between
+the other two components): epidemiological evidence ([Ruddy et al.,
 PMC6176657](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6176657/))
-señala el historial de lesiones reciente como el predictor individual
-más fuerte de una lesión futura, más que la edad en abstracto. Además,
-la curva de edad se aplana (no decrece, pero tampoco sigue subiendo) a
-partir de `peak_start_age` (32 por defecto), reflejando el sesgo de
-supervivencia documentado en veteranos de carreras muy largas ([Mack et
-al., PMC11569584](https://pmc.ncbi.nlm.nih.gov/articles/PMC11569584/)):
-un jugador de 41 años con historial reciente limpio (el caso de LeBron
-James) no recibe un `risk_score` inflado solo por su edad.
+points to recent injury history as the single strongest predictor of
+a future injury, more than age in the abstract. Also, the age curve
+flattens (doesn't decrease, but also stops climbing) past
+`peak_start_age` (32 by default), reflecting the survivorship bias
+documented in very long careers ([Mack et al.,
+PMC11569584](https://pmc.ncbi.nlm.nih.gov/articles/PMC11569584/)): a
+41-year-old player with a clean recent history (LeBron James's case)
+doesn't get an inflated `risk_score` just for his age.
 
 ```bash
 python -c "from src.context.injury_model import build_injury_risk_dataset; \
@@ -182,43 +181,43 @@ from src.config_loader import load_config; \
 print(build_injury_risk_dataset(load_config()))"
 ```
 
-Genera `data/processed/injury_risk.csv`. Requiere que
-`roster_career_stats.csv` ya exista (correr `data_pipeline.py` primero).
-Tests en `tests/test_injury_model.py` — no requieren red, usan DataFrames
-sintéticos con el esquema de `roster_career_stats.csv`.
+Generates `data/processed/injury_risk.csv`. Requires
+`roster_career_stats.csv` to already exist (run `data_pipeline.py`
+first). Tests in `tests/test_injury_model.py` — no network required,
+use synthetic DataFrames matching `roster_career_stats.csv`'s schema.
 
-> **Nota de corrección de datos:** cuando un jugador es traspasado a
-> mitad de temporada, `nba_api` incluye una fila `TOT` (total) además de
-> una fila por cada equipo, todas con la misma temporada. `injury_model.py`
-> (y `fatigue_accumulation.py`) hacen dedupe de esto priorizando la fila
-> `TOT` — sin ese paso, una temporada con trade se contaría dos o más
-> veces en la ventana de N temporadas.
+> **Data-correction note:** when a player is traded mid-season,
+> `nba_api` includes a `TOT` (total) row in addition to one row per
+> team, all with the same season. `injury_model.py` (and
+> `fatigue_accumulation.py`) dedupe this by prioritizing the `TOT` row
+> — without that step, a season with a trade would count two or more
+> times within the N-season window.
 
-### `fatigue_accumulation.py` — detalle
+### `fatigue_accumulation.py` — detail
 
-Calcula, para cada jugador, un `fatigue_score` entre 0 y 1 a partir de
-`roster_career_stats.csv` (temporada regular) y
-`roster_playoff_career_stats.csv` (playoffs) — ambos generados por
-`data_pipeline.py`. A diferencia de `injury_model.py` (que mide riesgo a
-partir de partidos *perdidos*), este mide desgaste acumulado por partidos
-*jugados* con carga alta de minutos.
+Computes, for each player, a `fatigue_score` between 0 and 1 from
+`roster_career_stats.csv` (regular season) and
+`roster_playoff_career_stats.csv` (playoffs) — both generated by
+`data_pipeline.py`. Unlike `injury_model.py` (which measures risk from
+games *missed*), this measures accumulated wear from games *played*
+under heavy minutes load.
 
-| Componente | Peso por defecto | Qué mide |
+| Component | Default weight | What it measures |
 |---|---|---|
-| `cumulative_load_score` | 0.35 | Minutos totales de carrera (regular + playoffs) frente a un tope configurable de "carrera longeva" (35 000 min por defecto) |
-| `recent_intensity_score` | 0.35 | Minutos/partido en las últimas N temporadas frente a un umbral de "uso pesado" (34 min/partido por defecto), ponderado por recencia |
-| `sustained_streak_score` | 0.30 | Nº de temporadas recientes consecutivas sin una caída de carga (sin temporada de descanso/descarga), con retornos decrecientes |
+| `cumulative_load_score` | 0.35 | Total career minutes (regular + playoffs) against a configurable "long career" ceiling (35,000 min by default) |
+| `recent_intensity_score` | 0.35 | Minutes/game over the last N seasons against a "heavy usage" threshold (34 min/game by default), weighted by recency |
+| `sustained_streak_score` | 0.30 | Number of consecutive recent seasons without a load drop (no rest/reduced season), with diminishing returns |
 
-A propósito **no tiene un componente de edad explícito**: el desgaste por
-carrera larga ya emerge de forma natural en `cumulative_load_score` (más
-años en la liga = más minutos acumulados), así que añadir edad aparte
-duplicaría esa señal — a diferencia de `injury_model.py`, donde el
-historial de lesiones y la edad sí son señales genuinamente distintas.
+Deliberately **has no explicit age component**: wear from a long
+career already emerges naturally in `cumulative_load_score` (more years
+in the league = more accumulated minutes), so adding age separately
+would duplicate that signal — unlike `injury_model.py`, where injury
+history and age are genuinely distinct signals.
 
-A diferencia de `injury_model.py`, aquí no hay literatura publicada que
-justifique una jerarquía clara entre los tres componentes, así que los
-pesos por defecto son similares entre sí (todos configurables en
-`config/team_config.yaml`, bloque `fatigue_model`).
+Unlike `injury_model.py`, there's no published literature here that
+justifies a clear hierarchy between the three components, so the
+default weights are similar to each other (all configurable in
+`config/team_config.yaml`, `fatigue_model` block).
 
 ```bash
 python -c "from src.context.fatigue_accumulation import build_fatigue_dataset; \
@@ -226,49 +225,49 @@ from src.config_loader import load_config; \
 print(build_fatigue_dataset(load_config()))"
 ```
 
-Genera `data/processed/fatigue_risk.csv`. Requiere
-`roster_career_stats.csv` (y opcionalmente `roster_playoff_career_stats.csv`
-— si no existe, el fatigue_score se calcula solo con temporada regular).
-Tests en `tests/test_fatigue_accumulation.py` — no requieren red.
+Generates `data/processed/fatigue_risk.csv`. Requires
+`roster_career_stats.csv` (and optionally
+`roster_playoff_career_stats.csv` — if it doesn't exist, fatigue_score
+is computed from regular season only). Tests in
+`tests/test_fatigue_accumulation.py` — no network required.
 
-**Resultado sobre el roster real (2026-27):** LeBron James encabeza el
-`fatigue_score` (0.89, el más alto del equipo) por su altísimo
-`cumulative_load_score` — pero en `injury_model.py` su `risk_score` es
-solo moderado (0.33, empatado con Kentavious Caldwell-Pope). Es
-exactamente el comportamiento buscado: dos submódulos midiendo cosas
-distintas pueden dar lecturas opuestas para el mismo jugador — mucho
-desgaste acumulado, pero poco riesgo de lesión reciente.
+**Result on the real roster (2026-27):** LeBron James tops the
+`fatigue_score` (0.89, highest on the team) due to his extremely high
+`cumulative_load_score` — but in `injury_model.py` his `risk_score` is
+only moderate (0.33, tied with Kentavious Caldwell-Pope). This is
+exactly the intended behavior: two submodules measuring different
+things can give opposite readings for the same player — lots of
+accumulated wear, but low recent injury risk.
 
-### `schedule_strength.py` — detalle
+### `schedule_strength.py` — detail
 
-A diferencia de `injury_model.py` y `fatigue_accumulation.py`, este
-submódulo **no es por jugador** — calcula un `difficulty_score` (0-1)
-**por partido** del calendario del equipo, a partir de
-`team_schedule.csv` y `prior_season_standings.csv` (ambos generados por
-`data_pipeline.py`).
+Unlike `injury_model.py` and `fatigue_accumulation.py`, this submodule
+is **not per player** — it computes a `difficulty_score` (0-1) **per
+game** on the team's schedule, from `team_schedule.csv` and
+`prior_season_standings.csv` (both generated by `data_pipeline.py`).
 
-| Componente | Peso por defecto | Qué mide |
+| Component | Default weight | What it measures |
 |---|---|---|
-| `opponent_strength_score` | 0.40 | WinPCT del rival en la temporada **anterior** (ya en escala 0-1) |
-| `back_to_back_score` | 0.30 | 1.0 si el partido anterior del equipo fue el día previo, si no 0.0 |
-| `travel_score` | 0.30 | Distancia (haversine) desde la ciudad del partido anterior, normalizada contra un tope de "viaje largo" (3000 km por defecto) |
+| `opponent_strength_score` | 0.40 | Opponent's WinPCT in the **prior** season (already on a 0-1 scale) |
+| `back_to_back_score` | 0.30 | 1.0 if the team's previous game was the day before, else 0.0 |
+| `travel_score` | 0.30 | Distance (haversine) from the previous game's city, normalized against a "long travel" ceiling (3000 km by default) |
 
-**Dos limitaciones de datos importantes, documentadas también en el
-docstring del módulo:**
+**Two important data limitations, also documented in the module's
+docstring:**
 
-1. **Fuerza del rival vía temporada anterior.** `team_config.yaml` puede
-   apuntar a una temporada que aún no se jugó (2026-27) — no existen
-   resultados reales de esa temporada para medir la fuerza de cada rival.
-   Se usa el WinPCT de la temporada anterior como proxy, igual que
-   cualquier preview de calendario real.
-2. **Viaje vía tabla estática de coordenadas.** `nba_api` no expone
-   distancias entre ciudades. `ARENA_COORDS` en el módulo tiene
-   coordenadas aproximadas de las 30 ciudades de franquicias NBA (un
-   hecho geográfico de la liga, no algo específico de este equipo) y
-   calcula distancia geodésica (haversine) entre partidos consecutivos.
-   Partidos en sede neutral fuera de esas 30 ciudades (México, Londres,
-   París) no tienen coordenada — ese tramo de viaje se trata como 0 km y
-   se avisa por consola, en vez de fallar.
+1. **Opponent strength via prior season.** `team_config.yaml` can point
+   to a season that hasn't been played yet (2026-27) — there are no
+   real results from that season to measure each opponent's strength.
+   Prior season WinPCT is used as a proxy, the same way any real
+   schedule preview does.
+2. **Travel via a static coordinate table.** `nba_api` doesn't expose
+   distances between cities. `ARENA_COORDS` in the module has
+   approximate coordinates for the 30 NBA franchise cities (a league
+   geographic fact, not something specific to this team) and computes
+   geodesic (haversine) distance between consecutive games. Neutral-site
+   games outside those 30 cities (Mexico City, London, Paris) have no
+   coordinate — that travel leg is treated as 0 km and a warning is
+   printed to console, instead of failing.
 
 ```bash
 python -c "from src.context.schedule_strength import build_schedule_difficulty_dataset; \
@@ -276,42 +275,41 @@ from src.config_loader import load_config; \
 print(build_schedule_difficulty_dataset(load_config()))"
 ```
 
-Genera `data/processed/schedule_difficulty.csv`. Requiere
-`team_schedule.csv` y `prior_season_standings.csv` (correr
-`data_pipeline.py` primero). Tests en `tests/test_schedule_strength.py`
-— no requieren red.
+Generates `data/processed/schedule_difficulty.csv`. Requires
+`team_schedule.csv` and `prior_season_standings.csv` (run
+`data_pipeline.py` first). Tests in `tests/test_schedule_strength.py`
+— no network required.
 
-> **Nota sobre disponibilidad real de datos:** al probar esto contra la
-> API real en agosto de 2026, el calendario 2026-27 de `ScheduleLeagueV2`
-> solo devolvió 2 partidos (ambos de pretemporada) — la NBA todavía no
-> había publicado el calendario completo de temporada regular. Esto es
-> un estado real y esperable, no un bug: en cuanto la liga publique el
-> calendario completo, `python src/data_pipeline.py --refresh` lo
-> recogerá.
+> **Note on real data availability:** when testing this against the
+> real API in August 2026, `ScheduleLeagueV2`'s 2026-27 schedule only
+> returned 2 games (both preseason) — the NBA hadn't published the full
+> regular-season schedule yet. This is a real, expected state, not a
+> bug: as soon as the league publishes the full schedule,
+> `python src/data_pipeline.py --refresh` will pick it up.
 
-### `performance_curve.py` — detalle
+### `performance_curve.py` — detail
 
-Opera sobre los `historical_comparables` (Heat 2010-11, Warriors 2016-17,
-Nets 2020-21, Suns 2022-23) — no sobre el roster simulado. Estima Net
-Rating por partido y calcula una media móvil configurable para detectar
-si un "superequipo" arranca lento (tarda en integrarse) y si mejora en
-playoffs, que es la narrativa central que el proyecto busca validar por
-backtesting.
+Operates on the `historical_comparables` (2010-11 Heat, 2016-17
+Warriors, 2020-21 Nets, 2022-23 Suns) — not on the simulated roster. It
+estimates per-game Net Rating and computes a configurable rolling
+average to detect whether a "superteam" starts slow (takes time to gel)
+and improves in the playoffs, which is the central narrative the
+project seeks to validate via backtesting.
 
-**Aproximación de datos:** NBA.com no expone Net Rating oficial por
-partido individual sin llamadas adicionales. Se estima como:
+**Data approximation:** NBA.com doesn't expose official per-game Net
+Rating without additional calls. It's estimated as:
 
 ```
-net_rating_estimate = PLUS_MINUS / posesiones_estimadas * 100
-posesiones_estimadas ≈ FGA - OREB + TOV + 0.44 * FTA   (fórmula estándar de analítica de básquet)
+net_rating_estimate = PLUS_MINUS / estimated_possessions * 100
+estimated_possessions ≈ FGA - OREB + TOV + 0.44 * FTA   (standard basketball analytics formula)
 ```
 
-`PLUS_MINUS` viene de `TeamGameLogs` (endpoint **plural**, con
-`PLUS_MINUS`) — distinto de `TeamGameLog` (singular, sin `PLUS_MINUS`,
-el que ya usaba `historical_comparables_game_logs.csv`). Por eso
-`data_pipeline.py` genera un CSV nuevo y separado,
-`historical_comparables_advanced_game_logs.csv`, en vez de tocar el
-existente.
+`PLUS_MINUS` comes from `TeamGameLogs` (the **plural** endpoint, which
+has `PLUS_MINUS`) — different from `TeamGameLog` (singular, no
+`PLUS_MINUS`, the one `historical_comparables_game_logs.csv` already
+used). That's why `data_pipeline.py` generates a new, separate CSV,
+`historical_comparables_advanced_game_logs.csv`, instead of touching
+the existing one.
 
 ```bash
 python -c "from src.context.performance_curve import build_performance_curve_dataset; \
@@ -319,40 +317,39 @@ from src.config_loader import load_config; \
 print(build_performance_curve_dataset(load_config())['summary'])"
 ```
 
-Genera `data/processed/performance_curve_by_game.csv` (serie completa) y
-`data/processed/performance_curve_summary.csv` (un resumen por caso:
+Generates `data/processed/performance_curve_by_game.csv` (full series)
+and `data/processed/performance_curve_summary.csv` (a per-case summary:
 `early_season_net_rating`, `playoff_boost`, `trend_slope`, etc.). Tests
-en `tests/test_performance_curve.py` — no requieren red.
+in `tests/test_performance_curve.py` — no network required.
 
-**Resultado sobre los 4 casos reales:** los Suns 2022-23 muestran
-`playoff_boost = -4.36` (colapsaron en playoffs — barridos en segunda
-ronda en la realidad) mientras que los Warriors 2016-17 muestran
-`playoff_boost = +1.62` (subieron de nivel en playoffs — campeones ese
-año). El modelo, con datos reales, reproduce direccionalmente narrativas
-conocidas de esos dos casos históricos.
+**Result on the 4 real cases:** the 2022-23 Suns show
+`playoff_boost = -4.36` (they collapsed in the playoffs — swept in the
+second round in real life) while the 2016-17 Warriors show
+`playoff_boost = +1.62` (they raised their level in the playoffs — that
+year's champions). The model, with real data, directionally reproduces
+known narratives from those two historical cases.
 
-### `opponent_weighting.py` — detalle
+### `opponent_weighting.py` — detail
 
-Complementa a `performance_curve.py`: pondera cada partido de un
-comparable histórico por la fuerza REAL de su rival **esa misma
-temporada** (no un proxy de temporada anterior — a diferencia de
-`schedule_strength.py`, estas 4 temporadas ya se jugaron por completo, así
-que se puede pedir la fuerza contemporánea real vía
-`historical_comparables_standings.csv`).
+Complements `performance_curve.py`: weighs each game of a historical
+comparable by its opponent's REAL strength **that same season** (not a
+prior-season proxy — unlike `schedule_strength.py`, these 4 seasons
+have already been played in full, so real contemporary strength can be
+pulled via `historical_comparables_standings.csv`).
 
-- El rival se resuelve desde la columna `MATCHUP` ("MIA @ TOR") con una
-  tabla estática de las 30 franquicias NBA, más alias para abreviaciones
-  históricas que cambiaron dentro del rango de temporadas del proyecto
-  (Nets "NJN" antes de mudarse a Brooklyn en 2012-13; Hornets/Pelicans
-  "NOH" antes del cambio de nombre en 2013-14).
-- El peso numérico es **continuo** (`win_pct ** steepness`), no un umbral
-  fijo — un rival con 0.54 de WinPCT no es cualitativamente distinto de
-  uno con 0.56, así que cualquier corte binario sería arbitrario. Sí
-  ofrece además una vista categórica descriptiva
-  (contender/medio/reconstrucción, con umbrales configurables) porque el
-  roadmap la pide como resumen legible.
-- Reutiliza `compute_net_rating_estimate()` de `performance_curve.py` por
-  import directo, en vez de duplicar la fórmula.
+- The opponent is resolved from the `MATCHUP` column ("MIA @ TOR") with
+  a static table of the 30 NBA franchises, plus aliases for historical
+  abbreviations that changed within the project's season range (Nets
+  "NJN" before moving to Brooklyn in 2012-13; Hornets/Pelicans "NOH"
+  before the 2013-14 rename).
+- The numeric weight is **continuous** (`win_pct ** steepness`), not a
+  fixed threshold — an opponent at 0.54 WinPCT isn't qualitatively
+  different from one at 0.56, so any binary cutoff would be arbitrary.
+  It does also offer a descriptive categorical view
+  (contender/mid/rebuilding, with configurable thresholds) because the
+  roadmap asks for it as a readable summary.
+- Reuses `compute_net_rating_estimate()` from `performance_curve.py` via
+  direct import, instead of duplicating the formula.
 
 ```bash
 python -c "from src.context.opponent_weighting import build_opponent_weighting_dataset; \
@@ -360,46 +357,46 @@ from src.config_loader import load_config; \
 print(build_opponent_weighting_dataset(load_config()))"
 ```
 
-Genera `data/processed/opponent_weighting_summary.csv`. Requiere
-`historical_comparables_advanced_game_logs.csv` y
-`historical_comparables_standings.csv` (correr `data_pipeline.py`
-primero). Tests en `tests/test_opponent_weighting.py` — no requieren red.
+Generates `data/processed/opponent_weighting_summary.csv`. Requires
+`historical_comparables_advanced_game_logs.csv` and
+`historical_comparables_standings.csv` (run `data_pipeline.py` first).
+Tests in `tests/test_opponent_weighting.py` — no network required.
 
-**Resultado sobre los 4 casos reales:** los Suns 2022-23 tienen
-`contender_net_rating = -5.35` — **perdían en promedio contra rivales
-fuertes** — mientras aplastaban a equipos en reconstrucción
-(`reconstruccion_net_rating = +6.62`). Su Net Rating general (1.55) se
-veía inflado por partidos fáciles; contra competencia real, el equipo era
-netamente negativo. Coincide con su colapso real en playoffs. Los Heat
-2010-11 muestran un patrón similar en menor grado (1.47 vs. contenders,
-13.17 vs. equipos débiles) — consistente con la narrativa real de un
-"superequipo" que tardó en integrarse contra rivales de su nivel.
+**Result on the 4 real cases:** the 2022-23 Suns have
+`contender_net_rating = -5.35` — **they lost on average against strong
+opponents** — while steamrolling rebuilding teams
+(`reconstruccion_net_rating = +6.62`). Their overall Net Rating (1.55)
+was inflated by easy games; against real competition, the team was net
+negative. This matches their real playoff collapse. The 2010-11 Heat
+show a similar pattern to a lesser degree (1.47 vs. contenders, 13.17
+vs. weak teams) — consistent with the real narrative of a "superteam"
+that took time to gel against opponents at its own level.
 
-### `conference_adjustment.py` — detalle
+### `conference_adjustment.py` — detail
 
-Cierra el roadmap de `src/context/`. Normaliza WinPCT y Net Rating de
-cada comparable histórico por la fuerza relativa Este/Oeste esa
-temporada, para poder comparar entre sí casos que jugaron en
-conferencias y temporadas distintas.
+Closes out the `src/context/` roadmap. Normalizes each historical
+comparable's WinPCT and Net Rating by the relative East/West strength
+that season, to be able to compare cases that played in different
+conferences and seasons against each other.
 
-**Fundamento estadístico (sin necesidad de datos adicionales):** tanto
-el WinPCT como el diferencial de puntos (`DiffPointsPG`) son de suma
-cero a nivel de LIGA completa (30 equipos) por construcción — pero NO
-por separado dentro de cada conferencia, porque los partidos
-inter-conferencia no son de suma cero dentro de un solo grupo. Si el
-Oeste le gana más partidos de los que pierde al Este esa temporada, el
-WinPCT/DiffPointsPG medio del Oeste sube por encima de la línea base
-(0.5 / 0) y el del Este baja en la misma magnitud. Esa desviación de la
-media de conferencia **es** el índice de fuerza relativa esa temporada.
+**Statistical basis (no additional data needed):** both WinPCT and
+point differential (`DiffPointsPG`) are zero-sum at the full LEAGUE
+level (30 teams) by construction — but NOT separately within each
+conference, because inter-conference games aren't zero-sum within a
+single group. If the West beats the East more than it loses to it that
+season, the West's average WinPCT/DiffPointsPG rises above the
+baseline (0.5 / 0) and the East's drops by the same magnitude. That
+deviation from the conference average **is** the relative strength
+index for that season.
 
 ```
-conference_index = media(métrica de todos los equipos de esa conferencia esa temporada) - línea_base
-valor_ajustado    = valor_bruto_del_equipo - conference_index
+conference_index = mean(metric across all teams in that conference that season) - baseline
+adjusted_value    = team's raw value - conference_index
 ```
 
-Jugar en una conferencia con índice positivo (más dura) resta menos (o
-suma) al valor ajustado; jugar en una conferencia floja resta más — da
-crédito por el contexto.
+Playing in a conference with a positive index (tougher) subtracts less
+(or adds) to the adjusted value; playing in a weak conference subtracts
+more — it gives credit for context.
 
 ```bash
 python -c "from src.context.conference_adjustment import build_conference_adjustment_dataset; \
@@ -407,60 +404,62 @@ from src.config_loader import load_config; \
 print(build_conference_adjustment_dataset(load_config()))"
 ```
 
-Genera `data/processed/conference_adjustment_summary.csv`. A diferencia
-de `opponent_weighting.py` (que recalcula su propia métrica por partido
-para mantenerse autocontenido), este módulo **sí depende** del resumen
-ya agregado de `performance_curve.py` — comparar resúmenes entre casos es
-exactamente su propósito, no tiene sentido recalcular la serie completa
-de partidos otra vez. Requiere `historical_comparables_standings.csv` y
-`performance_curve_summary.csv` (correr `data_pipeline.py` y
-`performance_curve.py` primero). Tests en
-`tests/test_conference_adjustment.py` — no requieren red.
+Generates `data/processed/conference_adjustment_summary.csv`. Unlike
+`opponent_weighting.py` (which recomputes its own per-game metric to
+stay self-contained), this module **does** depend on
+`performance_curve.py`'s already-aggregated summary — comparing
+summaries across cases is exactly its purpose, there's no point
+recomputing the full game series again. Requires
+`historical_comparables_standings.csv` and
+`performance_curve_summary.csv` (run `data_pipeline.py` and
+`performance_curve.py` first). Tests in
+`tests/test_conference_adjustment.py` — no network required.
 
-**Resultado sobre los 4 casos reales:** el Este tuvo índice negativo en
-2010-11 (-0.75) y 2020-21 (-0.35) — el Oeste dominaba el cruce
-inter-conferencia esos años, consistente con la narrativa real de esas
-temporadas. Por eso el Net Rating de los Heat 2010-11 se ajusta HACIA
-ARRIBA (8.05 → 8.80) y el de los Nets 2020-21 también (4.43 → 4.78) —
-crédito por competir en un contexto más duro. Los Warriors 2016-17, en
-cambio, jugaban en un Oeste dominante (+0.77) y su Net Rating se ajusta
-levemente hacia abajo (11.39 → 10.62).
+**Result on the 4 real cases:** the East had a negative index in
+2010-11 (-0.75) and 2020-21 (-0.35) — the West dominated the
+inter-conference matchup those years, consistent with the real
+narrative of those seasons. That's why the 2010-11 Heat's Net Rating
+gets adjusted UPWARD (8.05 → 8.80) and so does the 2020-21 Nets'
+(4.43 → 4.78) — credit for competing in a tougher context. The 2016-17
+Warriors, on the other hand, played in a dominant West (+0.77) and
+their Net Rating adjusts slightly downward (11.39 → 10.62).
 
-## Modelo de aging curve / proyección individual (`src/aging_curve.py`)
+## Individual aging curve / projection model (`src/aging_curve.py`)
 
-Fuera de `src/context/` — no es parte del roadmap de contexto de
-temporada, es la otra pieza pendiente de "Estado actual". Proyecta la
-producción por-36-minutos de cada jugador del roster para la temporada
-del config, combinando:
+Outside `src/context/` — not part of the season context roadmap, it's
+the other pending piece from "Current status". Projects each roster
+player's per-36-minute production for the config's season, combining:
 
-1. **Línea base** — media ponderada por recencia (decaimiento
-   exponencial, mismo patrón que `injury_model.py`) de las últimas N
-   temporadas por-36 del propio jugador.
-2. **Ajuste por edad** — un factor multiplicativo según DOS curvas
-   distintas, no una sola:
-   - **Curva general** (PTS, AST, REB, STL, BLK, TOV) — pico ~26-27 años.
-   - **Curva de tiro** (volumen de triples: FG3M, FG3A) — pico ~30 años,
-     porque el tiro exterior envejece mejor que el resto del juego.
+1. **Baseline** — recency-weighted average (exponential decay, same
+   pattern as `injury_model.py`) of the player's own last N seasons
+   per-36.
+2. **Age adjustment** — a multiplicative factor from TWO distinct
+   curves, not one:
+   - **General curve** (PTS, AST, REB, STL, BLK, TOV) — peaks ~26-27
+     years old.
+   - **Shooting curve** (three-point volume: FG3M, FG3A) — peaks ~30
+     years old, because outside shooting ages better than the rest of
+     the game.
 
-**Por qué dos curvas y de dónde salen los puntos de quiebre:** no hay
-suficientes datos propios en este proyecto (solo 10 jugadores) para
-ajustar una curva de edad poblacional con rigor estadístico — eso
-requeriría carreras completas de cientos de jugadores históricos, fuera
-del alcance de `data_pipeline.py` actual. En su lugar, la UBICACIÓN de
-los puntos de quiebre viene de investigación pública: el rendimiento
-medio sube más rápido entre 19-20 y 23-25 años, baja más rápido entre
-29-31 y 36-38, con pico general ~26-27; los tiros de 2/tiro libre pican
-~25 seguido de declive marcado, mientras el triple pica más tarde, ~30
+**Why two curves, and where the breakpoints come from:** this project
+doesn't have enough of its own data (only 10 players) to fit a
+population age curve with statistical rigor — that would require full
+careers of hundreds of historical players, beyond the current
+`data_pipeline.py`'s scope. Instead, the LOCATION of the breakpoints
+comes from public research: average performance rises fastest between
+ages 19-20 and 23-25, drops fastest between 29-31 and 36-38, with an
+overall peak ~26-27; 2-point/free-throw shooting peaks ~25 followed by
+a marked decline, while three-point shooting peaks later, ~30
 ([Large data and Bayesian modeling — aging curves of NBA players,
-PubMed 30684225](https://pubmed.ncbi.nlm.nih.gov/30684225/)). Las
-MAGNITUDES exactas del cambio anual en cada tramo sí son una estimación
-de este proyecto calibrada para esa forma — no vienen literalmente de un
-paper — y están expuestas como config (`config["aging_curve"]`), no
-hardcodeadas, precisamente porque son una estimación.
+PubMed 30684225](https://pubmed.ncbi.nlm.nih.gov/30684225/)). The exact
+MAGNITUDES of the yearly change within each stretch are this project's
+own estimate calibrated to fit that shape — they don't come literally
+from a paper — and are exposed as config (`config["aging_curve"]`),
+not hardcoded, precisely because they're an estimate.
 
-**Reutiliza config existente en vez de inventar campos nuevos:** escala
-la proyección por-36 a totales de temporada usando el `minutes_projection`
-que cada jugador ya tiene en el `roster` de `team_config.yaml`, y
+**Reuses existing config instead of inventing new fields:** scales the
+per-36 projection to season totals using the `minutes_projection` each
+player already has in `team_config.yaml`'s `roster`, and
 `simulation.games_per_season`.
 
 ```bash
@@ -469,56 +468,56 @@ from src.config_loader import load_config; \
 print(build_aging_projection_dataset(load_config()))"
 ```
 
-Genera `data/processed/aging_curve_projection.csv`. Requiere
-`roster_career_stats.csv` (correr `data_pipeline.py` primero). Tests en
-`tests/test_aging_curve.py` — no requieren red.
+Generates `data/processed/aging_curve_projection.csv`. Requires
+`roster_career_stats.csv` (run `data_pipeline.py` first). Tests in
+`tests/test_aging_curve.py` — no network required.
 
-**Resultado sobre el roster real:** el modelo no resetea a un jugador
-veterano a un nivel "genérico de jugador viejo" — LeBron James (41→42)
-sigue proyectando alta producción porque su LÍNEA BASE (sus propias
-últimas temporadas) ya es alta; el ajuste de edad solo aplica un
-descuento marginal de un año adicional, no un techo poblacional. Esto es
-intencional: la línea base específica del jugador domina, la curva de
-edad es el ajuste, no el punto de partida — mismo principio de diseño
-que "el historial manda sobre la edad" en `injury_model.py`.
+**Result on the real roster:** the model doesn't reset a veteran player
+to a "generic old player" level — LeBron James (41→42) still projects
+high production because his BASELINE (his own recent seasons) is
+already high; the age adjustment only applies a marginal one-year
+discount, not a population ceiling. This is intentional: the
+player-specific baseline dominates, the age curve is the adjustment,
+not the starting point — same design principle as "history rules over
+age" in `injury_model.py`.
 
-## Modelo de sinergia de alineación (`src/lineup_synergy.py`)
+## Lineup synergy model (`src/lineup_synergy.py`)
 
-Ajusta el Game Score de equipo que usa `simulation.py` según qué tan bien
-encajan estadísticamente los jugadores que comparten cancha, en vez de
-sumar sus contribuciones como si fueran independientes.
+Adjusts the team Game Score used by `simulation.py` based on how well
+the players sharing the floor statistically fit together, instead of
+summing their contributions as if they were independent.
 
-**Limitación de datos:** este roster nunca ha compartido cancha — es
-hipotético para 2026-27. `nba_api` sí tiene un endpoint de estadísticas
-de alineaciones reales (`leaguedashlineups`), pero no sirve aquí: no hay
-minutos jugados juntos que consultar para jugadores que nunca coincidieron.
-Por eso el módulo NO mide sinergia empírica — la DERIVA de los perfiles
-estadísticos proyectados por `aging_curve.py` (uso, creación de juego,
-espaciado, presencia interior).
+**Data limitation:** this roster has never shared the floor together —
+it's hypothetical for 2026-27. `nba_api` does have a real-lineup stats
+endpoint (`leaguedashlineups`), but it doesn't help here: there are no
+shared minutes to query for players who never overlapped. So the
+module does NOT measure empirical synergy — it DERIVES it from the
+statistical profiles `aging_curve.py` projects (usage, playmaking,
+spacing, interior presence).
 
-**Tampoco usa `role_expected`** de `team_config.yaml` a propósito: la
-intención original del archivo (un comentario que el propio
-`resolve_player_ids.py --fill-config` termina borrando al reescribir el
-YAML) es que ese campo es descriptivo, no una entrada de cálculo. Los
-"roles" que usa este módulo salen de estadísticas reales de `nba_api`,
-no de una etiqueta de texto escrita a mano.
+**Also deliberately doesn't use `role_expected`** from
+`team_config.yaml`: the file's original intent (a comment that
+`resolve_player_ids.py --fill-config` itself ends up erasing when it
+rewrites the YAML) is that this field is descriptive, not a
+calculation input. The "roles" this module uses come from real
+`nba_api` stats, not a hand-written text label.
 
-**Dos efectos, ambos con fundamento en analítica pública de usage rate:**
+**Two effects, both grounded in public usage-rate analytics:**
 
-| Efecto | Qué mide | Fundamento |
+| Effect | What it measures | Basis |
 |---|---|---|
-| `usage_clash` | Penalización cuando 2+ jugadores de alto uso comparten cancha | La eficiencia de un jugador cae según sube su propio uso, y concentrar el uso en pocas estrellas beneficia a los jugadores de rol — lo contrario (varias estrellas de alto uso a la vez) genera fricción ("solo hay un balón") |
-| `playmaking_spacing_synergy` | Bonus cuando un creador de juego comparte cancha con un tirador | Sabiduría de básquet ampliamente aceptada — efecto "gravedad" de los tiradores abriendo líneas de penetración |
+| `usage_clash` | Penalty when 2+ high-usage players share the floor | A player's efficiency drops as their own usage rises, and concentrating usage in few stars benefits role players — the opposite (several high-usage stars at once) creates friction ("there's only one ball") |
+| `playmaking_spacing_synergy` | Bonus when a playmaker shares the floor with a shooter | Widely accepted basketball wisdom — shooters' "gravity" effect opening driving lanes |
 
-Ambos se ponderan por `pair_weight = min(minutes_i, minutes_j) / 48` —
-una aproximación de cuánto podrían compartir cancha, ya que no hay datos
-de rotación real para saber si dos jugadores concretos juegan a la vez o
-se turnan.
+Both are weighted by `pair_weight = min(minutes_i, minutes_j) / 48` —
+an approximation of how much they could share the floor, since there's
+no real rotation data to know whether two specific players play at the
+same time or in shifts.
 
-`compute_game_synergy_adjustment()` recalcula la sinergia
-**dinámicamente por partido** según quién está disponible ese día (un
-jugador lesionado no genera ni sufre clash/sinergia esa noche), vía una
-forma cuadrática vectorizada (`einsum`) — no bucles por partido.
+`compute_game_synergy_adjustment()` recomputes synergy
+**dynamically per game** based on who's available that day (an injured
+player neither generates nor suffers clash/synergy that night), via a
+vectorized quadratic form (`einsum`) — no per-game loops.
 
 ```bash
 python -c "from src.lineup_synergy import build_lineup_synergy_dataset; \
@@ -526,63 +525,61 @@ from src.config_loader import load_config; \
 print(build_lineup_synergy_dataset(load_config()))"
 ```
 
-Genera `data/processed/lineup_synergy_pairs.csv` (una fila por pareja de
-jugadores, ordenada de más sinérgica a más conflictiva). Tests en
-`tests/test_lineup_synergy.py` — no requieren red.
+Generates `data/processed/lineup_synergy_pairs.csv` (one row per pair
+of players, sorted from most synergistic to most conflicting). Tests
+in `tests/test_lineup_synergy.py` — no network required.
 
-**Resultado sobre el roster real:** la pareja más conflictiva es Jaylen
-Brown + Joel Embiid (`net_pair_score = -1.69`, dos perfiles de alto uso
-compitiendo por el balón), mientras que Tyrese Maxey + VJ Edgecombe
-encabeza la sinergia positiva (`+0.75`, creación de juego + espaciado
-complementarios). La suma total con el roster sano ronda **+6.5** en la
-tabla de parejas — que al aplicarse como forma cuadrática en
-`simulation.py` (cada pareja se cuenta dos veces por simetría) sube el
-Net Rating estimado medio de la simulación de ~1.7 a ~8.9: el roster
-tiene fricción real entre sus estrellas, pero la complementariedad del
-resto del roster la compensa de sobra.
+**Result on the real roster:** the most conflicting pair is Jaylen
+Brown + Joel Embiid (`net_pair_score = -1.69`, two high-usage profiles
+competing for the ball), while Tyrese Maxey + VJ Edgecombe leads
+positive synergy (`+0.75`, complementary playmaking + spacing). The
+total sum with the healthy roster is around **+6.5** in the pair table
+— which, applied as a quadratic form in `simulation.py` (each pair
+counted twice by symmetry), raises the simulation's mean estimated Net
+Rating from ~1.7 to ~8.9: the roster has real friction between its
+stars, but the rest of the roster's complementary fit more than
+compensates for it.
 
-## Motor de simulación Monte Carlo (`src/simulation.py`)
+## Monte Carlo simulation engine (`src/simulation.py`)
 
-La pieza final: consume las 6 señales de `src/context/` más la proyección
-de `aging_curve.py` y el ajuste de `lineup_synergy.py` para simular
-`simulation.n_seasons` (10 000 por defecto) temporadas hipotéticas de 82
-partidos.
+The final piece: consumes the 6 signals from `src/context/` plus
+`aging_curve.py`'s projection and `lineup_synergy.py`'s adjustment to
+simulate `simulation.n_seasons` (10,000 by default) hypothetical
+82-game seasons.
 
-**Limitación de datos clave:** el calendario real de la temporada del
-config puede no existir todavía (ver `schedule_strength.py` — a la fecha,
-`team_schedule.csv` solo tenía 2 partidos de pretemporada para 2026-27).
-No se puede simular contra un calendario que no existe, así que cada
-partido usa un **calendario sintético representativo**: el rival se
-muestrea de la distribución real de WinPCT de toda la liga
-(`prior_season_standings.csv`), y el back-to-back se sortea con una
-probabilidad configurable (~18% por defecto, aproximando la tasa típica
-de un calendario NBA moderno). Cuando la NBA publique el calendario
-completo, se puede sustituir la muestra sintética por el calendario real
-sin cambiar el resto del motor.
+**Key data limitation:** the config season's real schedule may not
+exist yet (see `schedule_strength.py` — as of this writing,
+`team_schedule.csv` only had 2 preseason games for 2026-27). You can't
+simulate against a schedule that doesn't exist, so each game uses a
+**representative synthetic schedule**: the opponent is sampled from the
+real league-wide WinPCT distribution (`prior_season_standings.csv`),
+and back-to-backs are drawn with a configurable probability (~18% by
+default, approximating a modern NBA schedule's typical rate). Once the
+NBA publishes the full schedule, the synthetic sample can be swapped
+for the real schedule without changing the rest of the engine.
 
-**Mecánica por temporada simulada:**
-1. **Disponibilidad** — por jugador, se sortea el nº de partidos
-   perdidos de una binomial negativa con media `risk_score * 82` (de
-   `injury_model.py`), agrupados en UN tramo contiguo — las lesiones
-   reales son una racha, no partidos sueltos al azar.
-2. **Contribución por partido** — Game Score por-36 de cada jugador (de
-   `aging_curve.py`) escalado a sus minutos proyectados, con
-   penalización de fatiga en back-to-backs y desgaste progresivo de
-   temporada (ambos proporcionales a `fatigue_score` de
-   `fatigue_accumulation.py`), más ruido de partido a partido.
-3. **Resultado** — Game Score de equipo menos un ajuste por fuerza de
-   rival, convertido a probabilidad de victoria vía función logística, y
-   sorteado como victoria/derrota.
+**Per simulated season mechanics:**
+1. **Availability** — for each player, the number of missed games is
+   drawn from a negative binomial with mean `risk_score * 82` (from
+   `injury_model.py`), grouped into ONE contiguous stretch — real
+   injuries are a streak, not random scattered games.
+2. **Per-game contribution** — each player's per-36 Game Score (from
+   `aging_curve.py`) scaled to their projected minutes, with a fatigue
+   penalty on back-to-backs and progressive season wear (both
+   proportional to `fatigue_score` from `fatigue_accumulation.py`),
+   plus game-to-game noise.
+3. **Outcome** — team Game Score minus an opponent-strength adjustment,
+   converted to a win probability via a logistic function, and drawn as
+   a win/loss.
 
-**Decisión de calibración que vale la pena documentar:** el Game Score de
-equipo (suma de jugadores) NO es un diferencial de puntos por sí solo —
-sin restar la línea base de un equipo "promedio", la primera versión de
-este motor proyectaba una temporada de **81-1**, señal clara de un bug de
-calibración, no de un equipo excelente. La corrección usa la propia
-calibración de Hollinger (un jugador promedio ronda ~10 de Game Score por
-36 minutos) para derivar esa línea base: `10 × 240/36 ≈ 66.7` (240 = 5
-posiciones × 48 minutos). Solo el EXCESO de Game Score de equipo sobre
-esa línea base se lee como net rating.
+**A calibration decision worth documenting:** team Game Score (sum of
+players) is NOT a point differential by itself — without subtracting an
+"average team" baseline, this engine's first version projected an
+**81-1** season, a clear sign of a calibration bug, not an excellent
+team. The fix uses Hollinger's own calibration (an average player is
+around ~10 Game Score per 36 minutes) to derive that baseline:
+`10 × 240/36 ≈ 66.7` (240 = 5 positions × 48 minutes). Only the EXCESS
+of team Game Score over that baseline is read as net rating.
 
 ```bash
 python -c "from src.simulation import build_simulation_dataset; \
@@ -590,165 +587,166 @@ from src.config_loader import load_config; \
 print(build_simulation_dataset(load_config()).describe())"
 ```
 
-Genera `data/processed/simulation_results.csv` (una fila por temporada
-simulada: `wins`, `losses`, `net_rating_estimate_mean`,
-`total_games_missed`). Requiere `aging_curve_projection.csv`,
-`injury_risk.csv`, `fatigue_risk.csv` y `prior_season_standings.csv` (los
-cuatro módulos anteriores ya corridos). Tests en `tests/test_simulation.py`
-— no requieren red.
+Generates `data/processed/simulation_results.csv` (one row per
+simulated season: `wins`, `losses`, `net_rating_estimate_mean`,
+`total_games_missed`). Requires `aging_curve_projection.csv`,
+`injury_risk.csv`, `fatigue_risk.csv`, and `prior_season_standings.csv`
+(the four previous modules already run). Tests in
+`tests/test_simulation.py` — no network required.
 
-**Resultado sobre el roster real (con `lineup_synergy.py` ya integrado):**
-el Net Rating estimado medio (≈8.9) cae en el mismo orden de magnitud que
-los 4 `historical_comparables` reales calculados por
-`performance_curve.py` (Heat 8.05, Warriors 11.39, Nets 4.43, Suns 2.07)
-— cerca del nivel de los Warriors 2016-17, el comparable más dominante —
-una señal de que la calibración no es descabellada. El promedio de
-victorias (~50.5 de 82) sigue siendo más discreto de lo que sugeriría el
-nombre "superequipo", porque el modelo toma en serio el riesgo de lesión
-real del roster — Embiid solo, con su `risk_score` de `injury_model.py`,
-proyecta perder en promedio más de 50 partidos por temporada simulada. El
-modelo no infla el resultado por tener estrellas; las penaliza por su
-historial real, y las recompensa (vía `lineup_synergy.py`) solo cuando su
-mezcla de habilidades realmente encaja.
+**Result on the real roster (with `lineup_synergy.py` already
+integrated):** the mean estimated Net Rating (≈8.9) lands in the same
+order of magnitude as the 4 real `historical_comparables` computed by
+`performance_curve.py` (Heat 8.05, Warriors 11.39, Nets 4.43, Suns
+2.07) — close to the 2016-17 Warriors' level, the most dominant
+comparable — a sign the calibration isn't unreasonable. The average win
+total (~50.5 of 82) is still more modest than the "superteam" label
+would suggest, because the model takes the roster's real injury risk
+seriously — Embiid alone, with his `injury_model.py` `risk_score`,
+projects losing on average more than 50 games per simulated season. The
+model doesn't inflate the result just for having stars; it penalizes
+them for their real history, and rewards them (via `lineup_synergy.py`)
+only when their skill mix genuinely fits.
 
-## Simulación de liga completa y playoffs (`src/league_simulation.py`)
+## Full league simulation and playoffs (`src/league_simulation.py`)
 
-`simulation.py` (arriba) enfrenta al equipo del config contra un WinPCT
-genérico de rival — no responde "¿le ganaríamos a los Celtics de
-verdad?" ni "¿llegaríamos a las Finales?". Este es un motor **distinto**
-que proyecta los 30 equipos reales de la NBA (con sus rosters actuales,
-no el hipotético de `team_config.yaml`) y los enfrenta entre sí
-directamente, con un calendario round-robin y un bracket completo de
-playoffs (play-in incluido, formato real de la NBA).
+`simulation.py` (above) pits the config's team against a generic
+opponent WinPCT — it doesn't answer "would we beat the real Celtics?"
+or "would we make the Finals?". This is a **different** engine that
+projects the 30 real NBA teams (with their current rosters, not
+`team_config.yaml`'s hypothetical one) and pits them against each other
+directly, with a round-robin schedule and a full playoff bracket
+(play-in included, real NBA format).
 
-**Por qué un motor distinto y no una extensión de `simulation.py`:**
-comparar el Game Score de un equipo real contra otro real no necesita la
-aproximación de "línea base de equipo promedio" que sí hace falta cuando
-el rival es un número abstracto (WinPCT genérico) — la línea base se
-cancela al comparar dos equipos reales directamente.
+**Why a different engine instead of extending `simulation.py`:**
+comparing one real team's Game Score against another real team's
+doesn't need the "average team baseline" approximation that's needed
+when the opponent is an abstract number (generic WinPCT) — the baseline
+cancels out when comparing two real teams directly.
 
-**Coste real, opt-in a propósito:** proyectar 30 equipos requiere el
-roster real de cada uno (~450 jugadores) y su historial de carrera —
-~900 llamadas nuevas a `stats.nba.com`, la ingesta más cara del
-proyecto (20-30+ min la primera vez, cacheada después). Por eso NO
-forma parte del pipeline normal:
+**Real cost, deliberately opt-in:** projecting 30 teams requires each
+one's real roster (~450 players) and career history — ~900 new calls to
+`stats.nba.com`, the project's most expensive ingestion (20-30+ min the
+first time, cached afterward). That's why it's NOT part of the normal
+pipeline:
 
 ```bash
-# Ingesta (opt-in, ver advertencia de coste arriba)
+# Ingestion (opt-in, see cost warning above)
 python src/data_pipeline.py --league
 
-# Proyectar los 30 equipos + simular temporada regular + playoffs
+# Project the 30 teams + simulate regular season + playoffs
 python -c "from src.league_simulation import build_league_simulation_dataset; \
 from src.config_loader import load_config; \
 print(build_league_simulation_dataset(load_config()))"
 ```
 
-**Cómo se proyecta un equipo cualquiera (`project_team_roster`):** misma
-`aging_curve`/`injury_model`/`fatigue_accumulation`/`lineup_synergy` de
-siempre, pero como los otros 29 equipos no tienen un
-`minutes_projection` curado a mano como el roster propio, los minutos se
-asumen como los minutos/partido REALES de la temporada más reciente de
-cada jugador (continuidad de rol) — una aproximación con datos, no
-inventada.
+**How any team gets projected (`project_team_roster`):** the same
+`aging_curve`/`injury_model`/`fatigue_accumulation`/`lineup_synergy` as
+always, but since the other 29 teams don't have a hand-curated
+`minutes_projection` like this project's own roster, minutes are
+assumed to be each player's REAL minutes/game from their most recent
+season (role continuity) — a data-driven approximation, not made up.
 
-**Calendario:** usa el calendario REAL publicado por la NBA
-(`data_pipeline.build_league_schedule_dataset`, dentro de `--league`,
-guardado en `league_schedule_full.csv`) cuando existe -- fechas,
-rivales, descanso (back-to-back real, no sorteado) y ventaja de campo
-(`home_court_advantage`, 2.41 puntos calibrados) reales.
-`league_simulation.real_schedule_to_games` convierte el calendario en
-una lista de partidos con el índice de partido SECUENCIAL de cada
-equipo dentro de su propia temporada -- a diferencia de un round-robin
-sintético, donde "el mismo día" implica que todos los equipos juegan a
-la vez, un calendario real no tiene esa propiedad (el descanso varía
-por equipo), así que cada equipo necesita su propio índice, no uno
-compartido. Limitación temporal real, documentada, no oculta: mientras
-la fase eliminatoria de la NBA Cup no se resuelve del todo, cada equipo
-tiene menos partidos que `games_per_season` (hoy 80 de 82) -- se usan
-tal cual, no se inventan los que faltan. Si `league_schedule_full.csv`
-no existe todavía (temporada sin calendario oficial publicado), cae a
-un round-robin sintético equilibrado (método clásico del círculo de
-torneos, cada equipo contra cada rival ~2-3 veces hasta sumar
-`games_per_season`) -- mismo criterio de "degradar, no fallar" que el
-resto del proyecto.
+**Schedule:** uses the REAL schedule published by the NBA
+(`data_pipeline.build_league_schedule_dataset`, inside `--league`,
+saved to `league_schedule_full.csv`) when it exists — real dates,
+opponents, rest (real back-to-backs, not sampled), and home-court
+advantage (`home_court_advantage`, calibrated at 2.41 points).
+`league_simulation.real_schedule_to_games` converts the schedule into a
+list of games with each team's SEQUENTIAL game index within its own
+season — unlike a synthetic round-robin, where "the same day" implies
+every team plays at once, a real schedule doesn't have that property
+(rest varies by team), so each team needs its own index, not a shared
+one. Real, documented, not-hidden temporal limitation: while the NBA
+Cup knockout stage isn't fully resolved, each team has fewer games than
+`games_per_season` (currently 80 of 82) — they're used as-is, the
+missing ones aren't invented. If `league_schedule_full.csv` doesn't
+exist yet (a season without an official published schedule), it falls
+back to a balanced synthetic round-robin (classic circle-method
+tournament scheduling, each team against each opponent ~2-3 times until
+reaching `games_per_season`) — the same "degrade, don't fail"
+criterion as the rest of the project.
 
-**Playoffs — formato real, con simplificaciones documentadas:**
-play-in real (7 vs 8, perdedor vs ganador de 9 vs 10), bracket 1v8/4v5/
-3v6/2v7 pero SIN re-seeding entre rondas, series a mejor-de-7, sin
-back-to-backs. La disponibilidad **sí** se sortea en playoffs (Bernoulli
-por partido con la misma `risk_score` de la temporada regular); lo único
-que no se replica es el tramo *contiguo* de lesión, porque en series de
-4-7 partidos la diferencia entre racha y sorteo por partido es pequeña.
+**Playoffs — real format, with documented simplifications:** real
+play-in (7 vs 8, loser vs winner of 9 vs 10), 1v8/4v5/3v6/2v7 bracket
+but WITHOUT re-seeding between rounds, best-of-7 series, no
+back-to-backs. Availability **is** still sampled in the playoffs
+(per-game Bernoulli with the same regular-season `risk_score`); the
+only thing not replicated is the *contiguous* injury stretch, because
+in 4-7 game series the difference between a streak and a per-game draw
+is small.
 
-> **Esto antes era un bug, no una simplificación.** El modelo asumía
-> roster a plena salud en playoffs, justificado como "beneficio marginal".
-> No lo era: producía que un equipo con **peor** temporada regular fuese
-> **más** favorito al título. Caso real (2026-27): San Antonio ganaba 56.4
-> partidos —el mejor de la liga— con 10.8% de título, mientras Philadelphia
-> ganaba 45.5 con **23.7%**. La razón: PHI pierde el 31% de su producción
-> por lesiones (Embiid, riesgo 0.65) frente al 17.9% de SAS, así que era
-> castigado los 82 partidos y luego llegaba a playoffs milagrosamente sano.
-> Corregido: SAS 10.8% → **37.9%**, PHI 23.7% → **3.3%**, y la correlación
-> entre victorias de temporada regular y probabilidad de título subió a
-> **0.683**. Lección: que una simplificación esté *documentada* no
-> demuestra que su efecto sea marginal — hay que medirlo.
+> **This used to be a bug, not a simplification.** The model assumed a
+> fully healthy roster in the playoffs, justified as a "marginal
+> benefit." It wasn't: it produced a team with a **worse** regular
+> season being **more** favored for the title. Real case (2026-27): San
+> Antonio won 56.4 games — best in the league — with a 10.8% title
+> chance, while Philadelphia won 45.5 with **23.7%**. The reason: PHI
+> loses 31% of its production to injuries (Embiid, 0.65 risk) vs. SAS's
+> 17.9%, so it got penalized for all 82 games and then reached the
+> playoffs miraculously healthy. Fixed: SAS 10.8% → **37.9%**, PHI
+> 23.7% → **3.3%**, and the correlation between regular-season wins and
+> title probability rose to **0.683**. Lesson: a simplification being
+> *documented* doesn't prove its effect is marginal — it has to be
+> measured.
 
-También se corrigió un bug en las métricas por ronda: estaban desplazadas
-una ronda (`conf_semis_pct` contaba a los que *ganaron* las semifinales)
-y `conf_finals_pct` era idéntica a `finals_pct` en los 30 equipos. Ahora
-las probabilidades decrecen monotónicamente, que es el chequeo de sanidad
-evidente: playoffs ≥ semis ≥ finales de conferencia ≥ Finales ≥ título.
+A bug in the per-round metrics was also fixed: they were shifted by one
+round (`conf_semis_pct` counted teams that *won* the semifinals) and
+`conf_finals_pct` was identical to `finals_pct` across all 30 teams.
+Probabilities now decrease monotonically, which is the obvious sanity
+check: playoffs ≥ semis ≥ conference finals ≥ Finals ≥ title.
 
-**Ventaja de campo** (añadida tras medirla en los datos reales): el
-modelo no la tenía en absoluto. Medida sobre 15 temporadas: **+2.41
-puntos en casa** en temporada regular (57.4% de victorias locales) y
-**+3.98 en playoffs** (60.3%). Ahora se aplica en la temporada regular
-(exactamente 41 partidos en casa y 41 fuera) y en playoffs con el formato
-real **2-2-1-1-1** — el mejor seed es local en los partidos 1, 2, 5 y 7.
-Un detalle que no es obvio: a partir de semifinales el mejor seed no es
-necesariamente el primero del emparejamiento (si el 8 elimina al 1), así
-que la sede se decide por el seed real; y en las Finales manda el mejor
-récord de la liga, no el seed de conferencia.
+**Home-court advantage** (added after measuring it in real data): the
+model didn't have it at all. Measured over 15 seasons: **+2.41 points
+at home** in the regular season (57.4% home win rate) and **+3.98 in
+the playoffs** (60.3%). Now applied in the regular season (exactly 41
+home games and 41 away) and in the playoffs with the real
+**2-2-1-1-1** format — the higher seed hosts games 1, 2, 5, and 7. A
+non-obvious detail: from the semifinals onward the higher seed isn't
+necessarily the first one listed in the matchup (if the 8 upsets the
+1), so home court is decided by the real seed; and in the Finals it's
+the league's best record that decides, not conference seed.
 
-### Validación contra los campeones reales, y una limitación medida
+### Validation against real champions, and a measured limitation
 
-Comparando de qué seed salen los campeones reales frente a los simulados
-(ver la sub-pestaña **Campeones reales** del dashboard):
+Comparing which seed real champions come from vs. simulated ones (see
+the dashboard's **Campeones reales** sub-tab):
 
-| | Real (16 temporadas) | Simulado |
+| | Real (16 seasons) | Simulated |
 |---|---|---|
-| Campeón desde seed 1 | 56% | 47.6% |
-| Campeón desde seed 1-3 | **100%** | 75.5% |
-| Campeón desde **seed ≥4** | **0%** | **24.5%** |
+| Champion from seed 1 | 56% | 47.6% |
+| Champion from seed 1-3 | **100%** | 75.5% |
+| Champion from **seed ≥4** | **0%** | **24.5%** |
 
-En 16 temporadas reales **ningún** campeón salió de un seed peor que el
-3 (16 de 16). El simulador reparte títulos a seeds bajos un 24.5% de las veces (la
-ventaja de campo solo lo bajó de 27.0%). La causa **no** son los partidos
-—medidos, son incluso más deterministas que la realidad (escala efectiva
-4.25 puntos frente a 7.23 real)— sino el **seeding**:
+Across 16 real seasons, **no** champion came from a seed worse than 3
+(16 of 16). The simulator hands out titles to low seeds 24.5% of the
+time (home-court advantage only brought it down from 27.0%). The cause
+is **not** the games — measured, they're actually even more
+deterministic than reality (effective scale 4.25 points vs. 7.23 real)
+— it's the **seeding**:
 
-| | Talento (diferencias entre equipos) | Ruido (variación por temporada) | Señal/ruido |
+| | Talent (between-team differences) | Noise (season-to-season variation) | Signal/noise |
 |---|---|---|---|
-| Real | 11.27 victorias | 4.53 | **2.49** |
-| Modelo | 6.52 | 7.70 | **0.85** |
+| Real | 11.27 wins | 4.53 | **2.49** |
+| Model | 6.52 | 7.70 | **0.85** |
 
-El modelo comprime las diferencias de talento a la mitad y casi duplica
-el ruido, así que en cualquier temporada simulada el seeding sale casi
-sorteado. Lo interesante es que **el talento comprimido no es un error de
-predicción**: la proyección regresa a la media porque eso es lo que
-minimiza el error (MAE 7.75). El fallo es usar esa estimación regresada
-*como si fuera el talento verdadero* al simular — confundir la
-distribución predictiva con una simulación "plug-in". Arreglarlo bien
-exige separar incertidumbre de estimación de ruido de temporada, un
-cambio arquitectónico; y bajar el ruido sin más estrecharía las bandas
-P10-P90 y empeoraría la calibración del backtesting. **Se documenta
-medido en vez de forzar los parámetros para que el resultado se vea
-bien** — el error que este proyecto ya cometió una vez.
+The model compresses talent differences by half and nearly doubles the
+noise, so in any simulated season the seeding comes out almost drawn at
+random. The interesting part is that **the compressed talent isn't a
+prediction error**: the projection regresses to the mean because that's
+what minimizes error (MAE 7.75). The flaw is using that regressed
+estimate *as if it were the true talent* when simulating — confusing
+the predictive distribution with a "plug-in" simulation. Fixing it
+properly requires separating estimation uncertainty from season noise,
+an architectural change; and simply lowering the noise would narrow
+the P10-P90 bands and worsen backtesting calibration. **It's documented
+as measured instead of forcing the parameters to make the result look
+good** — the mistake this project already made once before.
 
-## Campeones reales: contexto y validación (`src/champion_profiles.py`)
+## Real champions: context and validation (`src/champion_profiles.py`)
 
-Análisis **descriptivo** de los campeones reales, reutilizando los datos
-del backtest sweep (no descarga nada nuevo):
+**Descriptive** analysis of real champions, reusing backtest sweep data
+(doesn't download anything new):
 
 ```bash
 python -c "from src.champion_profiles import build_champion_analysis_dataset; \
@@ -756,128 +754,124 @@ from src.config_loader import load_config; \
 build_champion_analysis_dataset(load_config())"
 ```
 
-- **Camino al título** (`champion_title_paths.csv`): seed de salida,
-  récord de temporada regular, y los rivales eliminados en orden con su
-  seed. Ejemplo real: *OKC 2024-25, seed 1, 68 victorias, 8 → 4 → 6 → 4*.
-- **Composición del roster** (`champion_roster_profiles.csv`): reparto de
-  minutos por posición, experiencia y edad ponderadas por minutos, y qué
-  % de los minutos se concentra en las 2 estrellas. Los 16 campeones
-  promedian ~25% de minutos en sus dos jugadores más usados, ~7
-  años de experiencia y ~29 años de edad.
-- **Trayectoria de seed** (`champion_seed_trajectories.csv`): puesto de
-  cada franquicia en su conferencia, temporada a temporada.
+- **Title path** (`champion_title_paths.csv`): starting seed,
+  regular-season record, and the opponents eliminated in order with
+  their seed. Real example: *OKC 2024-25, seed 1, 68 wins, 8 → 4 → 6 →
+  4*.
+- **Roster composition** (`champion_roster_profiles.csv`): minutes
+  breakdown by position, minutes-weighted experience and age, and what
+  % of minutes is concentrated in the 2 stars. The 16 champions average
+  ~25% of minutes in their two most-used players, ~7 years of
+  experience, and ~29 years of age.
+- **Seed trajectory** (`champion_seed_trajectories.csv`): each
+  franchise's standing in its conference, season by season.
 
-> **Descriptivo, no predictivo.** Son 16 campeones: cualquier "receta de
-> título" que se extraiga de ahí tiene una muestra de 16. Este proyecto
-> ya se equivocó una vez sacando una conclusión fuerte de 4 casos (ver
-> arriba). La parte que **sí** es estadísticamente sólida es la
-> validación de seeds: **0 de 16** campeones desde seed 4+ es una
-> restricción real contra la que medir el simulador.
+> **Descriptive, not predictive.** These are 16 champions: any "title
+> recipe" drawn from that has a sample of 16. This project already got
+> burned once drawing a strong conclusion from 4 cases (see above). The
+> part that **is** statistically solid is the seed validation: **0 of
+> 16** champions from seed 4+ is a real constraint to measure the
+> simulator against.
 
-Dato de paridad reciente: en las 16 temporadas hay **12 franquicias
-campeonas distintas**, y las **últimas 8 temporadas tuvieron 8 campeones
-diferentes** (TOR, LAL, MIL, GSW, DEN, BOS, OKC, NYK) — una racha de
-paridad sin precedentes.
+Recent parity data point: across the 16 seasons there are **12
+different champion franchises**, and the **last 8 seasons had 8
+different champions** (TOR, LAL, MIL, GSW, DEN, BOS, OKC, NYK) — an
+unprecedented parity streak.
 
-> **Cobertura de temporadas.** El sweep debe llegar hasta la temporada
-> completa más reciente (la que usan las proyecciones como base). Se
-> quedó una corto —hasta 2024-25 cuando ya existía 2025-26— y eso dejaba
-> al campeón más reciente fuera del análisis y de la calibración, aunque
-> sus estadísticas individuales sí estuvieran. Hay un test
-> (`test_backtest_sweep_includes_the_most_recent_completed_season`) que
-> lo comprueba contra `config["team"]["season"]`, para que no vuelva a
-> pasar al avanzar de temporada.
+> **Season coverage.** The sweep needs to reach the most recently
+> completed full season (the one projections use as a base). It fell
+> one short — up to 2024-25 when 2025-26 already existed — which left
+> the most recent champion out of the analysis and calibration, even
+> though its individual stats were already in. There's a test
+> (`test_backtest_sweep_includes_the_most_recent_completed_season`)
+> that checks this against `config["team"]["season"]`, so it doesn't
+> happen again as the season advances.
 
-Genera `data/processed/league_regular_season_summary.csv` (victorias
-medias de los 30 equipos), `data/processed/league_playoff_summary.csv`
-(% de veces que cada equipo hace playoffs / llega a cada ronda / gana el
-título) y `data/processed/league_player_projections.csv` (proyección
-individual de los ~450 jugadores de la liga) — visibles en la pestaña
-"Liga y Playoffs" del dashboard, con un selector para navegar cualquiera
-de los 30 equipos. Tests en `tests/test_league_simulation.py` — no
-requieren red (usan proyecciones de equipo sintéticas).
+Generates `data/processed/league_regular_season_summary.csv` (30
+teams' average wins), `data/processed/league_playoff_summary.csv`
+(% of times each team makes the playoffs / reaches each round / wins
+the title) and `data/processed/league_player_projections.csv`
+(individual projection for the league's ~450 players) — visible in the
+dashboard's "Liga y Playoffs" tab, with a selector to browse any of the
+30 teams. Tests in `tests/test_league_simulation.py` — no network
+required (they use synthetic team projections).
 
-**Bug real encontrado al correr contra los 30 equipos reales:**
-`simulate_playoffs_once` pasaba las 15 seeds completas de cada
-conferencia a `resolve_play_in()` (que exige exactamente 10 — en la NBA
-real los seeds 11-15 quedan eliminados de la temporada regular). Los
-tests originales usaban conferencias de 10 equipos cada una por
-simplicidad, lo que ocultó el bug hasta correr con datos reales (15 por
-conferencia). Arreglado, con un test de regresión que usa 15 equipos por
-conferencia a propósito.
+**Real bug found running against the 30 real teams:**
+`simulate_playoffs_once` passed each conference's full 15 seeds to
+`resolve_play_in()` (which requires exactly 10 — in the real NBA seeds
+11-15 are eliminated from the regular season). The original tests used
+10-team conferences for simplicity, which hid the bug until running
+against real data (15 per conference). Fixed, with a regression test
+that deliberately uses 15 teams per conference.
 
-**Segundo bug real, más importante, encontrado por inspección manual de
-los resultados:** al revisar la clasificación, saltaban resultados
-imposibles de justificar baloncestísticamente — Oklahoma City (uno de
-los núcleos más fuertes de la liga) casi último del Oeste, Boston y los
-Knicks fuera de playoffs. La causa: `project_team_roster()` asigna a
-cada jugador sus minutos/partido REALES de la temporada más reciente,
-pero nunca se normalizaba la SUMA de esos minutos por equipo a los 240
-minutos que existen de verdad en un partido (5 posiciones × 48 min). Un
-roster con rotación históricamente profunda podía sumar muy por encima
-de eso — Utah llegaba a sumar **449 minutos "en bruto"** (casi el doble
-de lo posible) y por eso lideraba las probabilidades de título, mientras
-OKC (262 minutos sumados, más ajustado a la realidad) salía penalizado
-en la comparación pese a tener individualmente el núcleo más fuerte.
-Arreglado escalando los minutos de cada jugador para que el total del
-equipo sume exactamente 240, preservando las proporciones relativas
-dentro del roster — con test de regresión (`test_project_team_roster_normalizes_total_minutes_to_240`).
+**Second real bug, more important, found by manually inspecting the
+results:** reviewing the standings, results kept popping up that made
+no basketball sense — Oklahoma City (one of the league's strongest
+cores) nearly last in the West, Boston and the Knicks out of the
+playoffs. The cause: `project_team_roster()` assigns each player their
+REAL minutes/game from their most recent season, but the team-level SUM
+of those minutes was never normalized to the 240 minutes that actually
+exist in a game (5 positions × 48 min). A roster with a historically
+deep rotation could sum well above that — Utah reached **449 "raw"
+minutes** (almost double what's possible) and so led title odds, while
+OKC (262 summed minutes, closer to reality) came out penalized in the
+comparison despite individually having the strongest core. Fixed by
+scaling each player's minutes so the team total sums to exactly 240,
+preserving relative proportions within the roster — with a regression
+test (`test_project_team_roster_normalizes_total_minutes_to_240`).
 
-**Tercer bug real, encontrado por revisión manual del usuario de las
-estadísticas individuales:** el fix anterior (escalar TODO el roster a
-240) tenía un efecto colateral no previsto — diluía a las ESTRELLAS
-reales en rosters con mucho movimiento de plantilla. Luka Dončić (~35.8
-min/partido reales en los Lakers) terminaba proyectado a solo 26.98,
-porque varios suplentes de fondo de plantilla (jugadores con 1-15
-partidos jugados por lesiones/llamados de two-way, no por mérito real)
-inflaban la suma bruta del equipo (318 minutos) y esa dilución se
-repartía por igual entre todos, estrella incluida. **Arreglado
-restringiendo la normalización a una rotación realista**: solo los 10
-jugadores con más minutos "en bruto" (`rotation_size`, configurable)
-participan en la normalización a 240; el resto del roster queda en 0
-minutos — no diluyen la asignación real. Con esto, la rotación real de
-los Lakers (top 10) ya sumaba ~257.5 en bruto, muy cerca de 240, y Luka
-queda en un realista ~33.3 min/partido. Test de regresión:
+**Third real bug, found by the user's manual review of individual
+stats:** the previous fix (scaling the ENTIRE roster to 240) had an
+unforeseen side effect — it diluted real STARS on rosters with heavy
+roster churn. Luka Dončić (~35.8 real min/game on the Lakers) ended up
+projected at only 26.98, because several deep-bench players (1-15
+games played due to injuries/two-way call-ups, not real merit) inflated
+the team's raw sum (318 minutes) and that dilution was spread evenly
+across everyone, star included. **Fixed by restricting normalization to
+a realistic rotation**: only the 10 players with the most "raw" minutes
+(`rotation_size`, configurable) participate in the normalization to
+240; the rest of the roster stays at 0 minutes — they don't dilute the
+real allocation. With this, the Lakers' real rotation (top 10) already
+summed to ~257.5 raw, very close to 240, and Luka lands at a realistic
+~33.3 min/game. Regression test:
 `test_project_team_roster_does_not_dilute_star_minutes_with_bench_churn`.
 
-**Resultado sobre la liga real, tras los dos arreglos:** Oklahoma City
-lidera claramente las probabilidades de título (30.8%) y San Antonio
-lidera victorias medias (56.0) — ambos coherentes con su percepción real
-como núcleos top de la liga. Utah, con un roster joven en reconstrucción,
-cae a un realista 31.9 de victorias medias (antes lideraba título con el
-bug). Chicago, que antes lideraba irrealmente el Este, ahora es un
-equipo de mitad de tabla razonable (3º, 45.8 victorias medias, detrás de
-Orlando y Atlanta). Los 76ers del config quedan con 64.3% de probabilidad
-de playoffs y 16.8% de título.
+**Result on the real league, after both fixes:** Oklahoma City clearly
+leads title odds (30.8%) and San Antonio leads average wins (56.0) —
+both consistent with their real-world perception as top league cores.
+Utah, with a young rebuilding roster, drops to a realistic 31.9 average
+wins (it used to lead the title odds under the bug). Chicago, which
+used to unrealistically lead the East, is now a reasonable mid-table
+team (3rd, 45.8 average wins, behind Orlando and Atlanta). The config's
+76ers end up with a 64.3% playoff probability and 16.8% title chance.
 
-## Backtesting contra comparables históricos (`src/backtesting.py`)
+## Backtesting against historical comparables (`src/backtesting.py`)
 
-La validación real del proyecto: corre el motor completo
-(`aging_curve` + `injury_model` + `fatigue_accumulation` +
-`lineup_synergy` + `simulation`) **retrospectivamente** sobre los 4
-`historical_comparables`, con su roster y calendario **reales** — no el
-roster hipotético de `team_config.yaml` ni el calendario sintético
-muestreado.
+The project's real validation: runs the full engine (`aging_curve` +
+`injury_model` + `fatigue_accumulation` + `lineup_synergy` +
+`simulation`) **retrospectively** over the 4 `historical_comparables`,
+with their **real** roster and schedule — not `team_config.yaml`'s
+hypothetical roster nor a sampled synthetic schedule.
 
-**Regla de no look-ahead (la más importante del módulo):** cada
-proyección de un jugador histórico solo puede usar sus temporadas
-*anteriores* a la que se está prediciendo — nunca la temporada del caso
-ni las posteriores. `filter_seasons_before()` es el único punto de
-entrada a los datos de carrera de un jugador en todo el módulo. La edad
-real del jugador esa temporada y sus minutos/partido reales sí se usan
-como insumos externos (igual que `minutes_projection` en el config para
-el roster hipotético) — lo que el modelo predice es rendimiento, riesgo y
-desgaste, no la asignación de minutos.
+**No-look-ahead rule (the module's most important one):** each
+historical player's projection can only use their seasons *before* the
+one being predicted — never the case's own season or later ones.
+`filter_seasons_before()` is the sole entry point to a player's career
+data across the entire module. The player's real age that season and
+their real minutes/game ARE used as external inputs (the same way
+`minutes_projection` is for the hypothetical roster in the config) —
+what the model predicts is performance, risk, and wear, not the minutes
+allocation.
 
-**Ventaja metodológica sobre la simulación hacia delante:** como estas
-temporadas ya se jugaron, se construye el calendario REAL (rival de cada
-partido, back-to-backs reales, resueltos igual que en
-`opponent_weighting.py`) en vez de muestrear uno sintético.
+**Methodological advantage over forward simulation:** since these
+seasons already happened, the REAL schedule is built (each game's
+opponent, real back-to-backs, resolved the same way as in
+`opponent_weighting.py`) instead of sampling a synthetic one.
 
-Esto requirió extender `data_pipeline.py` con un endpoint nuevo
-(`CommonTeamRoster`) y descargar career stats reales de ~60 jugadores de
-los 4 equipos históricos — mucho más volumen de llamadas a la API que
-cualquier módulo anterior.
+This required extending `data_pipeline.py` with a new endpoint
+(`CommonTeamRoster`) and downloading real career stats for ~60 players
+across the 4 historical teams — far more API call volume than any
+previous module.
 
 ```bash
 python -c "from src.backtesting import build_backtest_dataset; \
@@ -885,569 +879,565 @@ from src.config_loader import load_config; \
 print(build_backtest_dataset(load_config()))"
 ```
 
-Genera `data/processed/backtest_summary.csv` (una fila por caso: víctorias
-reales, distribución simulada, y en qué percentil de esa distribución cae
-el resultado real). Requiere los datasets de comparables históricos +
-rosters (correr `data_pipeline.py` primero). Tests en
-`tests/test_backtesting.py` — no requieren red.
+Generates `data/processed/backtest_summary.csv` (one row per case: real
+wins, simulated distribution, and which percentile of that distribution
+the real result falls in). Requires the historical comparables +
+rosters datasets (run `data_pipeline.py` first). Tests in
+`tests/test_backtesting.py` — no network required.
 
-### Resultado real, y cómo cambió al calibrar el modelo
+### Real result, and how it changed after calibrating the model
 
-**Primera lectura (modelo sin calibrar).** Con los parámetros originales,
-los 4 casos daban esto:
+**First reading (uncalibrated model).** With the original parameters,
+the 4 cases gave this:
 
-| Caso | Victorias reales | Mediana simulada | Percentil real |
+| Case | Real wins | Simulated median | Real percentile |
 |---|---|---|---|
 | Miami Heat 2010-11 | 58 | 68 | 7.7% |
 | Golden State Warriors 2016-17 | 67 | 70 | 33.9% |
 | Brooklyn Nets 2020-21 | 48 | 67 | **0.25%** |
 | Phoenix Suns 2022-23 | 45 | 74 | **0.05%** |
 
-3 de 4 casos sobreestimados de forma extrema. La lectura natural —y la
-que este README defendió durante un tiempo— era que el modelo capturaba
-el techo de talento pero no la **fricción humana** de los superequipos
-(ego, jerarquía, integración), y que esa brecha era el hallazgo central
-del proyecto.
+3 of 4 cases extremely overestimated. The natural reading — and the one
+this README defended for a while — was that the model captured the
+talent ceiling but not the **human friction** of superteams (ego,
+hierarchy, integration), and that this gap was the project's central
+finding.
 
-**Segunda lectura (tras el backtesting sistemático).** Al ampliar el
-backtesting de 4 casos a 450 (30 equipos × 15 temporadas) aparecieron
-tres bugs de calibración reales —ver la sección siguiente— que hacían que
-el modelo sobreestimase a **todos** los equipos, no solo a los
-superequipos. Corregidos, los mismos 4 casos quedan así:
+**Second reading (after systematic backtesting).** Scaling backtesting
+from 4 cases to 450 (30 teams × 15 seasons) surfaced three real
+calibration bugs — see the next section — that caused the model to
+overestimate **every** team, not just superteams. Fixed, the same 4
+cases come out like this:
 
-| Caso | Victorias reales | Media simulada | Percentil real |
+| Case | Real wins | Simulated mean | Real percentile |
 |---|---|---|---|
-| Miami Heat 2010-11 | 58 | 47.6 | 97.9% (sub-estimado) |
-| Golden State Warriors 2016-17 | 67 | 56.9 | 98.9% (sub-estimado) |
-| Brooklyn Nets 2020-21 | 48 | 47.9 | **52.7%** (casi exacto) |
-| Phoenix Suns 2022-23 | 45 | 50.9 | 18.8% (leve sobre-estimación) |
+| Miami Heat 2010-11 | 58 | 47.6 | 97.9% (underestimated) |
+| Golden State Warriors 2016-17 | 67 | 56.9 | 98.9% (underestimated) |
+| Brooklyn Nets 2020-21 | 48 | 47.9 | **52.7%** (nearly exact) |
+| Phoenix Suns 2022-23 | 45 | 50.9 | 18.8% (slight overestimation) |
 
-El patrón se invierte: los dos superequipos que **de verdad rindieron**
-(Heat 58 victorias, Warriors 67) quedan ahora *subestimados*, y los dos
-con fricción documentada (Nets, Suns) caen en percentiles razonables.
+The pattern flips: the two superteams that **actually performed**
+(Heat 58 wins, Warriors 67) are now *underestimated*, and the two with
+documented friction (Nets, Suns) land in reasonable percentiles.
 
-**La conclusión honesta:** buena parte de aquel "hallazgo" era un
-**artefacto de calibración**, no evidencia de fricción de superequipo. El
-modelo sobreestimaba a todo el mundo por razones mecánicas (línea base
-fija frente a una liga que anota cada vez más, minutos de roster sin
-normalizar, y una escala Game Score→diferencial inventada). Sigue
-existiendo un sesgo residual de sobreestimación (≈3.5 victorias de media
-sobre los 450 casos), y sigue siendo cierto que el box score no captura
-química ni jerarquía — pero la evidencia ya **no** sostiene la afirmación
-fuerte de que los superequipos rinden sistemáticamente por debajo de su
-proyección.
+**The honest conclusion:** a good chunk of that "finding" was a
+**calibration artifact**, not evidence of superteam friction. The model
+overestimated everyone for mechanical reasons (a fixed baseline against
+a league that scores more every year, un-normalized roster minutes, and
+a made-up Game Score→differential scale). A residual overestimation
+bias still exists (≈3.5 wins on average across the 450 cases), and it's
+still true that the box score doesn't capture chemistry or hierarchy —
+but the evidence no longer supports the strong claim that superteams
+systematically underperform their projection.
 
-> Esto es, en sí mismo, el hallazgo metodológico más valioso del
-> proyecto: **con 4 puntos de datos era imposible distinguir "el modelo
-> tiene un sesgo mecánico" de "existe un fenómeno real de fricción"**.
-> Hicieron falta 450 casos para separarlos, y la respuesta fue
-> mayoritariamente la primera. Una muestra pequeña puede producir una
-> narrativa convincente y equivocada.
+> This is, in itself, the project's most valuable methodological
+> finding: **with 4 data points it was impossible to distinguish "the
+> model has a mechanical bias" from "there's a real friction
+> phenomenon"**. It took 450 cases to separate them, and the answer was
+> mostly the former. A small sample can produce a convincing and wrong
+> narrative.
 
-### Backtesting sistemático a gran escala (30 equipos × 16 temporadas)
+### Large-scale systematic backtesting (30 teams × 16 seasons)
 
-Los 4 `historical_comparables` de arriba son casos narrativos elegidos a
-mano ("superequipos" conocidos) — útiles para el hallazgo de fricción de
-vestuario de arriba, pero 4 puntos de datos no dicen si el motor funciona
-bien **en general**, solo con equipos de estrellas apiladas. Para
-responder eso, `config["backtest_sweep"]` genera automáticamente los 30
-equipos NBA para cada temporada de 2010-11 a 2025-26 (480 casos:
-contendientes, tanques, equipos mediocres — todo el espectro), vía
-`config_loader.resolve_backtest_sweep_cases()` (misma tabla estática de
-franquicias que `league_simulation.py`/`opponent_weighting.py` — el
-`team_id` de nba_api es estable a través de mudanzas/cambios de nombre).
+The 4 `historical_comparables` above are hand-picked narrative cases
+(well-known "superteams") — useful for the locker-room friction finding
+above, but 4 data points don't say whether the engine works well **in
+general**, only with stacked-star teams. To answer that,
+`config["backtest_sweep"]` automatically generates the 30 NBA teams for
+every season from 2010-11 to 2025-26 (480 cases: contenders, tankers,
+mediocre teams — the whole spectrum), via
+`config_loader.resolve_backtest_sweep_cases()` (the same static
+franchise table as `league_simulation.py`/`opponent_weighting.py` —
+nba_api's `team_id` is stable across relocations/name changes).
 
 ```bash
-# Ingesta (ADVERTENCIA: la más cara del proyecto -- del orden de miles de
-# llamadas a la API, 1.5-3 horas la primera vez; cacheada después)
+# Ingestion (WARNING: the project's most expensive — on the order of
+# thousands of API calls, 1.5-3 hours the first time; cached afterward)
 python src/data_pipeline.py --backtest-sweep
 
-# Simulación + resumen de calibración
+# Simulation + calibration summary
 python -c "from src.backtesting import build_backtest_sweep_dataset; \
 from src.config_loader import load_config; \
 build_backtest_sweep_dataset(load_config())"
 ```
 
-Genera `data/processed/backtest_sweep_summary.csv` (una fila por caso,
-mismo esquema que `backtest_summary.csv`) y
-`backtest_sweep_calibration.csv` (resumen agregado vía
-`backtesting.compute_calibration_summary()`): % de casos donde el
-resultado real cae dentro del rango P10-P90 simulado (debería rondar 80%
-en un modelo bien calibrado), percentil medio/mediano (debería rondar 50,
-sin sesgo sistemático), error medio en victorias (positivo = subestima,
-negativo = sobreestima — mismo signo que el hallazgo de fricción de
-vestuario de arriba, pero medido a escala de liga completa en vez de 4
-casos), y la correlación entre victorias reales y predichas (mide si el
-modelo al menos ORDENA bien a los equipos, aunque el nivel absoluto esté
-desplazado). Visualización en la pestaña Backtesting del dashboard:
-KPIs, histograma de percentiles y scatter de victorias reales vs.
-simuladas. Un caso individual con datos incompletos (hueco real en
-15 años de historia NBA) se salta con un aviso en vez de abortar el
-sweep completo — ver `backtesting._run_backtest_cases()`.
+Generates `data/processed/backtest_sweep_summary.csv` (one row per
+case, same schema as `backtest_summary.csv`) and
+`backtest_sweep_calibration.csv` (aggregated summary via
+`backtesting.compute_calibration_summary()`): % of cases where the real
+result falls within the simulated P10-P90 range (should be around 80%
+in a well-calibrated model), mean/median percentile (should be around
+50, no systematic bias), mean error in wins (positive = underestimate,
+negative = overestimate — same sign as the locker-room friction finding
+above, but measured at full-league scale instead of 4 cases), and the
+correlation between real and predicted wins (measures whether the
+model at least ORDERS teams well, even if the absolute level is
+shifted). Visualized in the dashboard's Backtesting tab: KPIs, a
+percentile histogram, and a real-vs-simulated wins scatter plot. An
+individual case with incomplete data (a real gap in 15 years of NBA
+history) is skipped with a warning instead of aborting the whole sweep
+— see `backtesting._run_backtest_cases()`.
 
-Reutiliza el mismo `run_backtest_case()` y la misma regla de no
-look-ahead que los 4 comparables narrativos — es el mismo motor, más
-casos, no un modelo distinto. Career stats de jugadores se descargan UNA
-vez por jugador único (no por caso) — un jugador que aparece en varios
-de los 450 casos (misma franquicia varias temporadas) reutiliza la
-misma carrera completa ya cacheada.
+Reuses the same `run_backtest_case()` and the same no-look-ahead rule
+as the 4 narrative comparables — it's the same engine, more cases, not
+a different model. Player career stats are downloaded ONCE per unique
+player (not per case) — a player who appears in several of the 450
+cases (same franchise across multiple seasons) reuses the same
+already-cached full career.
 
-### Lo que el sweep encontró: dos bugs de calibración
+### What the sweep found: two calibration bugs
 
-La primera corrida del sweep dio resultados malos con un patrón
-inconfundible: solo el **36.7%** de los casos caían dentro del rango
-P10-P90 (debería ser ~80%), el percentil real **mediano** era 4.5
-(debería ser ~50) y el error medio era de **-13.2 victorias**. El
-desglose por temporada reveló la causa:
+The sweep's first run gave bad results with an unmistakable pattern:
+only **36.7%** of cases fell within the P10-P90 range (should be
+~80%), the **median** real percentile was 4.5 (should be ~50), and the
+mean error was **-13.2 wins**. The breakdown by season revealed the
+cause:
 
-| Temporada | Media real | Media PREDICHA | Exceso |
+| Season | Real mean | PREDICTED mean | Excess |
 |---|---|---|---|
 | 2010-11 | 41.0 | 49.8 | +8.8 |
 | 2016-17 | 41.0 | 49.3 | +8.3 |
 | 2020-21 | 36.0 | 53.4 | +17.4 |
 | 2024-25 | 41.0 | **66.0** | **+25.0** |
 
-En una liga real de 30 equipos la media de victorias es *siempre*
-exactamente 41 en 82 partidos (cada victoria es la derrota de otro). El
-modelo violaba esa restricción de suma cero, y la violación **crecía
-monotónicamente con el tiempo**. Dos causas, ambas corregidas:
+In a real 30-team league the average number of wins is *always* exactly
+41 over 82 games (every win is another team's loss). The model violated
+that zero-sum constraint, and the violation **grew monotonically over
+time**. Two causes, both fixed:
 
-1. **Inflación de era.** El nivel de Game Score de la NBA subió de ~10.7
-   por-36 en 2010-11 a ~13.4 en 2024-25 (más ritmo, revolución del
-   triple), pero la línea base de comparación era una constante fija
-   (10.0). Un equipo *medio* de 2024-25 aparecía +22 puntos de Game Score
-   por encima de la referencia — mérito de su época, no suyo. La
-   correlación entre inflación de era y exceso de victorias predichas es
-   **0.926**. Corregido con
-   `aging_curve.compute_league_game_score_baseline()`: cada equipo se
-   compara contra la media de **su propia temporada**.
-2. **Minutos del roster sin normalizar.** El backtest sumaba el Game
-   Score de **todo** el roster (14-18 jugadores → 283-343 min/partido)
-   en vez de los 240 reales de un partido (5 posiciones × 48 min),
-   inflando la fuerza de cada equipo un 18-43% y castigando más a los
-   equipos con mucho movimiento de plantilla. Era exactamente el mismo
-   bug ya corregido en `league_simulation.py`, que `backtesting.py`
-   nunca había recibido. Corregido extrayendo la lógica a
-   `simulation.normalize_rotation_minutes()`, ahora **compartida** por
-   ambos módulos para que no pueda volver a divergir.
-3. **Escala Game Score → diferencial mal calibrada por ~3.5x.** El
-   parámetro `game_score_to_net_rating_scale` valía 1.0 con el comentario
-   *"1 punto de Game Score ≈ 1 punto de diferencial"* — una suposición
-   nunca verificada. Regresando el diferencial de puntos **real** (de los
-   game logs con `PLUS_MINUS` de los 450 casos) contra el Game Score
-   proyectado, normalizado y ajustado por era, la pendiente empírica es
-   **0.29**. El modelo amplificaba las diferencias entre equipos ~3.5x,
-   lo que también explica la sobreconfianza de las distribuciones.
+1. **Era inflation.** The NBA's Game Score level rose from ~10.7
+   per-36 in 2010-11 to ~13.4 in 2024-25 (more pace, the three-point
+   revolution), but the comparison baseline was a fixed constant
+   (10.0). An *average* 2024-25 team showed up +22 Game Score points
+   above the reference — a credit to its era, not to itself. The
+   correlation between era inflation and excess predicted wins is
+   **0.926**. Fixed with
+   `aging_curve.compute_league_game_score_baseline()`: each team is now
+   compared against the mean of **its own season**.
+2. **Un-normalized roster minutes.** The backtest summed the Game
+   Score of the **entire** roster (14-18 players → 283-343 min/game)
+   instead of a game's real 240 (5 positions × 48 min), inflating each
+   team's strength by 18-43% and penalizing teams with heavy roster
+   churn more. It was exactly the same bug already fixed in
+   `league_simulation.py`, which `backtesting.py` had never received.
+   Fixed by extracting the logic into
+   `simulation.normalize_rotation_minutes()`, now **shared** by both
+   modules so it can't diverge again.
+3. **Game Score → differential scale miscalibrated by ~3.5x.** The
+   `game_score_to_net_rating_scale` parameter was set to 1.0 with the
+   comment *"1 Game Score point ≈ 1 differential point"* — an
+   assumption never verified. Regressing the **real** point
+   differential (from the 450 cases' `PLUS_MINUS` game logs) against
+   the projected Game Score, normalized and era-adjusted, the empirical
+   slope is **0.29**. The model was amplifying between-team differences
+   ~3.5x, which also explains the distributions' overconfidence.
 
-Además, la línea base dejó de ser la media de los *jugadores* de la liga
-para pasar a ser **la media de los equipos proyectados** de esa temporada
-(`backtesting.compute_projected_league_baselines()`), que es lo único que
-satisface la restricción de suma cero por construcción: el equipo
-promedio queda exactamente en `net_rating = 0`.
+The baseline also stopped being the mean of the league's *players* and
+became **the mean of that season's projected teams**
+(`backtesting.compute_projected_league_baselines()`), which is the only
+thing that satisfies the zero-sum constraint by construction: the
+average team lands exactly at `net_rating = 0`.
 
-### Resultado de las correcciones (mismos casos)
+### Result of the fixes (same cases)
 
-| Métrica | Antes | Después | Ideal |
+| Metric | Before | After | Ideal |
 |---|---|---|---|
-| % dentro de P10-P90 | 36.7% | **55.3%** | ~80% |
-| Percentil real medio | 18.6 | **38.8** | ~50 |
-| Percentil real mediano | 4.5 | **30.2** | ~50 |
-| Error medio (victorias) | −13.2 | **−3.5** | ~0 |
-| Error absoluto medio | 15.0 | **7.75** | bajo |
-| Correlación real vs. predicho | 0.538 | **0.690** | alto |
+| % within P10-P90 | 36.7% | **55.3%** | ~80% |
+| Mean real percentile | 18.6 | **38.8** | ~50 |
+| Median real percentile | 4.5 | **30.2** | ~50 |
+| Mean error (wins) | −13.2 | **−3.5** | ~0 |
+| Mean absolute error | 15.0 | **7.75** | low |
+| Real vs. predicted correlation | 0.538 | **0.690** | high |
 
-Y el sesgo de era desapareció: el exceso de victorias predichas pasó de
-crecer de +5.8 (2012-13) a +25.0 (2024-25), a quedarse plano entre +1.6 y
-+4.6 en todas las temporadas.
+And the era bias disappeared: excess predicted wins went from growing
+from +5.8 (2012-13) to +25.0 (2024-25), to staying flat between +1.6
+and +4.6 across every season.
 
-Al ampliar el sweep de 450 a 480 casos (añadiendo 2025-26) las métricas
-quedaron prácticamente idénticas (55.4% dentro de P10-P90, MAE 7.78,
-correlación 0.690), lo que confirma que la calibración es estable y no
-dependía de qué temporadas concretas entraban.
+When the sweep was expanded from 450 to 480 cases (adding 2025-26), the
+metrics came out practically identical (55.4% within P10-P90, MAE 7.78,
+correlation 0.690), confirming the calibration is stable and didn't
+depend on which specific seasons were included.
 
-### Segunda ronda: NET_RATING + la suma cero de verdad
+### Second round: NET_RATING and true zero-sum
 
-Al integrar `NET_RATING` (ver la sección de estadísticas avanzadas) la
-correlación subió pero la **calibración empeoró**, lo que destapó un bug
-más profundo: la línea base violaba la restricción de suma cero por dos
-términos no centrados que hasta entonces se habían estado **cancelando
-por casualidad**.
+When `NET_RATING` was integrated (see the advanced stats section), the
+correlation rose but **calibration got worse**, which uncovered a
+deeper bug: the baseline violated the zero-sum constraint through two
+off-center terms that, until then, had been **canceling out by
+coincidence**.
 
-- La línea base usaba el Game Score del equipo a **plena salud** (88.7 de
-  media en 2024-25) mientras los equipos simulan con ausencias por lesión
-  (66.6): **−4.65** de net rating para el equipo promedio.
-- El ajuste de sinergia es **siempre positivo** (+4.4 a +11.9, media
-  +9.67) y se suma al net rating de todos los equipos por igual:
+- The baseline used the team's Game Score at **full health** (88.7
+  average in 2024-25) while simulated teams have injury absences
+  (66.6): **−4.65** net rating for the average team.
+- The synergy adjustment is **always positive** (+4.4 to +11.9,
+  average +9.67) and gets added to every team's net rating equally:
   **+9.67**.
-- Total: **+5.02** para el equipo *promedio*, cuando por definición debe
-  ser 0.
+- Total: **+5.02** for the *average* team, when it should be 0 by
+  definition.
 
-Con la escala antigua (0.29) esos dos daban −6.42 + 9.67 = **+3.25**, que
-explica casi exactamente el sesgo residual de −3.5 victorias que llevaba
-tiempo documentado como "sin explicar". Re-calibrar la escala a 0.21
-encogió el término negativo y destapó el positivo. Dos errores grandes de
-signo opuesto se veían como uno pequeño.
+With the old scale (0.29) those two came out to −6.42 + 9.67 = **+3.25**,
+which explains almost exactly the −3.5-win residual bias that had been
+documented for a while as "unexplained." Recalibrating the scale to
+0.21 shrank the negative term and uncovered the positive one. Two large
+errors of opposite sign looked like one small one.
 
-| Métrica | Antes | +NET_RATING | **+ suma cero** | Ideal |
+| Metric | Before | +NET_RATING | **+ zero-sum** | Ideal |
 |---|---|---|---|---|
-| % dentro de P10-P90 | 55.4% | 51.0% | **61.3%** | ~80% |
-| Percentil real medio | 30.0 | 30.0 | **52.1** | ~50 |
-| Percentil real mediano | 30.8 | 17.5 | **54.6** | ~50 |
-| Error medio (victorias) | −3.50 | −5.79 | **−0.04** | ~0 |
-| Error absoluto medio | 7.78 | 8.29 | **6.78** | bajo |
-| Correlación real vs. predicho | 0.690 | 0.734 | **0.750** | alto |
+| % within P10-P90 | 55.4% | 51.0% | **61.3%** | ~80% |
+| Mean real percentile | 30.0 | 30.0 | **52.1** | ~50 |
+| Median real percentile | 30.8 | 17.5 | **54.6** | ~50 |
+| Mean error (wins) | −3.50 | −5.79 | **−0.04** | ~0 |
+| Mean absolute error | 7.78 | 8.29 | **6.78** | low |
+| Real vs. predicted correlation | 0.690 | 0.734 | **0.750** | high |
 
-**Dónde queda el modelo:** con correlación **0.750** y MAE **6.78**,
-ahora **supera el baseline honesto en las dos métricas** (0.619 y 7.39) —
-antes solo lo superaba en correlación. El sesgo sistemático desapareció
-(−0.04 victorias) y la media simulada por temporada es exactamente 41,
-como manda la aritmética de una liga de 30 equipos.
+**Where the model stands:** with correlation **0.750** and MAE **6.78**,
+it now **beats the honest baseline on both metrics** (0.619 and 7.39) —
+before it only beat it on correlation. The systematic bias disappeared
+(−0.04 wins) and the simulated mean per season is exactly 41, as the
+arithmetic of a 30-team league demands.
 
-### Referencias empíricas obtenidas (útiles para calibrar a futuro)
+### Empirical references obtained (useful for future calibration)
 
-De la regresión sobre los 450 casos con datos reales:
+From the regression over the 450 real-data cases:
 
-| Referencia | Valor |
+| Reference | Value |
 |---|---|
-| 1 punto de diferencial real = | **2.48 victorias** en 82 partidos |
-| corr(diferencial real, % victorias) | **0.966** (techo teórico, ya conocido el resultado) |
-| corr(diferencial del año ANTERIOR, % victorias) | **0.619**, MAE 7.39 victorias |
+| 1 real differential point = | **2.48 wins** over 82 games |
+| corr(real differential, win %) | **0.966** (theoretical ceiling, outcome already known) |
+| corr(PRIOR year's differential, win %) | **0.619**, MAE 7.39 wins |
 
-Ese último es el **baseline honesto**: lo que consigue el pronóstico más
-tonto posible (*"asume que el equipo rendirá como el año pasado"*).
-Cualquier modelo de proyección que no lo supere no está aportando nada.
+That last one is the **honest baseline**: what the dumbest possible
+forecast gets you (*"assume the team will perform like last year"*).
+Any projection model that doesn't beat it isn't adding anything.
 
-### Estadísticas avanzadas: ¿mejoran el pronóstico?
+### Advanced stats: do they improve the forecast?
 
-Investigado sobre los mismos 450 casos, con `leaguedashplayerstats`
-(measure type *Advanced*) de las 15 temporadas — 15 llamadas a la API,
-barato, porque cada una devuelve toda la liga de golpe. Se agregó cada
-métrica por roster ponderando por minutos, usando **solo la temporada
-anterior** (misma regla de no look-ahead) y ajustando por era:
+Investigated over the same 450 cases, with `leaguedashplayerstats`
+(measure type *Advanced*) across the 15 seasons — 15 API calls, cheap,
+because each one returns the whole league at once. Each metric was
+aggregated per roster weighted by minutes, using **only the prior
+season** (same no-look-ahead rule) and era-adjusted:
 
-| Métrica (temporada anterior, ajustada por era) | corr. con diferencial real |
+| Metric (prior season, era-adjusted) | corr. with real differential |
 |---|---|
 | `NET_RATING` | **+0.635** |
 | `PIE` (Player Impact Estimate) | **+0.624** |
 | `OFF_RATING` | +0.585 |
 | `TS_PCT` | +0.524 |
-| **Game Score (lo que usa el modelo hoy)** | **+0.529** |
-| `DEF_RATING` | −0.396 (negativo = correcto: menos es mejor) |
+| **Game Score (what the model uses today)** | **+0.529** |
+| `DEF_RATING` | −0.396 (negative = correct: lower is better) |
 | `USG_PCT` | +0.197 |
 
-### Medición definitiva (y una corrección de la de arriba)
+### Definitive measurement (and a correction to the one above)
 
-Aquella primera lectura se hizo con una agregación cruda. Repetida con la
-proyección **real** del pipeline (minutos normalizados a 240, recencia de
-3 temporadas, sin look-ahead) y validada **dejando fuera una temporada
-entera cada vez** (LOSO) sobre los 480 casos:
+That first reading used a crude aggregation. Repeated with the
+pipeline's **real** projection (minutes normalized to 240, 3-season
+recency, no look-ahead) and validated **leaving out one entire season
+at a time** (LOSO) over the 480 cases:
 
-| Modelo | R fuera de muestra |
+| Model | Out-of-sample R |
 |---|---|
-| Game Score solo | 0.702 |
-| Game Score + `PIE` | 0.702 — *no aporta nada* |
+| Game Score alone | 0.702 |
+| Game Score + `PIE` | 0.702 — *adds nothing* |
 | **Game Score + `NET_RATING`** | **0.754** |
-| Game Score + `PIE` + `NET_RATING` | 0.753 — *PIE resta* |
+| Game Score + `PIE` + `NET_RATING` | 0.753 — *PIE hurts* |
 
-**`PIE` quedó fuera**, corrigiendo la lectura anterior que lo daba como
-útil. Dos motivos por los que aquella era engañosa: `corr(PIE, NET_RATING)
-= 0.64` a nivel de equipo (en solitario PIE correlaciona porque va montado
-en la misma señal), y con las tres variables su coeficiente sale
-**negativo** (−46.8), artefacto clásico de colinealidad — nadie va a
-defender que más cuota de producción prediga *peor*.
+**`PIE` got dropped**, correcting the earlier reading that had called
+it useful. Two reasons that earlier reading was misleading:
+`corr(PIE, NET_RATING) = 0.64` at the team level (alone, PIE correlates
+because it's riding on the same signal), and with all three variables
+its coefficient comes out **negative** (−46.8), a classic collinearity
+artifact — nobody would defend the claim that a higher share of
+production predicts *worse* outcomes.
 
-**Conclusión:** `NET_RATING` sí aporta, y mucho. La razón de fondo es que
-Game Score es una métrica de caja puramente ofensiva: no ve nada de la
-defensa más allá de robos, tapones y rebote defensivo. `NET_RATING` (el
-rating del equipo mientras el jugador está en cancha) sí la captura.
+**Conclusion:** `NET_RATING` does help, a lot. The underlying reason is
+that Game Score is a purely offensive box-score metric: it sees nothing
+of defense beyond steals, blocks, and defensive rebounds. `NET_RATING`
+(the team's rating while the player is on the floor) does capture it.
 
-Validación lateral bonita: la misma regresión devuelve una pendiente de
-**0.2946** para el Game Score solo. `game_score_to_net_rating_scale`
-estaba calibrado a **0.29** por una vía completamente distinta.
+Nice side validation: the same regression returns a slope of
+**0.2946** for Game Score alone. `game_score_to_net_rating_scale` had
+been calibrated to **0.29** through a completely different route.
 
-> ⚠️ **Caveat importante para el caso de uso de este proyecto.**
-> `NET_RATING` y `PIE` están *contaminados por el contexto de equipo*: el
-> `NET_RATING` de LeBron mide cómo rendían **los Lakers** con él en
-> cancha, no lo que aportaría en un superequipo hipotético con otros
-> compañeros. Predicen muy bien para rosters **reales** que se mantienen
-> en un contexto parecido, pero transplantar ese número a un roster
-> inventado es exactamente el tipo de suposición que este proyecto ya
-> demostró que falla (ver la sección de fricción de superequipos). Game
-> Score, al ser puramente individual, es más transferible aunque prediga
-> peor.
+> ⚠️ **Important caveat for this project's use case.** `NET_RATING`
+> and `PIE` are *contaminated by team context*: LeBron's `NET_RATING`
+> measures how **the Lakers** performed with him on the floor, not what
+> he'd contribute on a hypothetical superteam with other teammates.
+> They predict very well for **real** rosters that stay in a similar
+> context, but transplanting that number onto a made-up roster is
+> exactly the kind of assumption this project already showed fails (see
+> the superteam friction section). Game Score, being purely individual,
+> is more transferable even though it predicts worse.
 >
-> **Aun así el peso va sin encoger.** Se probó encogerlo (0.25, 0.4, 0.5,
-> 0.6, 0.75) y fuera de muestra el R mejora de forma *monótona* hasta el
-> peso completo: no hay ninguna señal empírica de sobreajuste que lo
-> justifique. Encogerlo "por si acaso" sería forzar un parámetro contra la
-> evidencia para que el resultado se vea como uno espera — el error que
-> este proyecto ya cometió una vez. La limitación se documenta; el
-> parámetro no se manipula. Quien quiera medir su efecto tiene la palanca:
-> `advanced_impact: {enabled: false}` en el YAML recupera exactamente el
-> Game Score puro (recordando volver `game_score_to_net_rating_scale` a
-> 0.29).
+> **Even so, the weight isn't shrunk.** Shrinking it was tested (0.25,
+> 0.4, 0.5, 0.6, 0.75) and out-of-sample R improves *monotonically* up
+> to the full weight: there's no empirical overfitting signal that
+> would justify it. Shrinking it "just in case" would be forcing a
+> parameter against the evidence to make the result look like what's
+> expected — the mistake this project already made once. The limitation
+> is documented; the parameter isn't manipulated. Anyone who wants to
+> measure its effect has the lever: `advanced_impact: {enabled: false}`
+> in the YAML recovers exactly pure Game Score (remember to set
+> `game_score_to_net_rating_scale` back to 0.29).
 
-**Ya está integrado** en `src/advanced_impact.py`, como un ajuste aditivo
-en unidades de Game Score:
+**Already integrated** in `src/advanced_impact.py`, as an additive
+adjustment in Game Score units:
 
 ```
-impacto/36 = game_score/36
-             + 0.42 * (NET_RATING − media_de_su_temporada)
-             − 57.03 * (PCT_PLUSMINUS − media_de_su_temporada)
+impact/36 = game_score/36
+             + 0.42 * (NET_RATING − its season's mean)
+             − 57.03 * (PCT_PLUSMINUS − its season's mean)
 ```
 
-Centrar por temporada preserva la restricción de suma cero por
-construcción y ajusta la inflación de era gratis. Requiere
-`league_advanced_player_stats.csv` (lo genera `--backtest-sweep`, una
-llamada por temporada); sin ese CSV el proyecto sigue corriendo con Game
-Score puro.
+Centering by season preserves the zero-sum constraint by construction
+and adjusts for era inflation for free. Requires
+`league_advanced_player_stats.csv` (generated by `--backtest-sweep`,
+one call per season); without that CSV the project keeps running on
+pure Game Score.
 
-**Tercera métrica: `PCT_PLUSMINUS`** (defensa por tracking, `leaguedashptdefend`
-/ Second Spectrum, disponible desde 2013-14) — cuánto empeora el % de
-tiro real del rival cuando este jugador es el defensor más cercano,
-frente a su % de tiro normal. A diferencia de los *hustle stats*
-(contested shots, deflections... investigados y descartados, no aportan
-señal — ver `scripts/experiments/hustle_stats_signal.py`), esta sí es
-una señal de impacto defensivo directo, validada leave-one-season-out
-(ΔR² fuera de muestra +0.016 sobre los 480 casos del backtest sweep,
-mejora real pero modesta). Peso derivado con la misma técnica que
-`net_rating_weight` (ratio de coeficientes de una regresión conjunta, no
-una escala inventada) — ver `scripts/experiments/pt_defend_signal.py` y
-el docstring de `advanced_impact.py` para el detalle completo, incluida
-la recalibración de `game_score_to_net_rating_scale` que exigió (0.172 →
+**Third metric: `PCT_PLUSMINUS`** (tracking-based defense,
+`leaguedashptdefend` / Second Spectrum, available since 2013-14) — how
+much worse the real opponent's shooting % gets when this player is the
+closest defender, compared to their normal shooting %. Unlike *hustle
+stats* (contested shots, deflections... investigated and discarded, no
+signal — see `scripts/experiments/hustle_stats_signal.py`), this one
+IS a direct defensive-impact signal, validated leave-one-season-out
+(out-of-sample ΔR² +0.016 over the backtest sweep's 480 cases, a real
+but modest improvement). Weight derived with the same technique as
+`net_rating_weight` (coefficient ratio from a joint regression, not a
+made-up scale) — see `scripts/experiments/pt_defend_signal.py` and
+`advanced_impact.py`'s docstring for the full detail, including the
+recalibration of `game_score_to_net_rating_scale` it required (0.172 →
 0.1617).
 
-## Frontend web (`webapp/`)
+## Web frontend (`webapp/`)
 
-Única interfaz del proyecto: HTML/CSS/JS puro (sin frameworks ni
-dependencias de terceros) servido por un backend FastAPI. Hubo también
-un dashboard Streamlit (`dashboard/app.py`) en paralelo durante el
-desarrollo -- se retiró una vez `webapp/` cubrió todas sus pestañas, para
-no mantener dos interfaces con la misma información. `dashboard/data_loader.py`
-sigue vivo: es la capa de carga/combinación de datos (testeable,
-`tests/test_dashboard_data_loader.py`) que todos los routers de
-`webapp/routers/` reutilizan sin duplicar ninguna transformación, igual
-que `src/awards_projection.py` / `src/champion_profiles.py` /
-`src/llm_explainer.py` en Liga NBA.
+The project's only interface: pure HTML/CSS/JS (no frameworks or
+third-party dependencies) served by a FastAPI backend. There was also a
+Streamlit dashboard (`dashboard/app.py`) running in parallel during
+development — it was retired once `webapp/` covered all its tabs, to
+avoid maintaining two interfaces with the same information.
+`dashboard/data_loader.py` is still alive: it's the data
+loading/combination layer (testable,
+`tests/test_dashboard_data_loader.py`) that every router in
+`webapp/routers/` reuses without duplicating any transformation, same
+as `src/awards_projection.py` / `src/champion_profiles.py` /
+`src/llm_explainer.py` in Liga NBA.
 
 ```bash
 uvicorn webapp.main:app --reload
-# abre http://localhost:8000
+# opens http://localhost:8000
 ```
 
-Tres pestañas de primer nivel:
+Three top-level tabs:
 
-- **🏀 Mi equipo** (sub-pestañas):
-  - **Roster y proyecciones** — tabla combinada de `aging_curve.py` +
-    `injury_model.py` + `fatigue_accumulation.py` por jugador, con
-    `role_expected`/`minutes_projection` de `team_config.yaml`, más
-    **GP** (partidos jugados) y **MPG** (minutos/partido) REALES de la
-    temporada más reciente registrada de cada jugador -- distinto de
-    `minutes_projection`, que es el minutaje ASUMIDO para la temporada
-    simulada. Incluye el roster hipotético editable (añadir/quitar/
-    sustituir cualquier jugador de los 30 equipos, ver sección de
-    arriba sobre el sandbox de liga). El popup de detalle de cada
-    jugador (doble clic en su nombre) incluye un **mapa de tiros real**
-    sobre una media cancha dibujada en SVG (`webapp/static/js/court.js`,
-    sin librería externa): ubicación exacta de cada tiro de su temporada
-    real más reciente (`ShotChartDetail` vía
-    `data_pipeline.build_roster_shot_charts_dataset`), verde/rojo por
-    anotado/fallado. Cacheado en `data/processed/roster_shot_charts.csv`
-    -- el router nunca llama a `nba_api` desde un request HTTP (mismo
-    principio que el resto de `webapp/routers/players.py`).
-  - **Simulación Monte Carlo** — distribución de victorias y Net Rating
-    de `simulation_results.csv`.
-  - **Sinergia de alineación** — tabla completa de
+- **🏀 Mi equipo** (sub-tabs):
+  - **Roster y proyecciones** — combined table from `aging_curve.py` +
+    `injury_model.py` + `fatigue_accumulation.py` per player, with
+    `role_expected`/`minutes_projection` from `team_config.yaml`, plus
+    REAL **GP** (games played) and **MPG** (minutes/game) from each
+    player's most recent registered season — different from
+    `minutes_projection`, which is the ASSUMED minutes load for the
+    simulated season. Includes the editable hypothetical roster
+    (add/remove/swap any player from the 30 teams, see the league
+    sandbox section above). Each player's detail popup (double-click
+    their name) includes a **real shot chart** over a hand-drawn SVG
+    half court (`webapp/static/js/court.js`, no external library):
+    exact location of every shot from their most recent real season
+    (`ShotChartDetail` via
+    `data_pipeline.build_roster_shot_charts_dataset`), green/red for
+    made/missed. Cached in `data/processed/roster_shot_charts.csv` —
+    the router never calls `nba_api` from an HTTP request (same
+    principle as the rest of `webapp/routers/players.py`).
+  - **Simulación Monte Carlo** — win and Net Rating distribution from
+    `simulation_results.csv`.
+  - **Sinergia de alineación** — full table from
     `lineup_synergy_pairs.csv`.
-  - **Backtesting** — `backtest_summary.csv`, con un aviso automático
-    cuando un caso cae en un percentil extremo (<5% o >95%) (ver sección
-    de Backtesting arriba).
-- **🏆 Liga NBA** (sub-pestañas):
-  - **Liga y Playoffs** — victorias medias y probabilidades de
-    playoffs/campeonato de los 30 equipos, selector de escenario con/sin
-    lesiones, explorador de equipo (con las mismas columnas GP/MPG,
-    incluido tu roster hipotético si hay una liga simulada activa), un
-    simulador de bracket de playoffs con árbol visual (una realización
-    concreta -- play-in, ronda 1, semis y finales de conferencia --
-    distinta cada vez que se pulsa) y un simulador de calendario de
-    temporada completo (`league_simulation.run_single_league_season_simulation`):
-    el resultado de CADA partido de una realización concreta, navegable
-    y filtrable por equipo, con boxscore ILUSTRATIVO por jugador (media
-    por-partido de temporada ya proyectada + ruido, categorías
-    independientes -- no una simulación conjunta jugada a jugada) y un
-    widget de head-to-head entre dos equipos cualesquiera sobre ese
-    mismo calendario. Usa el calendario REAL publicado por la NBA
-    cuando existe (`data_pipeline.build_league_schedule_dataset`) --
-    fechas, rivales, descanso y ventaja de campo reales; si no, cae a un
-    calendario sintético round-robin.
-  - **Premios individuales** — heurísticas de MVP, DPOY, 6.º Hombre,
-    ROY, MIP y COY sobre las proyecciones ya calculadas, vía
-    `src/awards_projection.py`. **NO son una predicción de la votación
-    real de los medios** -- cada fórmula (Game Score proyectado
-    ponderado por victorias del equipo para MVP, un proxy de
-    robos/tapones/rebote defensivo para DPOY, mejora real entre las dos
-    últimas temporadas para MIP, equipo que más superó su récord real
-    del año anterior como proxy de COY porque este proyecto no modela
-    entrenadores...) está documentada con sus limitaciones en el
-    docstring del módulo. MVP/DPOY/ROY/MIP/6.º Hombre se muestran como
-    un **ranking visual** (`leaderboard.js`, foto real + barra
-    proporcional al valor de temporada, sin tabla) -- clic en
-    cualquier fila abre el popup de detalle del jugador; pasar el ratón
-    muestra una tarjeta de vista previa (`player-preview.js`) con el
-    mismo set de stats para los 4 premios y para los quintetos, a
-    petición del usuario: PPG/RPG/APG/SPG/BPG/FG%/3P%, récord de equipo,
-    y el "valor" que de verdad ordena ESE premio (mvp_score/dpoy_score/
-    season_value/defensive_value). **MIP es la excepción**: en vez de
-    solo la proyección, compara cada stat "temporada real anterior →
-    proyectada" (`awards_projection.compute_latest_real_season_stats`),
-    ya que MIP se vota sobre una mejora que YA ocurrió, no sobre una
-    proyección. **Entrenador del Año** y **All-Star** también son
-    ranking visual, no tabla: COY (premio de EQUIPO, sin jugador --
-    este proyecto no modela entrenadores) usa `teamLeaderboardChart()`,
-    con el escudo del equipo en vez de una foto de jugador y abre el
-    popup de EQUIPO al hacer clic; el All-Star reutiliza
-    `leaderboardChart()` normal, dividido en dos columnas Este/Oeste,
-    con una etiqueta "Titular"/"Reserva" en cada fila. Los quintetos
-    **All-NBA** y **All-Defensive**
-    (`compute_all_nba_teams`/`compute_all_defensive_teams`, formato
-    clásico 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot) se
-    dibujan directamente sobre una media cancha real
-    (`court.js::courtLineup`, misma media cancha con medidas físicas
-    reales que el mapa de tiros) con la foto de cada jugador -- sin
-    tabla al lado, mismo patrón de clic/hover y el mismo set de stats
-    que el leaderboard. La posición exacta dentro de cada grupo G/F es
-    solo ilustrativa (el
-    modelo no distingue base de escolta ni alero de ala-pívot, ver el
-    aviso en la propia pestaña).
-  - **Campeones reales** — comparables históricos (`champion_profiles.py`).
-- **🤖 Explicador (IA)** — chat en lenguaje natural sobre TODOS los datos
-  ya calculados en las otras pestañas (`src/llm_explainer.py`, vía la
-  API de Groq — modelos open-weight servidos con inferencia muy rápida).
-  El modelo recibe un snapshot de texto con los números reales ya
-  generados por el pipeline (proyecciones de roster, riesgo de
-  lesión/desgaste, resultados de simulación, backtesting, standings de
-  la liga) como mensaje de `system`, con instrucciones explícitas de no
-  inventar cifras y de señalar cuándo una pregunta depende de datos que
-  todavía no se han generado. No ejecuta ninguna simulación nueva ni
-  sustituye ningún cálculo existente — solo narra sobre lo ya calculado.
-  Requiere la variable de entorno `GROQ_API_KEY`; sin ella, la pestaña
-  muestra un aviso y no intenta llamar a la API.
+  - **Backtesting** — `backtest_summary.csv`, with an automatic warning
+    when a case falls in an extreme percentile (<5% or >95%) (see the
+    Backtesting section above).
+- **🏆 Liga NBA** (sub-tabs):
+  - **Liga y Playoffs** — average wins and playoff/championship
+    probabilities for the 30 teams, with/without injuries scenario
+    selector, team explorer (with the same GP/MPG columns, including
+    your hypothetical roster if a simulated league is active), a
+    playoff bracket simulator with a visual tree (one concrete
+    realization — play-in, round 1, conference semis and finals —
+    different every time it's clicked), and a full season schedule
+    simulator (`league_simulation.run_single_league_season_simulation`):
+    the result of EVERY game of one concrete realization, browsable and
+    filterable by team, with an ILLUSTRATIVE per-player boxscore
+    (already-projected per-game season average + noise, independent
+    categories — not a joint play-by-play simulation) and a
+    head-to-head widget between any two teams on that same schedule.
+    Uses the REAL schedule published by the NBA when it exists
+    (`data_pipeline.build_league_schedule_dataset`) — real dates,
+    opponents, rest, and home-court advantage; otherwise falls back to
+    a synthetic round-robin schedule.
+  - **Premios individuales** — MVP, DPOY, 6th Man, ROY, MIP, and COY
+    heuristics over the already-computed projections, via
+    `src/awards_projection.py`. **These are NOT a prediction of the
+    real media vote** — each formula (projected Game Score weighted by
+    team wins for MVP, a steals/blocks/defensive-rebound proxy for
+    DPOY, real improvement between the last two seasons for MIP, the
+    team that most exceeded its real record from the prior year as a
+    COY proxy since this project doesn't model coaches...) is
+    documented with its limitations in the module's docstring.
+    MVP/DPOY/ROY/MIP/6th Man are shown as a **visual ranking**
+    (`leaderboard.js`, real photo + bar proportional to the season
+    value, no table) — click any row to open the player's detail
+    popup; hovering shows a preview card (`player-preview.js`) with the
+    same set of stats for all 4 awards and for the lineups, per the
+    user's request: PPG/RPG/APG/SPG/BPG/FG%/3P%, team record, and the
+    "value" that actually ranks THAT award (mvp_score/dpoy_score/
+    season_value/defensive_value). **MIP is the exception**: instead of
+    just the projection, it compares each stat "real previous season →
+    projected" (`awards_projection.compute_latest_real_season_stats`),
+    since MIP is voted on improvement that has ALREADY happened, not on
+    a projection. **Entrenador del Año** and **All-Star** are also
+    visual rankings, not tables: COY (a TEAM award, no player — this
+    project doesn't model coaches at all) uses `teamLeaderboardChart()`,
+    with the team's badge instead of a player photo, opening the TEAM
+    popup on click; All-Star reuses the regular `leaderboardChart()`,
+    split into two East/West columns, with a "Starter"/"Reserve" tag on
+    each row. The **All-NBA** and **All-Defensive** lineups
+    (`compute_all_nba_teams`/`compute_all_defensive_teams`, classic
+    2 guards + 2 forwards + 1 center format) are drawn directly on a
+    real half court (`court.js::courtLineup`, the same half court with
+    real physical dimensions as the shot chart) with each player's
+    photo — no table next to it, same click/hover pattern and the same
+    set of stats as the leaderboard. The exact position within each
+    G/F group is illustrative only (the
+    model doesn't distinguish point guard from shooting guard, or
+    small forward from power forward — see the notice on the tab
+    itself).
+  - **Campeones reales** — historical comparables
+    (`champion_profiles.py`).
+- **🤖 Explicador (IA)** — natural-language chat over ALL the data
+  already computed in the other tabs (`src/llm_explainer.py`, via the
+  Groq API — open-weight models served with very fast inference). The
+  model receives a text snapshot with the real numbers already
+  generated by the pipeline (roster projections, injury/wear risk,
+  simulation results, backtesting, league standings) as a `system`
+  message, with explicit instructions not to make up numbers and to
+  flag when a question depends on data that hasn't been generated yet.
+  It doesn't run any new simulation or replace any existing calculation
+  — it only narrates over what's already been computed. Requires the
+  `GROQ_API_KEY` environment variable; without it, the tab shows a
+  notice and doesn't attempt to call the API.
 
-  **RAG de noticias recientes (opcional, dos fases):** el pipeline
-  estadístico no puede ver noticias del día (lesiones de última hora,
-  cambios de entrenador) porque no viene de ningún CSV calculado. Fase 1:
-  un cuadro de texto donde pegar artículos/titulares a mano — TF-IDF
-  (`src/llm_explainer.py::retrieve_relevant_news_snippets`, sin
-  dependencias nuevas) recupera los fragmentos relevantes a la pregunta y
-  los añade al prompt en una sección claramente etiquetada como NO
-  verificada, nunca mezclada con los datos del pipeline. Fase 2: un botón
-  "Buscar noticias recientes" (`src/news_search.py`, API de Tavily) que
-  rellena ese mismo cuadro bajo demanda explícita del usuario — es la
-  ÚNICA llamada de red en vivo del proyecto fuera de `nba_api`, nunca
-  automática. Requiere `TAVILY_API_KEY`; sin ella, ese botón concreto
-  avisa pero se puede seguir pegando texto a mano (fase 1 no depende de
-  esta variable).
+  **Recent news RAG (optional, two phases):** the statistical pipeline
+  can't see today's news (last-minute injuries, coaching changes)
+  because it doesn't come from any computed CSV. Phase 1: a text box
+  where you paste articles/headlines by hand — TF-IDF
+  (`src/llm_explainer.py::retrieve_relevant_news_snippets`, no new
+  dependencies) retrieves the fragments relevant to the question and
+  adds them to the prompt in a section clearly labeled as NOT
+  verified, never mixed with the pipeline's data. Phase 2: a "Search
+  recent news" button (`src/news_search.py`, Tavily API) that fills
+  that same box on the user's explicit demand — it's the project's
+  ONLY live network call outside of `nba_api`, never automatic.
+  Requires `TAVILY_API_KEY`; without it, that specific button shows a
+  notice but you can keep pasting text by hand (phase 1 doesn't depend
+  on this variable).
 
-Las stats **totales** de temporada se muestran redondeadas a entero (son
-proyecciones continuas, pero "1600 PTS" se lee mejor que "1600.34" —
-los decimales en un total no aportan precisión real, solo ruido visual).
-Las stats **por partido** mantienen 1 decimal (ahí sí importa: 22.7 PPG
-vs. 23 PPG es una diferencia real a lo largo de una temporada).
+Season **total** stats are shown rounded to a whole number (they're
+continuous projections, but "1600 PTS" reads better than "1600.34" —
+decimals in a total don't add real precision, just visual noise).
+**Per-game** stats keep 1 decimal (there it matters: 22.7 PPG vs.
+23 PPG is a real difference over a season).
 
-Los gráficos (histogramas, línea de Net Rating, scatter de calibración)
-son SVG hecho a mano, sin librería externa. Los logos de equipo/NBA se
-cargan en vivo desde `cdn.nba.com` (nunca se guardan en el repo, que es
-público) y caen a una insignia con las iniciales del equipo si la imagen
-no carga. Tema oscuro fijo con un degradado de marca (azul marino →
-negro → rojo muy oscuro) en `webapp/static/css/tokens.css`. Tests en
-`tests/test_webapp_api.py`.
+Charts (histograms, Net Rating line, calibration scatter) are
+hand-made SVG, no external library. Team/NBA logos are loaded live from
+`cdn.nba.com` (never saved in the repo, which is public) and fall back
+to a badge with the team's initials if the image fails to load. Fixed
+dark theme with a brand gradient (navy → black → very dark red) in
+`webapp/static/css/tokens.css`. Tests in `tests/test_webapp_api.py`.
 
-## Instalación
+## Installation
 
 ```bash
-git clone <tu-repo>
+git clone <your-repo>
 cd nba-superteam-sim
 python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env  # opcional: solo si vas a usar la pestaña "Explicador (IA)"
+cp .env.example .env  # optional: only if you'll use the "Explicador (IA)" tab
 ```
 
-Edita `.env` y rellena `GROQ_API_KEY` con tu key de
-[console.groq.com/keys](https://console.groq.com/keys). El archivo `.env`
-está en `.gitignore` -- nunca se versiona. Sin esta variable, el resto
-del dashboard funciona igual; solo la pestaña "Explicador (IA)" queda
-deshabilitada. `TAVILY_API_KEY` ([tavily.com](https://tavily.com)) es
-opcional dentro de esa misma pestaña -- sin ella, el botón "Buscar
-noticias recientes" avisa pero se puede seguir pegando texto de noticias
-a mano.
+Edit `.env` and fill in `GROQ_API_KEY` with your key from
+[console.groq.com/keys](https://console.groq.com/keys). The `.env`
+file is in `.gitignore` — never committed. Without this variable, the
+rest of the dashboard works the same; only the "Explicador (IA)" tab
+is disabled. `TAVILY_API_KEY` ([tavily.com](https://tavily.com)) is
+optional within that same tab — without it, the "Search recent news"
+button shows a notice but you can keep pasting news text by hand.
 
-## Uso: descargar los datos
+## Usage: downloading the data
 
 ```bash
 cd src
 python data_pipeline.py
 ```
 
-Esto descarga (con caché en `data/raw/`) el historial de carrera de cada
-jugador del roster (temporada regular y playoffs) y los game logs
-completos de los equipos comparables definidos en
-`config/team_config.yaml`, y deja datasets consolidados en
-`data/processed/`.
+This downloads (caching to `data/raw/`) each roster player's career
+history (regular season and playoffs) and the full game logs for the
+comparable teams defined in `config/team_config.yaml`, and leaves
+consolidated datasets in `data/processed/`.
 
-> **Comportamiento por defecto: offline-first.** La primera ejecución
-> descarga y cachea todo en `data/raw/*.csv`. **A partir de la segunda
-> ejecución, el pipeline NO vuelve a llamar a la API** — lee directamente
-> de los CSV locales (verás `[caché local]` en la consola en vez de
-> `[API stats.nba.com]`). Si necesitas forzar una recarga (por ejemplo,
-> tras jugarse nuevos partidos), usa:
+> **Default behavior: offline-first.** The first run downloads and
+> caches everything to `data/raw/*.csv`. **From the second run
+> onward, the pipeline does NOT call the API again** — it reads
+> directly from local CSVs (you'll see `[local cache]` in the console
+> instead of `[stats.nba.com API]`). If you need to force a refresh
+> (e.g. after new games have been played), use:
 > ```bash
 > python data_pipeline.py --refresh
 > ```
-> `stats.nba.com` aplica rate-limiting agresivo, así que el pipeline
-> incluye pausas entre llamadas y reintentos con backoff — pero gracias
-> a la caché, en el uso normal del día a día apenas la necesitarás.
+> `stats.nba.com` applies aggressive rate-limiting, so the pipeline
+> includes pauses between calls and retries with backoff — but thanks
+> to the cache, you'll barely need it in normal day-to-day use.
 
-## Reutilizar el pipeline para otro equipo
+## Reusing the pipeline for another team
 
-Edita `config/team_config.yaml`:
+Edit `config/team_config.yaml`:
 
-1. Cambia `team.team_id` y `team.name` (los IDs de equipo de la NBA están
-   documentados en la propia librería `nba_api`, o se pueden obtener con
+1. Change `team.team_id` and `team.name` (NBA team IDs are documented
+   in the `nba_api` library itself, or can be obtained with
    `nba_api.stats.static.teams`).
-2. Sustituye el `roster` por los jugadores que quieras simular, con sus
-   `player_id` (obtenibles vía `nba_api.stats.static.players`).
-3. Los `historical_comparables` puedes dejarlos igual (sirven como
-   benchmark general de "efecto superequipo") o adaptarlos a casos más
-   relevantes para tu comparación.
-4. Ejecuta de nuevo `python src/data_pipeline.py` — no hace falta tocar
-   ni una línea de código.
+2. Replace `roster` with the players you want to simulate, with their
+   `player_id` (obtainable via `nba_api.stats.static.players`).
+3. You can leave `historical_comparables` as-is (they serve as a
+   general "superteam effect" benchmark) or adapt them to cases more
+   relevant to your comparison.
+4. Run `python src/data_pipeline.py` again — no need to touch a single
+   line of code.
 
-## Estructura del proyecto
+## Project structure
 
 ```
 nba-superteam-sim/
 ├── config/
-│   └── team_config.yaml            # única fuente de verdad sobre "qué equipo"
+│   └── team_config.yaml            # single source of truth for "which team"
 ├── data/
-│   ├── raw/                        # respuestas cacheadas de nba_api, sin procesar
-│   └── processed/                  # datasets consolidados listos para modelar
+│   ├── raw/                        # cached nba_api responses, unprocessed
+│   └── processed/                  # consolidated datasets ready for modeling
 ├── src/
-│   ├── config_loader.py            # lectura y validación del YAML
-│   ├── data_pipeline.py            # ingesta con caché y reintentos
-│   ├── season_utils.py             # dedupe de temporadas con trade, compartido
-│   ├── aging_curve.py              # proyección individual por-36 con ajuste de edad
-│   ├── lineup_synergy.py           # ajuste de Game Score por encaje de alineación
-│   ├── simulation.py               # motor de simulación Monte Carlo (un equipo vs. WinPCT genérico)
-│   ├── league_simulation.py        # 30 equipos reales, temporada regular + playoffs
-│   ├── backtesting.py              # backtest retrospectivo contra comparables reales
-│   └── context/                    # capa de contexto de temporada (roadmap completo)
-│       ├── injury_model.py         # risk_score de lesión por jugador
-│       ├── fatigue_accumulation.py # fatigue_score por desgaste de minutos
-│       ├── schedule_strength.py    # difficulty_score por partido del calendario
-│       ├── performance_curve.py    # Net Rating estimado en ventanas móviles
-│       ├── opponent_weighting.py   # Net Rating ponderado por fuerza de rival
-│       └── conference_adjustment.py # normalización Este/Oeste entre comparables
+│   ├── config_loader.py            # YAML reading and validation
+│   ├── data_pipeline.py            # ingestion with caching and retries
+│   ├── season_utils.py             # shared traded-season dedupe
+│   ├── aging_curve.py              # individual per-36 projection with age adjustment
+│   ├── lineup_synergy.py           # Game Score adjustment for lineup fit
+│   ├── simulation.py               # Monte Carlo simulation engine (one team vs. generic WinPCT)
+│   ├── league_simulation.py        # 30 real teams, regular season + playoffs
+│   ├── backtesting.py              # retrospective backtest against real comparables
+│   └── context/                    # season context layer (full roadmap)
+│       ├── injury_model.py         # per-player injury risk_score
+│       ├── fatigue_accumulation.py # fatigue_score from minutes wear
+│       ├── schedule_strength.py    # difficulty_score per schedule game
+│       ├── performance_curve.py    # estimated Net Rating in rolling windows
+│       ├── opponent_weighting.py   # Net Rating weighted by opponent strength
+│       └── conference_adjustment.py # East/West normalization between comparables
 ├── tests/
 │   ├── test_config_loader.py
 │   ├── test_aging_curve.py
@@ -1464,44 +1454,44 @@ nba-superteam-sim/
 │   ├── test_opponent_weighting.py
 │   └── test_conference_adjustment.py
 ├── scripts/
-│   ├── resolve_player_ids.py       # resuelve player_id sin red
-│   └── experiments/                # investigaciones exploratorias, FUERA del pipeline
-│       ├── requirements-experiments.txt  # pymc/arviz/statsmodels/lifelines -- no en requirements.txt
-│       ├── bayesian_calibration.py       # recalibración bayesiana de game_score_to_net_rating_scale
-│       ├── aging_curve_shrinkage.py      # descartado: el encogimiento no explica la compresión de talento
-│       ├── team_quality_uncertainty.py   # calibración de la incertidumbre de calidad de equipo
-│       ├── hustle_stats_signal.py        # descartado: hustle stats no aportan señal
-│       ├── pt_defend_signal.py           # defensa por tracking -- integrada en advanced_impact.py
-│       ├── injury_survival_model.py      # descartado: Cox no mejora el heurístico de injury_model.py
-│       ├── game_win_predictor.py         # descartado: GBT no mejora la logística de compute_win_probabilities
-│       └── game_win_predictor_injury_signal.py  # positivo: disponibilidad de jugadores clave mejora el Brier score, incluso en versión pregame desplegable
-├── notebooks/                      # 3 investigaciones narradas visualmente (complementan, no sustituyen, scripts/experiments/)
+│   ├── resolve_player_ids.py       # resolves player_id without network calls
+│   └── experiments/                # exploratory investigations, OUTSIDE the pipeline
+│       ├── requirements-experiments.txt  # pymc/arviz/statsmodels/lifelines -- not in requirements.txt
+│       ├── bayesian_calibration.py       # Bayesian recalibration of game_score_to_net_rating_scale
+│       ├── aging_curve_shrinkage.py      # discarded: shrinkage doesn't explain the talent compression
+│       ├── team_quality_uncertainty.py   # team-quality uncertainty calibration
+│       ├── hustle_stats_signal.py        # discarded: hustle stats add no signal
+│       ├── pt_defend_signal.py           # tracking-based defense -- integrated into advanced_impact.py
+│       ├── injury_survival_model.py      # discarded: Cox doesn't improve injury_model.py's heuristic
+│       ├── game_win_predictor.py         # discarded: GBT doesn't improve compute_win_probabilities's logistic model
+│       └── game_win_predictor_injury_signal.py  # positive: key-player availability improves the Brier score, even in a deployable pregame version
+├── notebooks/                      # 3 investigations narrated visually (complement, don't replace, scripts/experiments/)
 ├── dashboard/
-│   └── data_loader.py              # carga/combinación de CSV, testeable -- capa de datos de webapp/ (el dashboard Streamlit que vivió aquí se retiró)
-├── webapp/                         # única interfaz del proyecto: HTML/CSS/JS + FastAPI
-│   ├── main.py                     # FastAPI: monta routers + sirve static/
+│   └── data_loader.py              # CSV loading/combination, testable -- webapp/'s data layer (the Streamlit dashboard that used to live here was retired)
+├── webapp/                         # the project's only interface: HTML/CSS/JS + FastAPI
+│   ├── main.py                     # FastAPI: mounts routers + serves static/
 │   ├── serializers.py              # DataFrame -> JSON (NaN/NaT -> None)
 │   ├── routers/                    # /api/status, /api/roster, /api/simulation, ...
-│   └── static/                     # index.html, css/, js/ (sin dependencias externas)
+│   └── static/                     # index.html, css/, js/ (no external dependencies)
 └── requirements.txt
 ```
 
-## Próximos pasos
+## Next steps
 
-Ver la sección "Estado actual" arriba. Con todas las piezas del roadmap
-original implementadas, incluido el dashboard y la simulación de liga
-completa, el proyecto está funcionalmente completo de punta a punta
-(datos → contexto → proyección → simulación → liga/playoffs →
-backtesting → visualización). Quedan dos direcciones razonables:
+See the "Current status" section above. With every piece of the
+original roadmap implemented, including the dashboard and the full
+league simulation, the project is functionally complete end to end
+(data → context → projection → simulation → league/playoffs →
+backtesting → visualization). Two reasonable directions remain:
 
-1. **Un proxy de "fricción de vestuario"** — el backtest mostró que el
-   motor sobreestima sistemáticamente cuando hay conflicto real conocido
-   (Heat, Nets, Suns). No hay un dato de caja de estadísticas que
-   capture esto directamente, pero podría explorarse una señal
-   indirecta (volatilidad de rendimiento partido a partido de las
-   estrellas, por ejemplo) antes de asumir que no se puede modelar.
-2. **Re-seeding real entre rondas de playoffs** — `league_simulation.py`
-   sigue usando un bracket FIJO (sin resiembra tras cada ronda, a
-   diferencia de la NBA real). El calendario oficial 2026-27 ya se
-   integró (`real_schedule_to_games`, ver sección de arriba) -- este es
-   ahora el único de los dos pendientes.
+1. **A "locker-room friction" proxy** — backtesting showed the engine
+   systematically overestimates when there's known real conflict
+   (Heat, Nets, Suns). There's no box-score data point that captures
+   this directly, but an indirect signal could be explored (e.g.
+   game-to-game performance volatility of the stars) before assuming
+   it can't be modeled.
+2. **Real re-seeding between playoff rounds** — `league_simulation.py`
+   still uses a FIXED bracket (no re-seeding after each round, unlike
+   the real NBA). The official 2026-27 schedule has already been
+   integrated (`real_schedule_to_games`, see the section above) — this
+   is now the only one of the two still pending.
