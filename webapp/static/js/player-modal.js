@@ -5,6 +5,7 @@
 
 import { api } from "./api.js";
 import { dataTable, el, emptyState, pillToggle, playerPhoto, teamBadge } from "./ui.js";
+import { courtShotChart } from "./court.js";
 
 const PER_GAME_STATS = ["MIN", "PTS", "REB", "AST", "STL", "BLK"];
 
@@ -105,6 +106,8 @@ export async function openPlayerModal(playerId, teamId) {
     data.seasons.length ? seasonsTable(data.seasons, mode) : el("p", { class: "caption" }, "Sin temporadas registradas.")
   );
 
+  const shotChartBox = el("div");
+
   dialog.replaceChildren(
     el("div", { class: "detail-modal-body" }, [
       el("button", { class: "modal-close", "aria-label": "Cerrar", onclick: () => dialog.close() }, "✕"),
@@ -120,6 +123,27 @@ export async function openPlayerModal(playerId, teamId) {
       qualityChips(data.qualities),
       header,
       seasonsBox,
+      shotChartBox,
     ])
   );
+
+  loadShotChart(shotChartBox, playerId);
+}
+
+/** Se carga aparte (no bloquea el resto del popup, que ya tiene todo lo
+ * que necesita de api.player()) porque roster_shot_charts.csv puede no
+ * existir para jugadores fuera del roster propio (ver
+ * webapp/routers/players.py::get_player_shot_chart) -- en ese caso la
+ * sección simplemente no aparece, en vez de fallar el popup entero. */
+async function loadShotChart(container, playerId) {
+  try {
+    const data = await api.playerShotChart(playerId);
+    if (!data.shots.length) return;
+    container.replaceChildren(
+      el("h3", { style: "margin: 20px 0 6px;" }, `Mapa de tiros -- temporada ${data.season}`),
+      courtShotChart(data.shots, { title: `Mapa de tiros de ${playerId}` })
+    );
+  } catch {
+    // Sin mapa de tiros disponible -- se omite en silencio, no es un dato crítico del popup.
+  }
 }

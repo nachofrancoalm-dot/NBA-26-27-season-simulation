@@ -53,6 +53,7 @@ export const api = {
   champions: () => request("/champions"),
 
   player: (playerId) => request(`/player/${playerId}`),
+  playerShotChart: (playerId) => request(`/player/${playerId}/shot-chart`),
 
   explainerContext: () => request("/explainer/context"),
   explainerAsk: (question, newsText) =>

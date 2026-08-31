@@ -915,3 +915,92 @@ td.cell-clickable:focus-visible {
     animation: none;
   }
 }
+
+/* Mapa de tiros (court.js) -- media cancha con tiros reales
+   (ShotChartDetail). El SVG usa el mismo sistema de coordenadas que la
+   API (décimas de pie desde el aro), así que estas reglas solo definen
+   trazo/relleno, nunca posición. */
+.court-chart-wrap {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.court-chart {
+  width: 100%;
+  height: auto;
+  background: color-mix(in srgb, var(--basketball-orange) 8%, transparent);
+  border-radius: var(--radius-card);
+}
+
+.court-lines .court-boundary,
+.court-lines .court-paint-outer,
+.court-lines .court-paint-inner {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2;
+}
+
+.court-lines .court-hoop {
+  fill: none;
+  stroke: var(--basketball-orange);
+  stroke-width: 2.5;
+}
+
+.court-lines .court-backboard {
+  stroke: var(--text-muted);
+  stroke-width: 2.5;
+}
+
+.court-lines .court-restricted,
+.court-lines .court-ft-circle,
+.court-lines .court-three {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2;
+}
+
+.court-shot {
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 0.6;
+  opacity: 0.8;
+}
+
+.court-shot-made {
+  fill: var(--status-good);
+}
+
+.court-shot-missed {
+  fill: var(--status-critical);
+}
+
+.court-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.court-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.court-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.court-swatch-made {
+  background: var(--status-good);
+}
+
+.court-swatch-missed {
+  background: var(--status-critical);
+}

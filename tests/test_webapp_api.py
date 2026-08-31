@@ -598,6 +598,32 @@ def test_player_detail_projection_discounts_injury_risk(client, config):
     assert projected["PTS"] == round(2000 * (33 / 82))
 
 
+def test_player_shot_chart_empty_without_csv(client):
+    response = client.get("/api/player/42/shot-chart")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["shots"] == []
+    assert body["season"] is None
+
+
+def test_player_shot_chart_returns_shots_for_that_player_only(client, config):
+    processed_dir = tmp_path_from_config(config)
+    pd.DataFrame(
+        [
+            {"player_id": 42, "season": "2024-25", "loc_x": -10, "loc_y": 20, "shot_made": True, "shot_type": "2PT Field Goal"},
+            {"player_id": 42, "season": "2024-25", "loc_x": 200, "loc_y": 230, "shot_made": False, "shot_type": "3PT Field Goal"},
+            {"player_id": 99, "season": "2024-25", "loc_x": 0, "loc_y": 0, "shot_made": True, "shot_type": "2PT Field Goal"},
+        ]
+    ).to_csv(processed_dir / "roster_shot_charts.csv", index=False)
+
+    response = client.get("/api/player/42/shot-chart")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["season"] == "2024-25"
+    assert len(body["shots"]) == 2
+    assert all(s["loc_x"] in (-10, 200) for s in body["shots"])
+
+
 def _write_single_season_game_log(processed_dir, rows, suffix=""):
     pd.DataFrame(rows).to_csv(processed_dir / f"league_single_season_game_log{suffix}.csv", index=False)
 

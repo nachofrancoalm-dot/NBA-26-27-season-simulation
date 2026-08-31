@@ -260,3 +260,28 @@ def get_player(player_id: int):
         "qualities": _find_qualities(projection_row),
         "seasons": season_records,
     }
+
+
+@router.get("/player/{player_id}/shot-chart")
+def get_player_shot_chart(player_id: int):
+    """Tiros reales (LOC_X/LOC_Y) de la temporada real más reciente del
+    jugador -- SOLO lee data/processed/roster_shot_charts.csv (generado
+    por data_pipeline.build_roster_shot_charts_dataset, ejecutado como
+    parte de la ingesta), nunca dispara una llamada a nba_api desde este
+    request (mismo principio que el resto de este router). Si el CSV no
+    existe o el jugador no tiene tiros cacheados, devuelve una lista
+    vacía -- el frontend lo trata como "sin datos", no como error."""
+    config = load_config()
+    paths = get_paths(config)
+    path = paths["processed"] / "roster_shot_charts.csv"
+    if not path.exists():
+        return {"player_id": player_id, "season": None, "shots": []}
+
+    shots = pd.read_csv(path)
+    shots = shots[shots["player_id"] == player_id]
+    if shots.empty:
+        return {"player_id": player_id, "season": None, "shots": []}
+
+    season = str(shots["season"].iloc[0])
+    records = shots[["loc_x", "loc_y", "shot_made", "shot_type"]].to_dict(orient="records")
+    return {"player_id": player_id, "season": season, "shots": records}

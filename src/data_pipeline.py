@@ -366,6 +366,80 @@ def fetch_player_common_info(
     return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
 
 
+def fetch_player_shot_chart(
+    player_id: int,
+    season: str,
+    raw_dir: Path,
+    force_refresh: bool = False,
+) -> pd.DataFrame:
+    """
+    Ubicación real de cada tiro de un jugador en una temporada concreta
+    (ShotChartDetail: LOC_X/LOC_Y en décimas de pie desde el aro,
+    SHOT_MADE_FLAG, SHOT_TYPE, ACTION_TYPE) -- para el mapa de tiros del
+    popup de detalle de jugador (webapp/static/js/court.js). `team_id=0`
+    en la llamada trae los tiros del jugador con cualquier equipo esa
+    temporada (evita tener que resolver de qué equipo era en ese momento).
+    """
+    from nba_api.stats.endpoints import shotchartdetail
+
+    cache_path = raw_dir / "shot_charts" / f"{player_id}_{season}.csv"
+
+    def _fetch():
+        chart = shotchartdetail.ShotChartDetail(
+            team_id=0, player_id=player_id, season_nullable=season, context_measure_simple="FGA"
+        )
+        return chart.get_data_frames()[0]
+
+    return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
+
+
+def build_roster_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Mapa de tiros de cada jugador del roster propio, para su temporada
+    REAL más reciente registrada (no la temporada de proyección del
+    config, que es futura y no tiene tiros de verdad todavía) -- misma
+    idea que las columnas GP/MPG "reales" del roster (ver
+    dashboard/data_loader.py). Guarda
+    data/processed/roster_shot_charts.csv (player_id, season, loc_x,
+    loc_y, shot_made, shot_type) para que el router de la webapp lo lea
+    directo, sin disparar ninguna llamada a nba_api desde un request
+    HTTP (mismo principio que fetch_player_common_info -- ver
+    webapp/routers/players.py). Un jugador sin temporadas reales
+    registradas (rookie sin GP todavía) o sin tiros en su última
+    temporada real (lesión) se omite, no rompe el resto.
+    """
+    paths = get_paths(config)
+    career_path = paths["processed"] / "roster_career_stats.csv"
+    if not career_path.exists():
+        raise FileNotFoundError(f"No se encontró {career_path}. Corre la ingesta de roster primero.")
+    career = pd.read_csv(career_path)
+    career = career[career["GP"] > 0]
+
+    rows = []
+    for player_id, group in tqdm(career.groupby("PLAYER_ID"), desc="Descargando mapas de tiro del roster"):
+        latest_season = sorted(group["SEASON_ID"].astype(str))[-1]
+        shots = fetch_player_shot_chart(int(player_id), latest_season, paths["raw"], force_refresh)
+        if shots.empty:
+            continue
+        for _, shot in shots.iterrows():
+            rows.append(
+                {
+                    "player_id": int(player_id),
+                    "season": latest_season,
+                    "loc_x": shot["LOC_X"],
+                    "loc_y": shot["LOC_Y"],
+                    "shot_made": bool(shot["SHOT_MADE_FLAG"]),
+                    "shot_type": shot["SHOT_TYPE"],
+                }
+            )
+
+    shots_df = pd.DataFrame(rows, columns=["player_id", "season", "loc_x", "loc_y", "shot_made", "shot_type"])
+    out_path = paths["processed"] / "roster_shot_charts.csv"
+    shots_df.to_csv(out_path, index=False)
+    print(f"Guardado: {out_path} ({len(shots_df)} tiros, {shots_df['player_id'].nunique()} jugadores)")
+    return shots_df
+
+
 def fetch_team_roster(
     team_id: int,
     season: str,
