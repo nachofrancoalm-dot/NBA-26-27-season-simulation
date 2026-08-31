@@ -2,24 +2,34 @@
 // 6.º Hombre): foto real + barra proporcional al valor de temporada,
 // en vez de una tabla. Pensado para complementar (no sustituir del
 // todo) los quintetos sobre cancha de court.js -- mismo espíritu de
-// "menos tabla, más foto real". Reutiliza el tooltip compartido
-// #chart-tooltip (mismo que charts.js) en vez de duplicar la lógica.
+// "menos tabla, más foto real". La vista previa al pasar el ratón usa
+// player-preview.js (tarjeta real con foto + stats), no el tooltip de
+// una línea de charts.js -- un jugador tiene más que enseñar que un
+// solo número.
 
-import { el, playerPhoto, showTooltip, hideTooltip } from "./ui.js";
+import { el, playerPhoto } from "./ui.js";
 import { openPlayerModal } from "./player-modal.js";
+import { showPlayerPreview, hidePlayerPreview } from "./player-preview.js";
 
 /**
  * `records`: filas YA ordenadas por el backend (mvp_score/dpoy_score/
  * season_value/improvement descendente, ver src/awards_projection.py).
  * `valueKey`: columna a usar como longitud de barra.
  * `valueFormat`: formatea el valor mostrado a la derecha de la barra.
- * `subtitleFn(record)`: texto del tooltip al pasar el ratón (stats
- * rápidas) -- opcional, se omite si no aporta nada para ese premio.
+ * `statsFn(record)`: [{label, value}] para la vista previa -- SIEMPRE
+ * stats de la temporada proyectada (las mismas columnas que ya
+ * calculó awards_projection.py sobre player_df, nunca datos reales
+ * mezclados), opcional (se omite si no aporta nada para ese premio).
+ * `season`: string de la temporada proyectada, para el pie de la
+ * vista previa (p.ej. "Temporada proyectada 2026-27").
  * Clic en cualquier fila abre el popup de detalle del jugador (mismo
  * popup que el resto de la app, ver player-modal.js) -- doble
  * clic/tabla ya no hace falta para "ver más": es la fila entera.
  */
-export function leaderboardChart(records, { valueKey, valueFormat = (v) => (typeof v === "number" ? v.toFixed(1) : "—"), subtitleFn, teamIds = {} } = {}) {
+export function leaderboardChart(
+  records,
+  { valueKey, valueFormat = (v) => (typeof v === "number" ? v.toFixed(1) : "—"), statsFn, season, teamIds = {} } = {}
+) {
   if (!records || !records.length) {
     return el("p", { class: "caption" }, "Sin candidatos.");
   }
@@ -49,12 +59,18 @@ export function leaderboardChart(records, { valueKey, valueFormat = (v) => (type
       ]
     );
 
-    if (subtitleFn) {
-      const text = subtitleFn(record);
-      row.addEventListener("mousemove", (event) => showTooltip(event, text));
-      row.addEventListener("mouseleave", hideTooltip);
-      row.addEventListener("focus", (event) => showTooltip(event, text));
-      row.addEventListener("blur", hideTooltip);
+    if (statsFn) {
+      const preview = () => ({
+        playerId: record.player_id,
+        playerName: record.player_name,
+        teamAbbreviation: record.team_abbreviation,
+        season,
+        stats: statsFn(record),
+      });
+      row.addEventListener("mousemove", (event) => showPlayerPreview(event, preview()));
+      row.addEventListener("mouseleave", hidePlayerPreview);
+      row.addEventListener("focus", (event) => showPlayerPreview(event, preview()));
+      row.addEventListener("blur", hidePlayerPreview);
     }
 
     return row;

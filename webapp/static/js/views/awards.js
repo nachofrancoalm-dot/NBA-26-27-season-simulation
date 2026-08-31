@@ -27,37 +27,62 @@ function awardsInteractions(teamIds) {
   };
 }
 
-function offenseSubtitle(record) {
+/** El backend NO redondea PPG/RPG/APG/etc en /api/awards (a diferencia
+ * de dataTable(), que sí redondea a 2 decimales para mostrar) -- sin
+ * esto, la vista previa mostraría "31.19570399944936" en vez de "31.2". */
+function fmt1(value) {
+  return typeof value === "number" ? value.toFixed(1) : value;
+}
+
+/** Stats rápidas de ofensiva para la vista previa (MVP/ROY/6.º Hombre)
+ * -- SIEMPRE de player_df (la temporada proyectada, ver
+ * awards_projection.OFFENSIVE_COMPARISON_STATS), nunca mezcladas con
+ * temporadas reales. `record.team_record` se añade como stat aparte
+ * (no es "del jugador", pero da contexto de si juega en un equipo
+ * ganador -- relevante para MVP en particular). */
+function offenseStats(record) {
   return [
-    record.PPG != null ? `${record.PPG} PPG` : null,
-    record.RPG != null ? `${record.RPG} RPG` : null,
-    record.APG != null ? `${record.APG} APG` : null,
-    record.team_record,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+    record.PPG != null ? { label: "PPG", value: fmt1(record.PPG) } : null,
+    record.RPG != null ? { label: "RPG", value: fmt1(record.RPG) } : null,
+    record.APG != null ? { label: "APG", value: fmt1(record.APG) } : null,
+    record.team_record ? { label: "Récord equipo", value: record.team_record } : null,
+  ].filter(Boolean);
 }
 
 /** Config de leaderboardChart() por premio -- qué columna manda el
  * largo de la barra (ver los `sort_values(...)` de
  * src/awards_projection.py, la misma columna que ya ordenaba la tabla)
- * y qué stats rápidas mostrar en el tooltip al pasar el ratón. */
+ * y qué stats rápidas mostrar en la vista previa al pasar el ratón. */
 const LEADERBOARD_CONFIG = {
-  mvp: { valueKey: "mvp_score", subtitleFn: offenseSubtitle },
+  mvp: { valueKey: "mvp_score", statsFn: offenseStats },
   dpoy: {
     valueKey: "dpoy_score",
-    subtitleFn: (r) =>
-      [r.SPG != null ? `${r.SPG} SPG` : null, r.BPG != null ? `${r.BPG} BPG` : null, r.RPG != null ? `${r.RPG} RPG` : null, r.team_record]
-        .filter(Boolean)
-        .join(" · "),
+    statsFn: (r) =>
+      [
+        r.SPG != null ? { label: "SPG", value: fmt1(r.SPG) } : null,
+        r.BPG != null ? { label: "BPG", value: fmt1(r.BPG) } : null,
+        r.RPG != null ? { label: "RPG", value: fmt1(r.RPG) } : null,
+        r.team_record ? { label: "Récord equipo", value: r.team_record } : null,
+      ].filter(Boolean),
   },
-  roy: { valueKey: "season_value", subtitleFn: offenseSubtitle },
-  sixth_man: { valueKey: "season_value", subtitleFn: offenseSubtitle },
+  roy: { valueKey: "season_value", statsFn: offenseStats },
+  sixth_man: { valueKey: "season_value", statsFn: offenseStats },
+  // MIP NO usa la temporada proyectada -- compara el Game Score por-36
+  // REAL de las dos últimas temporadas ya jugadas (ver el docstring de
+  // compute_mip_candidates: "lo que un jugador YA mejoró", no una
+  // proyección). Por eso no lleva `season` global -- se omite el pie
+  // "Temporada proyectada X" en la vista previa (ver la llamada a
+  // awardBlock más abajo) y en su lugar la propia temporada real
+  // (r.latest_season) va como una stat más.
   mip: {
     valueKey: "improvement",
     valueFormat: (v) => (typeof v === "number" ? `+${v.toFixed(1)}` : "—"),
-    subtitleFn: (r) =>
-      `Game Score/36: ${r.previous_game_score_per36?.toFixed(1)} → ${r.latest_game_score_per36?.toFixed(1)} (${r.latest_season})`,
+    statsFn: (r) => [
+      { label: "GmSc/36 anterior", value: r.previous_game_score_per36?.toFixed(1) },
+      { label: "GmSc/36 actual", value: r.latest_game_score_per36?.toFixed(1) },
+      { label: "Temporada real", value: r.latest_season },
+    ],
+    noProjectedSeason: true,
   },
 };
 
@@ -66,12 +91,12 @@ const LEADERBOARD_CONFIG = {
  * a petición del usuario ("más minimalista y visual"). COY sigue en
  * tabla: es un premio de EQUIPO (sin player_name/player_id), no encaja
  * en un ranking de jugadores. */
-function awardBlock(emoji, title, records, teamIds, configKey) {
+function awardBlock(emoji, title, records, teamIds, configKey, season) {
   const config = LEADERBOARD_CONFIG[configKey];
   const body =
     records && records.length
       ? config
-        ? leaderboardChart(records, { ...config, teamIds })
+        ? leaderboardChart(records, { ...config, teamIds, season: config.noProjectedSeason ? null : season })
         : dataTable(records, {}, awardsInteractions(teamIds))
       : el("p", { class: "caption" }, "Sin candidatos.");
   return el("div", {}, [el("h3", {}, `${emoji} ${title}`), body]);
@@ -123,18 +148,20 @@ export async function render(container) {
   }
   cards.push(card(introChildren));
 
+  const season = status.team.season;
+
   cards.push(
     card([
       el("div", { class: "grid-2" }, [
-        awardBlock("🏆", "MVP", data.mvp, teamIds, "mvp"),
-        awardBlock("🛡️", "DPOY", data.dpoy, teamIds, "dpoy"),
+        awardBlock("🏆", "MVP", data.mvp, teamIds, "mvp", season),
+        awardBlock("🛡️", "DPOY", data.dpoy, teamIds, "dpoy", season),
       ]),
       el("div", { class: "grid-2", style: "margin-top: 16px;" }, [
-        awardBlock("🌟", "Rookie del Año", data.roy, teamIds, "roy"),
-        awardBlock("🔥", "Más Mejorado", data.mip, teamIds, "mip"),
+        awardBlock("🌟", "Rookie del Año", data.roy, teamIds, "roy", season),
+        awardBlock("🔥", "Más Mejorado", data.mip, teamIds, "mip", season),
       ]),
       el("div", { class: "grid-2", style: "margin-top: 16px;" }, [
-        awardBlock("🎖️", "6.º Hombre", data.sixth_man, teamIds, "sixth_man"),
+        awardBlock("🎖️", "6.º Hombre", data.sixth_man, teamIds, "sixth_man", season),
         awardBlock("📋", "Entrenador del Año", data.coy, teamIds),
       ]),
       glossaryExpander(Object.entries(data.glossary), "Leyenda de columnas"),
@@ -142,8 +169,8 @@ export async function render(container) {
   );
 
   cards.push(allStarCard(data, teamIds));
-  cards.push(card([allTeamSection("🏀 Quintetos All-NBA", data.all_nba, teamIds)]));
-  cards.push(card([allTeamSection("🛡️ Quintetos All-Defensive", data.all_defensive, teamIds)]));
+  cards.push(card([allTeamSection("🏀 Quintetos All-NBA", data.all_nba, teamIds, season)]));
+  cards.push(card([allTeamSection("🛡️ Quintetos All-Defensive", data.all_defensive, teamIds, season)]));
   cards.push(card([glossaryExpander(Object.entries(data.season_awards_glossary), "Leyenda — premios de fin de temporada")]));
 
   container.replaceChildren(...cards);
@@ -196,7 +223,7 @@ function allStarCard(data, teamIds) {
   ]);
 }
 
-function allTeamSection(title, records, teamIds) {
+function allTeamSection(title, records, teamIds, season) {
   if (!records || !records.length) {
     return el("div", {}, [el("h2", {}, title), el("p", { class: "caption" }, "Sin candidatos.")]);
   }
@@ -215,7 +242,10 @@ function allTeamSection(title, records, teamIds) {
       { class: "court-lineup-grid" },
       teams.map((team) => {
         const teamRecords = records.filter((r) => r.team === team);
-        return el("div", {}, [el("h3", { style: "margin: 0 0 8px; text-align: center;" }, team), courtLineup(teamRecords, { title: team, teamIds })]);
+        return el("div", {}, [
+          el("h3", { style: "margin: 0 0 8px; text-align: center;" }, team),
+          courtLineup(teamRecords, { title: team, teamIds, season }),
+        ]);
       })
     ),
   ]);

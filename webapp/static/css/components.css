@@ -568,6 +568,93 @@ table.data-table {
   opacity: 1;
 }
 
+/* Vista previa de jugador al pasar el ratón/foco (player-preview.js) --
+   tarjeta real (foto + stats de la temporada proyectada), no una línea
+   de texto plano. Mismo lenguaje visual que el resto de tarjetas
+   (surface-card, radius-card, shadow-card). */
+.player-preview {
+  position: fixed;
+  pointer-events: none;
+  z-index: 30;
+  min-width: 220px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 12px 14px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.player-preview.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.player-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-preview-heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-preview-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-preview-team {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.player-preview-caption {
+  margin: 10px 0 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.player-preview-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.player-preview-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.player-preview-stat-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent-600);
+  font-variant-numeric: tabular-nums;
+}
+
+.player-preview-stat-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 svg.chart text {
   fill: var(--text-muted);
   font-family: var(--font-sans);
