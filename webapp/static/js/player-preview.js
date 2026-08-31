@@ -1,10 +1,12 @@
 // player-preview.js -- tarjeta de vista previa al pasar el ratón/foco
 // sobre un jugador en leaderboard.js o court.js: foto + nombre + equipo
-// + 2-4 stats de la TEMPORADA PROYECTADA (nunca datos reales mezclados
-// con proyectados en la misma tarjeta -- cada caller decide qué stats
-// pasar, este módulo solo las presenta). Sustituye al #chart-tooltip
-// genérico (texto plano, una línea) para este caso concreto: un
-// jugador tiene más que enseñar que un solo número.
+// + un set de stats con su `caption` (p.ej. "Temporada proyectada
+// 2026-27"). Este módulo es puramente de presentación -- qué stats
+// mostrar y de dónde salen (proyectadas, reales, o una comparación de
+// las dos, como en MIP) lo decide siempre el caller, nunca se mezclan
+// aquí. Sustituye al #chart-tooltip genérico (texto plano, una línea)
+// para este caso concreto: un jugador tiene más que enseñar que un
+// solo número.
 //
 // Un único nodo reutilizado (mismo patrón que #chart-tooltip) en vez de
 // crear/destruir un popover por cada hover -- más barato y evita fugas
@@ -27,16 +29,19 @@ function previewNode() {
  * `event`: el MouseEvent/FocusEvent que disparó la vista previa (para
  * posicionarla). `player`: {playerId, playerName, teamAbbreviation}.
  * `stats`: [{label, value}] -- ya formateadas por el caller (distintas
- * por premio, ver LEADERBOARD_CONFIG en awards.js). `season`: string
- * de la temporada proyectada (p.ej. "2026-27"), o null para omitir el
- * pie de foto.
+ * por premio, ver LEADERBOARD_CONFIG en awards.js). Un `value` puede ser
+ * una comparación ya formateada como texto (p.ej. "27.9 → 22.5", MIP:
+ * temporada real anterior -> proyectada) -- este módulo no sabe ni le
+ * importa qué representa cada stat, solo la pinta. `caption`: string ya
+ * formado por el caller (p.ej. "Temporada proyectada 2026-27" o, para
+ * MIP, "Real 2025-26 → Proyectada 2026-27"), o null para omitirlo.
  */
-export function showPlayerPreview(event, { playerId, playerName, teamAbbreviation, season, stats = [] }) {
+export function showPlayerPreview(event, { playerId, playerName, teamAbbreviation, caption, stats = [] }) {
   const node = previewNode();
   // Node.replaceChildren() es el método NATIVO del DOM -- a diferencia
   // de el() (ui.js), NO ignora los `null`: los convierte en un nodo de
   // texto literal "null" (bug real encontrado al probar MIP, que no
-  // lleva `season`). Por eso se filtran aquí antes de pasarlos.
+  // llevaba caption). Por eso se filtran aquí antes de pasarlos.
   const children = [
     el("div", { class: "player-preview-header" }, [
       playerPhoto(playerId, playerName, 40),
@@ -45,7 +50,7 @@ export function showPlayerPreview(event, { playerId, playerName, teamAbbreviatio
         teamAbbreviation ? el("span", { class: "player-preview-team" }, teamAbbreviation) : null,
       ]),
     ]),
-    season ? el("p", { class: "player-preview-caption" }, `Temporada proyectada ${season}`) : null,
+    caption ? el("p", { class: "player-preview-caption" }, caption) : null,
     stats.length
       ? el(
           "div",

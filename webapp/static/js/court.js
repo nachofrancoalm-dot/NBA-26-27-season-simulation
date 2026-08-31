@@ -107,6 +107,35 @@ const LINEUP_SLOT_COORDS = {
   ],
 };
 
+function fmt1(value) {
+  return typeof value === "number" ? value.toFixed(1) : value;
+}
+
+/** Set de stats UNIFICADO con leaderboard.js (a petición del usuario):
+ * PPG/RPG/APG/SPG/BPG/FG%/3P%/récord de equipo + el "valor" que ordena
+ * el quinteto (season_value en All-NBA, defensive_value en
+ * All-Defensive -- awards_projection.compute_all_nba_teams/
+ * compute_all_defensive_teams ya incluyen las mismas columnas que
+ * MVP/DPOY/ROY/6.º Hombre). Siempre de la temporada proyectada -- los
+ * quintetos, a diferencia de MIP, no tienen una "temporada anterior"
+ * con la que compararse. */
+function lineupStats(record) {
+  const stat = (label, key) => (record[key] != null ? { label, value: fmt1(record[key]) } : null);
+  const awardValue = record.season_value ?? record.defensive_value;
+  const awardLabel = record.season_value != null ? "Valor temporada" : "Valor defensivo";
+  return [
+    stat("PPG", "PPG"),
+    stat("RPG", "RPG"),
+    stat("APG", "APG"),
+    stat("SPG", "SPG"),
+    stat("BPG", "BPG"),
+    stat("FG%", "FG%"),
+    stat("3P%", "3P%"),
+    record.team_record ? { label: "Récord equipo", value: record.team_record } : null,
+    awardValue != null ? { label: awardLabel, value: fmt1(awardValue) } : null,
+  ].filter(Boolean);
+}
+
 /** `records`: 5 filas de un quinteto (all_nba/all_defensive), cada una
  * con player_id, player_name, position_slot ("G"/"F"/"C"), y
  * season_value o defensive_value según el premio. Dibuja la misma
@@ -142,11 +171,6 @@ export function courtLineup(records, { title, teamIds = {}, season } = {}) {
     const leftPct = ((x + 250) / 500) * 100;
     const topPct = ((y + 60) / 500) * 100;
     const lastName = (rec.player_name || "?").trim().split(" ").slice(-1)[0];
-    const value = rec.season_value ?? rec.defensive_value;
-    const stats = [
-      Number.isFinite(value) ? { label: "Valor temporada", value: Math.round(value) } : null,
-      Number.isFinite(rec.games_played_expected) ? { label: "PJ esperados", value: Math.round(rec.games_played_expected) } : null,
-    ].filter(Boolean);
 
     const marker = el(
       "button",
@@ -154,7 +178,13 @@ export function courtLineup(records, { title, teamIds = {}, season } = {}) {
       [playerPhoto(rec.player_id, rec.player_name, 44), el("span", { class: "court-lineup-label" }, lastName)]
     );
     const preview = (event) =>
-      showPlayerPreview(event, { playerId: rec.player_id, playerName: rec.player_name, teamAbbreviation: rec.team_abbreviation, season, stats });
+      showPlayerPreview(event, {
+        playerId: rec.player_id,
+        playerName: rec.player_name,
+        teamAbbreviation: rec.team_abbreviation,
+        caption: season ? `Temporada proyectada ${season}` : null,
+        stats: lineupStats(rec),
+      });
     marker.addEventListener("click", () => openPlayerModal(rec.player_id, teamIds[rec.team_abbreviation]));
     marker.addEventListener("mousemove", preview);
     marker.addEventListener("mouseleave", hidePlayerPreview);

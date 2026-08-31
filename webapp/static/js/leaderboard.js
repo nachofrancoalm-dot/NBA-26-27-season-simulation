@@ -16,19 +16,22 @@ import { showPlayerPreview, hidePlayerPreview } from "./player-preview.js";
  * season_value/improvement descendente, ver src/awards_projection.py).
  * `valueKey`: columna a usar como longitud de barra.
  * `valueFormat`: formatea el valor mostrado a la derecha de la barra.
- * `statsFn(record)`: [{label, value}] para la vista previa -- SIEMPRE
- * stats de la temporada proyectada (las mismas columnas que ya
- * calculó awards_projection.py sobre player_df, nunca datos reales
- * mezclados), opcional (se omite si no aporta nada para ese premio).
- * `season`: string de la temporada proyectada, para el pie de la
- * vista previa (p.ej. "Temporada proyectada 2026-27").
+ * `statsFn(record)`: [{label, value}] para la vista previa -- opcional
+ * (se omite si no aporta nada para ese premio). Qué stats son y de qué
+ * temporada (proyectada, real, o una comparación de ambas) lo decide
+ * el caller (ver LEADERBOARD_CONFIG en views/awards.js), este módulo
+ * solo las pinta.
+ * `captionFn(record)`: pie de foto de la vista previa (p.ej.
+ * "Temporada proyectada 2026-27") -- función y no un string fijo porque
+ * MIP necesita uno DISTINTO por fila (cada jugador tiene su propia
+ * temporada real anterior).
  * Clic en cualquier fila abre el popup de detalle del jugador (mismo
  * popup que el resto de la app, ver player-modal.js) -- doble
  * clic/tabla ya no hace falta para "ver más": es la fila entera.
  */
 export function leaderboardChart(
   records,
-  { valueKey, valueFormat = (v) => (typeof v === "number" ? v.toFixed(1) : "—"), statsFn, season, teamIds = {} } = {}
+  { valueKey, valueFormat = (v) => (typeof v === "number" ? v.toFixed(1) : "—"), statsFn, captionFn, teamIds = {} } = {}
 ) {
   if (!records || !records.length) {
     return el("p", { class: "caption" }, "Sin candidatos.");
@@ -64,7 +67,7 @@ export function leaderboardChart(
         playerId: record.player_id,
         playerName: record.player_name,
         teamAbbreviation: record.team_abbreviation,
-        season,
+        caption: captionFn ? captionFn(record) : null,
         stats: statsFn(record),
       });
       row.addEventListener("mousemove", (event) => showPlayerPreview(event, preview()));

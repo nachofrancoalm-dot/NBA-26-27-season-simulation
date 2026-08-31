@@ -1292,17 +1292,25 @@ Tres pestañas de primer nivel:
     docstring del módulo. MVP/DPOY/ROY/MIP/6.º Hombre se muestran como
     un **ranking visual** (`leaderboard.js`, foto real + barra
     proporcional al valor de temporada, sin tabla) -- clic en
-    cualquier fila abre el popup de detalle del jugador, pasar el
-    ratón muestra sus stats rápidas (PPG/RPG/APG o el proxy defensivo
-    según el premio). COY sigue en tabla (es un premio de equipo, sin
+    cualquier fila abre el popup de detalle del jugador; pasar el ratón
+    muestra una tarjeta de vista previa (`player-preview.js`) con el
+    mismo set de stats para los 4 premios y para los quintetos, a
+    petición del usuario: PPG/RPG/APG/SPG/BPG/FG%/3P%, récord de equipo,
+    y el "valor" que de verdad ordena ESE premio (mvp_score/dpoy_score/
+    season_value/defensive_value). **MIP es la excepción**: en vez de
+    solo la proyección, compara cada stat "temporada real anterior →
+    proyectada" (`awards_projection.compute_latest_real_season_stats`),
+    ya que MIP se vota sobre una mejora que YA ocurrió, no sobre una
+    proyección. COY sigue en tabla (es un premio de equipo, sin
     jugador). Los quintetos **All-NBA** y **All-Defensive**
     (`compute_all_nba_teams`/`compute_all_defensive_teams`, formato
     clásico 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot) se
     dibujan directamente sobre una media cancha real
     (`court.js::courtLineup`, misma media cancha con medidas físicas
     reales que el mapa de tiros) con la foto de cada jugador -- sin
-    tabla al lado, mismo patrón de clic/hover que el leaderboard. La
-    posición exacta dentro de cada grupo G/F es solo ilustrativa (el
+    tabla al lado, mismo patrón de clic/hover y el mismo set de stats
+    que el leaderboard. La posición exacta dentro de cada grupo G/F es
+    solo ilustrativa (el
     modelo no distingue base de escolta ni alero de ala-pívot, ver el
     aviso en la propia pestaña).
   - **Campeones reales** — comparables históricos (`champion_profiles.py`).

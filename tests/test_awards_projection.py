@@ -26,6 +26,7 @@ from awards_projection import (  # noqa: E402
     compute_bench_player_ids,
     compute_coy_candidates,
     compute_dpoy_candidates,
+    compute_latest_real_season_stats,
     compute_mip_candidates,
     compute_mvp_candidates,
     compute_rookie_player_ids,
@@ -189,6 +190,41 @@ def test_compute_mip_candidates_excludes_low_minutes_seasons():
     assert result.empty
 
 
+def test_compute_latest_real_season_stats_uses_the_most_recent_season_per_game():
+    # A diferencia de compute_mip_candidates (que usa la PENÚLTIMA
+    # temporada real como "previous"), esto debe usar la ÚLTIMA
+    # (2024-25), la que precede a la proyección.
+    career = pd.DataFrame(
+        [
+            _career_row(1, "2023-24", 70, 1800, 700, name="Big Leap"),
+            _career_row(1, "2024-25", 75, 2200, 1500, name="Big Leap"),
+        ]
+    )
+
+    result = compute_latest_real_season_stats(career)
+
+    assert len(result) == 1
+    row = result.iloc[0]
+    assert row["prev_season"] == "2024-25"
+    assert row["prev_PPG"] == pytest.approx(round(1500 / 75, 1))
+    assert row["prev_APG"] == pytest.approx(round(100 / 75, 1))
+
+
+def test_compute_latest_real_season_stats_handles_missing_shooting_columns():
+    """FG_PCT/FG3_PCT no siempre están (p.ej. career_stats_df sintético de
+    otros tests) -- no debe romper, solo devolver NaN para esas dos."""
+    career = pd.DataFrame([_career_row(1, "2024-25", 70, 2000, 1200, name="Player")])
+
+    result = compute_latest_real_season_stats(career)
+
+    assert pd.isna(result.iloc[0]["prev_FG%"])
+    assert pd.isna(result.iloc[0]["prev_3P%"])
+
+
+def test_compute_latest_real_season_stats_empty_input():
+    assert compute_latest_real_season_stats(pd.DataFrame()).empty
+
+
 def test_compute_coy_candidates_ranks_by_win_improvement():
     team_wins = pd.DataFrame(
         [
@@ -320,6 +356,15 @@ def test_all_nba_teams_leaves_a_slot_empty_when_no_eligible_candidate():
     assert "C" not in result["position_slot"].tolist()
 
 
+def test_all_nba_teams_include_offensive_comparison_stats_and_team_record():
+    df = pd.DataFrame([_player_row_with_stats(pid, f"P{pid}", position="Guard") for pid in range(1, 7)])
+    result = compute_all_nba_teams(df, GAMES_PER_SEASON, team_record={1: "50-32"})
+
+    for col in ["PPG", "RPG", "APG", "SPG", "BPG", "FG%", "3P%", "team_record"]:
+        assert col in result.columns
+    assert result[result["player_id"] == 1].iloc[0]["team_record"] == "50-32"
+
+
 def test_all_defensive_teams_ranks_by_defensive_value_not_offensive_value():
     df = pd.DataFrame([
         # G0: mejor Game Score ofensivo, peor defensa -- no debería entrar.
@@ -340,6 +385,15 @@ def test_all_defensive_teams_has_two_teams_not_three():
     result = compute_all_defensive_teams(_all_nba_pool(), GAMES_PER_SEASON)
     assert set(result["team"]) <= set(ALL_DEFENSIVE_TEAM_NAMES)
     assert ALL_NBA_TEAM_NAMES[2] not in result["team"].tolist()  # no hay "tercer equipo" en defensivo
+
+
+def test_all_defensive_teams_include_offensive_comparison_stats_and_team_record():
+    df = pd.DataFrame([_player_row_with_stats(pid, f"P{pid}", position="Guard") for pid in range(1, 7)])
+    result = compute_all_defensive_teams(df, GAMES_PER_SEASON, team_record={1: "50-32"})
+
+    for col in ["PPG", "RPG", "APG", "SPG", "BPG", "FG%", "3P%", "team_record"]:
+        assert col in result.columns
+    assert result[result["player_id"] == 1].iloc[0]["team_record"] == "50-32"
 
 
 def test_default_games_threshold_matches_the_real_nba_policy():
@@ -538,14 +592,16 @@ def test_mvp_candidates_include_offensive_comparison_stats_and_team_record():
     assert result.iloc[0]["team_record"] == "50-32"
 
 
-def test_dpoy_candidates_include_defensive_stats_but_not_offensive_ones():
+def test_dpoy_candidates_include_full_comparison_stats():
+    """El ranking (dpoy_score) sigue siendo puramente defensivo, pero las
+    columnas devueltas incluyen también PPG/APG/tiro -- a petición del
+    usuario, para que la vista previa al pasar el ratón en webapp/
+    muestre el mismo set de stats que el resto de premios."""
     df = pd.DataFrame([_player_row_with_stats(1, "Defender", pf_projected=200.0)])
     result = compute_dpoy_candidates(df, GAMES_PER_SEASON, team_record={1: "50-32"}, top_n=5)
 
-    for col in ["RPG", "SPG", "BPG", "PFPG", "team_record"]:
+    for col in ["RPG", "SPG", "BPG", "PFPG", "team_record", "PPG", "APG", "FG%", "3P%"]:
         assert col in result.columns
-    for col in ["PPG", "APG", "FG%", "3P%"]:
-        assert col not in result.columns
     assert result.iloc[0]["PFPG"] == pytest.approx(round(200.0 / GAMES_PER_SEASON, 1))
 
 

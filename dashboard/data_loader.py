@@ -572,6 +572,15 @@ AWARDS_GLOSSARY: Dict[str, str] = {
     "prior_wins": "Victorias REALES de la temporada anterior a la simulada (prior_season_standings.csv)",
     "wins_mean": "Victorias medias proyectadas en la temporada simulada",
     "win_improvement": "wins_mean menos prior_wins -- proxy de \"equipo que más mejoró\", usado como heurística de Entrenador del Año (este proyecto no modela entrenadores)",
+    "team_record": "Récord \"V-D\" proyectado del equipo del jugador en la temporada simulada",
+    "prev_PPG": "Puntos por partido REALES de la última temporada ya jugada (no proyectados) -- para comparar en MIP contra la proyección",
+    "prev_RPG": "Rebotes por partido REALES de la última temporada ya jugada",
+    "prev_APG": "Asistencias por partido REALES de la última temporada ya jugada",
+    "prev_SPG": "Robos de balón por partido REALES de la última temporada ya jugada",
+    "prev_BPG": "Tapones por partido REALES de la última temporada ya jugada",
+    "prev_FG%": "Porcentaje de tiro de campo REAL de la última temporada ya jugada",
+    "prev_3P%": "Porcentaje de triples REAL de la última temporada ya jugada",
+    "prev_season": "Última temporada REAL ya jugada -- la que precede a la proyección, no la penúltima que usa `improvement`",
 }
 
 SEASON_AWARDS_GLOSSARY: Dict[str, str] = {
@@ -585,6 +594,14 @@ SEASON_AWARDS_GLOSSARY: Dict[str, str] = {
     "selection_type": "Titular, Reserva, o \"Añadido por el comisionado\" (cuota de nacionalidad) -- SOLO una etiqueta sobre el ranking de season_value, NO una simulación del voto real (50% fans + 25% jugadores + 25% medios para titulares, entrenadores para reservas) ni del criterio real del comisionado",
     "country": "País de nacimiento del jugador (CommonPlayerInfo) -- usado solo para el chequeo de cuota de nacionalidad del All-Star",
     "commissioner_pick": "True si el jugador se añadió para cubrir la cuota de nacionalidad, NO por mérito del ranking natural -- ver el aviso en la tabla",
+    "team_record": "Récord \"V-D\" proyectado del equipo del jugador en la temporada simulada",
+    "PPG": "Puntos por partido proyectados",
+    "RPG": "Rebotes por partido proyectados",
+    "APG": "Asistencias por partido proyectadas",
+    "SPG": "Robos de balón por partido proyectados",
+    "BPG": "Tapones por partido proyectados",
+    "FG%": "Porcentaje de tiro de campo proyectado",
+    "3P%": "Porcentaje de triples proyectado",
 }
 
 
@@ -592,7 +609,6 @@ def _win_loss_record(wins_mean: float, games_per_season: int) -> str:
     """"V-D" redondeado a partir de una media continua de victorias simuladas."""
     wins = round(wins_mean)
     return f"{wins}-{games_per_season - wins}"
-
 
 def compute_awards_summary(
     config: Dict[str, Any], top_n: int = 5, scenario: str = "with_injuries"
@@ -697,6 +713,11 @@ def compute_awards_summary(
         mip = mip.merge(player_df[["player_id"] + extra_cols], on="player_id", how="left")
         if team_record:
             mip["team_record"] = mip["player_id"].map(team_record)
+        # PPG/RPG/APG/etc de la ÚLTIMA temporada REAL (distinto de los de
+        # arriba, que son la proyección) -- para que el popup de MIP en
+        # webapp/ compare "de dónde viene" vs "hacia dónde va", a
+        # petición del usuario.
+        mip = mip.merge(ap.compute_latest_real_season_stats(career), on="player_id", how="left")
 
     return {
         "scope": scope,
@@ -712,8 +733,8 @@ def compute_awards_summary(
         "all_star": all_star,
         "all_star_nationality_quota": all_star_quota,
         "all_star_final": all_star_final,
-        "all_nba": ap.compute_all_nba_teams(player_df, games_per_season),
-        "all_defensive": ap.compute_all_defensive_teams(player_df, games_per_season),
+        "all_nba": ap.compute_all_nba_teams(player_df, games_per_season, team_record=team_record),
+        "all_defensive": ap.compute_all_defensive_teams(player_df, games_per_season, team_record=team_record),
     }
 
 

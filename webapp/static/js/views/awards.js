@@ -34,69 +34,93 @@ function fmt1(value) {
   return typeof value === "number" ? value.toFixed(1) : value;
 }
 
-/** Stats rápidas de ofensiva para la vista previa (MVP/ROY/6.º Hombre)
- * -- SIEMPRE de player_df (la temporada proyectada, ver
- * awards_projection.OFFENSIVE_COMPARISON_STATS), nunca mezcladas con
- * temporadas reales. `record.team_record` se añade como stat aparte
- * (no es "del jugador", pero da contexto de si juega en un equipo
- * ganador -- relevante para MVP en particular). */
-function offenseStats(record) {
+/** "anterior → actual" ya formateado, con "—" para el lado que falte --
+ * usado solo por MIP (ver `fullStats` con `prevPrefix`). Nunca oculta
+ * el stat entero solo porque falte un lado: mejor un "—" visible que un
+ * hueco silencioso. */
+function comparisonValue(prev, current) {
+  return `${prev != null ? fmt1(prev) : "—"} → ${current != null ? fmt1(current) : "—"}`;
+}
+
+/** Set de stats UNIFICADO para todos los premios individuales y
+ * quintetos, a petición explícita del usuario: PPG, RPG, APG, SPG, BPG,
+ * FG%, 3P%, récord de equipo y el "valor" que de verdad ordena ESE
+ * premio en concreto (mvp_score/dpoy_score/season_value/defensive_value
+ * -- distinto nombre e incluso distinta fórmula según el premio, por
+ * eso `valueKey`/`valueLabel` se pasan aparte en vez de asumir uno fijo).
+ *
+ * Sin `prevPrefix` (MVP/DPOY/ROY/6.º Hombre/quintetos): cada stat sale
+ * de player_df, la temporada PROYECTADA -- nunca mezclada con datos
+ * reales. Con `prevPrefix` ("prev_", solo MIP): cada stat se muestra
+ * como comparación "real anterior → proyectada" (ver comparisonValue) --
+ * MIP es el único premio donde el usuario pidió explícitamente ver de
+ * dónde viene el jugador, no solo hacia dónde va.
+ */
+function fullStats(record, { valueKey, valueLabel, prevPrefix } = {}) {
+  const stat = (label, key) => {
+    const current = record[key];
+    const prev = prevPrefix ? record[`${prevPrefix}${key}`] : null;
+    if (current == null && prev == null) return null;
+    return { label, value: prevPrefix ? comparisonValue(prev, current) : fmt1(current) };
+  };
+
   return [
-    record.PPG != null ? { label: "PPG", value: fmt1(record.PPG) } : null,
-    record.RPG != null ? { label: "RPG", value: fmt1(record.RPG) } : null,
-    record.APG != null ? { label: "APG", value: fmt1(record.APG) } : null,
+    stat("PPG", "PPG"),
+    stat("RPG", "RPG"),
+    stat("APG", "APG"),
+    stat("SPG", "SPG"),
+    stat("BPG", "BPG"),
+    stat("FG%", "FG%"),
+    stat("3P%", "3P%"),
     record.team_record ? { label: "Récord equipo", value: record.team_record } : null,
+    valueKey && record[valueKey] != null ? { label: valueLabel, value: fmt1(record[valueKey]) } : null,
   ].filter(Boolean);
 }
 
 /** Config de leaderboardChart() por premio -- qué columna manda el
  * largo de la barra (ver los `sort_values(...)` de
- * src/awards_projection.py, la misma columna que ya ordenaba la tabla)
- * y qué stats rápidas mostrar en la vista previa al pasar el ratón. */
-const LEADERBOARD_CONFIG = {
-  mvp: { valueKey: "mvp_score", statsFn: offenseStats },
-  dpoy: {
-    valueKey: "dpoy_score",
-    statsFn: (r) =>
-      [
-        r.SPG != null ? { label: "SPG", value: fmt1(r.SPG) } : null,
-        r.BPG != null ? { label: "BPG", value: fmt1(r.BPG) } : null,
-        r.RPG != null ? { label: "RPG", value: fmt1(r.RPG) } : null,
-        r.team_record ? { label: "Récord equipo", value: r.team_record } : null,
-      ].filter(Boolean),
-  },
-  roy: { valueKey: "season_value", statsFn: offenseStats },
-  sixth_man: { valueKey: "season_value", statsFn: offenseStats },
-  // MIP NO usa la temporada proyectada -- compara el Game Score por-36
-  // REAL de las dos últimas temporadas ya jugadas (ver el docstring de
-  // compute_mip_candidates: "lo que un jugador YA mejoró", no una
-  // proyección). Por eso no lleva `season` global -- se omite el pie
-  // "Temporada proyectada X" en la vista previa (ver la llamada a
-  // awardBlock más abajo) y en su lugar la propia temporada real
-  // (r.latest_season) va como una stat más.
-  mip: {
-    valueKey: "improvement",
-    valueFormat: (v) => (typeof v === "number" ? `+${v.toFixed(1)}` : "—"),
-    statsFn: (r) => [
-      { label: "GmSc/36 anterior", value: r.previous_game_score_per36?.toFixed(1) },
-      { label: "GmSc/36 actual", value: r.latest_game_score_per36?.toFixed(1) },
-      { label: "Temporada real", value: r.latest_season },
-    ],
-    noProjectedSeason: true,
-  },
-};
+ * src/awards_projection.py, la misma columna que ya ordenaba la tabla),
+ * qué stats mostrar en la vista previa, y el pie de foto (`captionFn`).
+ * Función de `season` (temporada proyectada activa) porque MIP necesita
+ * construir un pie DISTINTO por fila (cada jugador tiene su propia
+ * `prev_season` real) -- por eso esto es una función, no un objeto
+ * estático, y se llama dentro de `render()` en vez de vivir a nivel de
+ * módulo. */
+function buildLeaderboardConfig(season) {
+  const projectedCaption = () => `Temporada proyectada ${season}`;
+  return {
+    mvp: { valueKey: "mvp_score", statsFn: (r) => fullStats(r, { valueKey: "mvp_score", valueLabel: "Valor MVP" }), captionFn: projectedCaption },
+    dpoy: { valueKey: "dpoy_score", statsFn: (r) => fullStats(r, { valueKey: "dpoy_score", valueLabel: "Valor DPOY" }), captionFn: projectedCaption },
+    roy: { valueKey: "season_value", statsFn: (r) => fullStats(r, { valueKey: "season_value", valueLabel: "Valor temporada" }), captionFn: projectedCaption },
+    sixth_man: {
+      valueKey: "season_value",
+      statsFn: (r) => fullStats(r, { valueKey: "season_value", valueLabel: "Valor temporada" }),
+      captionFn: projectedCaption,
+    },
+    // MIP compara la temporada PROYECTADA contra la ÚLTIMA REAL ya
+    // jugada (prev_*, ver awards_projection.compute_latest_real_season_stats)
+    // -- DISTINTO del ranking en sí (`improvement`, ya visible como el
+    // valor de la barra), que usa la PENÚLTIMA real para medir cuánto
+    // mejoró un jugador de un año real a otro (ver compute_mip_candidates).
+    mip: {
+      valueKey: "improvement",
+      valueFormat: (v) => (typeof v === "number" ? `+${v.toFixed(1)}` : "—"),
+      statsFn: (r) => fullStats(r, { prevPrefix: "prev_" }),
+      captionFn: (r) => `Real ${r.prev_season || "?"} → Proyectada ${season}`,
+    },
+  };
+}
 
 /** Ranking visual (foto + barra, ver leaderboard.js) para los premios
  * individuales con una columna de "valor" clara -- reemplaza la tabla
  * a petición del usuario ("más minimalista y visual"). COY sigue en
  * tabla: es un premio de EQUIPO (sin player_name/player_id), no encaja
  * en un ranking de jugadores. */
-function awardBlock(emoji, title, records, teamIds, configKey, season) {
-  const config = LEADERBOARD_CONFIG[configKey];
+function awardBlock(emoji, title, records, teamIds, config) {
   const body =
     records && records.length
       ? config
-        ? leaderboardChart(records, { ...config, teamIds, season: config.noProjectedSeason ? null : season })
+        ? leaderboardChart(records, { ...config, teamIds })
         : dataTable(records, {}, awardsInteractions(teamIds))
       : el("p", { class: "caption" }, "Sin candidatos.");
   return el("div", {}, [el("h3", {}, `${emoji} ${title}`), body]);
@@ -149,20 +173,21 @@ export async function render(container) {
   cards.push(card(introChildren));
 
   const season = status.team.season;
+  const leaderboardConfig = buildLeaderboardConfig(season);
 
   cards.push(
     card([
       el("div", { class: "grid-2" }, [
-        awardBlock("🏆", "MVP", data.mvp, teamIds, "mvp", season),
-        awardBlock("🛡️", "DPOY", data.dpoy, teamIds, "dpoy", season),
+        awardBlock("🏆", "MVP", data.mvp, teamIds, leaderboardConfig.mvp),
+        awardBlock("🛡️", "DPOY", data.dpoy, teamIds, leaderboardConfig.dpoy),
       ]),
       el("div", { class: "grid-2", style: "margin-top: 16px;" }, [
-        awardBlock("🌟", "Rookie del Año", data.roy, teamIds, "roy", season),
-        awardBlock("🔥", "Más Mejorado", data.mip, teamIds, "mip", season),
+        awardBlock("🌟", "Rookie del Año", data.roy, teamIds, leaderboardConfig.roy),
+        awardBlock("🔥", "Más Mejorado", data.mip, teamIds, leaderboardConfig.mip),
       ]),
       el("div", { class: "grid-2", style: "margin-top: 16px;" }, [
-        awardBlock("🎖️", "6.º Hombre", data.sixth_man, teamIds, "sixth_man", season),
-        awardBlock("📋", "Entrenador del Año", data.coy, teamIds),
+        awardBlock("🎖️", "6.º Hombre", data.sixth_man, teamIds, leaderboardConfig.sixth_man),
+        awardBlock("📋", "Entrenador del Año", data.coy, teamIds, null),
       ]),
       glossaryExpander(Object.entries(data.glossary), "Leyenda de columnas"),
     ])

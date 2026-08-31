@@ -36,7 +36,7 @@ import pandas as pd
 
 from aging_curve import compute_game_score_per36, compute_per36_stats
 from champion_profiles import POSITION_GROUPS
-from season_utils import season_start_year
+from season_utils import dedupe_traded_seasons, season_start_year
 from simulation import compute_expected_games_played
 
 # Filtra jugadores de rotación marginal (muestra pequeña, ruido) de los
@@ -163,9 +163,13 @@ def compute_dpoy_candidates(
     muchos minutos, no solo tasas altas en pocos minutos).
 
     Incluye DEFENSIVE_COMPARISON_STATS (RPG/SPG/BPG + PFPG, faltas por
-    partido -- el único término NEGATIVO de la fórmula) para comparar
-    candidatos de un vistazo. Sin PPG/APG/tiro: DPOY es un premio
-    defensivo, esas stats no aportan a la comparación aquí.
+    partido -- el único término NEGATIVO de la fórmula) MÁS
+    OFFENSIVE_COMPARISON_STATS completo (PPG/APG/tiro incluidos) -- en un
+    primer diseño se omitía PPG/APG/tiro aquí porque "DPOY es un premio
+    defensivo, no aportan al RANKING", pero el ranking (dpoy_score) sigue
+    siendo puramente defensivo; estas columnas son solo para que la vista
+    previa al pasar el ratón en webapp/ muestre el mismo set de stats que
+    el resto de premios (a petición explícita del usuario).
     """
     df = player_df.copy()
     df["mpg"] = _avg_mpg(df, games_per_season)
@@ -185,9 +189,14 @@ def compute_dpoy_candidates(
         c for c in
         ["player_id", "player_name", "team_abbreviation", "team_record", "mpg"]
         + DEFENSIVE_COMPARISON_STATS
+        + OFFENSIVE_COMPARISON_STATS
         + ["defensive_score_per36", "dpoy_score"]
         if c in df.columns
     ]
+    # dict.fromkeys en vez de set(): DEFENSIVE_COMPARISON_STATS y
+    # OFFENSIVE_COMPARISON_STATS comparten RPG/SPG/BPG -- deduplicar sin
+    # perder el orden (pandas rechaza columnas repetidas en un selector).
+    cols = list(dict.fromkeys(cols))
     return df.sort_values("dpoy_score", ascending=False)[cols].head(top_n).reset_index(drop=True)
 
 
@@ -343,6 +352,67 @@ def compute_mip_candidates(
     if result.empty:
         return result
     return result.sort_values("improvement", ascending=False).head(top_n).reset_index(drop=True)
+
+
+PREV_SEASON_STATS_COLUMNS = ["prev_PPG", "prev_RPG", "prev_APG", "prev_SPG", "prev_BPG", "prev_FG%", "prev_3P%", "prev_season"]
+
+
+def compute_latest_real_season_stats(career_stats_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    PPG/RPG/APG/SPG/BPG/FG%/3P% REALES de la última temporada YA jugada
+    de cada jugador (una fila por jugador) -- para que el popup de MIP
+    (webapp/) pueda comparar la temporada PROYECTADA (mergeada aparte,
+    desde player_df, ver dashboard.data_loader.compute_awards_summary)
+    contra la temporada real inmediatamente anterior, a petición del
+    usuario. DISTINTO de `previous_game_score_per36` de
+    compute_mip_candidates: esa usa la PENÚLTIMA temporada real (para
+    calcular cuánto mejoró un jugador de un año real a otro); esto usa
+    la ÚLTIMA real, la que precede a la proyección.
+    """
+    if career_stats_df.empty:
+        return pd.DataFrame(columns=["player_id"] + PREV_SEASON_STATS_COLUMNS)
+
+    # dedupe_traded_seasons() agrupa por SEASON_ID -- BUG REAL encontrado
+    # al probar esto contra los 577 jugadores reales de la liga: llamarla
+    # sobre el DataFrame multi-jugador completo compara temporadas de
+    # jugadores DISTINTOS entre sí (si CUALQUIER jugador de la liga fue
+    # traspasado en la temporada X, "has_tot" sale True para la
+    # temporada X de TODOS los jugadores, y a quienes no fueron
+    # traspasados esa temporada se les descarta su única fila de esa
+    # temporada por no ser 'TOT') -- para Kawhi Leonard esto acababa
+    # dejando su temporada de ROOKIE (2011-12) como "la más reciente"
+    # porque casi todas sus demás temporadas reales se descartaban por
+    # trades de OTROS jugadores. Hay que aplicarla POR JUGADOR (mismo
+    # criterio que ya usa compute_mip_candidates, que itera con
+    # `.groupby("PLAYER_ID")` antes de llamar a compute_per36_stats, que
+    # a su vez llama a dedupe_traded_seasons ya sobre un solo jugador).
+    df = pd.concat(
+        [dedupe_traded_seasons(group) for _, group in career_stats_df.groupby("PLAYER_ID")], ignore_index=True
+    )
+    df = df[df["GP"] > 0]
+    df["_start_year"] = df["SEASON_ID"].apply(season_start_year)
+    latest = df.sort_values("_start_year", ascending=False).groupby("PLAYER_ID").head(1)
+
+    # FG_PCT/FG3_PCT no siempre están (p.ej. career_stats_df construido a
+    # mano en tests, sin las columnas de tiro) -- se degradan a NaN en
+    # vez de romper el resto de esta función, mismo criterio que el
+    # resto del proyecto ante una columna opcional ausente.
+    gp = latest["GP"]
+    fg_pct = latest["FG_PCT"] * 100 if "FG_PCT" in latest.columns else np.nan
+    fg3_pct = latest["FG3_PCT"] * 100 if "FG3_PCT" in latest.columns else np.nan
+    return pd.DataFrame(
+        {
+            "player_id": latest["PLAYER_ID"],
+            "prev_PPG": (latest["PTS"] / gp).round(1),
+            "prev_RPG": (latest["REB"] / gp).round(1),
+            "prev_APG": (latest["AST"] / gp).round(1),
+            "prev_SPG": (latest["STL"] / gp).round(1),
+            "prev_BPG": (latest["BLK"] / gp).round(1),
+            "prev_FG%": fg_pct if isinstance(fg_pct, float) else fg_pct.round(1),
+            "prev_3P%": fg3_pct if isinstance(fg3_pct, float) else fg3_pct.round(1),
+            "prev_season": latest["SEASON_ID"],
+        }
+    )
 
 
 def compute_coy_candidates(
@@ -652,6 +722,7 @@ def _pick_positional_teams(
 def compute_all_nba_teams(
     player_df: pd.DataFrame,
     games_per_season: int,
+    team_record: Optional[Dict[Any, str]] = None,
     min_games_played: int = DEFAULT_MIN_GAMES_SEASON_AWARDS,
     team_names: List[str] = ALL_NBA_TEAM_NAMES,
 ) -> pd.DataFrame:
@@ -666,15 +737,24 @@ def compute_all_nba_teams(
     ELEGIBILIDAD: partidos jugados ESPERADOS >= `min_games_played` (65
     por defecto, la política real de la NBA desde 2023-24) -- ver
     `_expected_games_played`. A petición explícita del usuario.
+
+    Incluye OFFENSIVE_COMPARISON_STATS + team_record (a petición del
+    usuario, para la vista previa al pasar el ratón en webapp/) -- mismas
+    columnas que MVP/ROY/6MOY, así que el quinteto es comparable de un
+    vistazo con cualquier otro premio.
     """
     df = player_df.copy()
     df["games_played_expected"] = _expected_games_played(df, games_per_season)
     df = df[df["games_played_expected"] >= min_games_played]
     df["_position_group"] = _position_group(df)
     df["season_value"] = _season_value(df)
+    df = _attach_team_record(df, team_record)
 
     cols = [
-        c for c in ["player_id", "player_name", "team_abbreviation", "_position_group", "games_played_expected", "season_value"]
+        c for c in
+        ["player_id", "player_name", "team_abbreviation", "team_record", "_position_group", "games_played_expected"]
+        + OFFENSIVE_COMPARISON_STATS
+        + ["season_value"]
         if c in df.columns
     ]
     return _pick_positional_teams(df[cols], "season_value", team_names)
@@ -683,6 +763,7 @@ def compute_all_nba_teams(
 def compute_all_defensive_teams(
     player_df: pd.DataFrame,
     games_per_season: int,
+    team_record: Optional[Dict[Any, str]] = None,
     min_games_played: int = DEFAULT_MIN_GAMES_SEASON_AWARDS,
     team_names: List[str] = ALL_DEFENSIVE_TEAM_NAMES,
 ) -> pd.DataFrame:
@@ -696,6 +777,11 @@ def compute_all_defensive_teams(
 
     ELEGIBILIDAD: partidos jugados ESPERADOS >= `min_games_played` (65
     por defecto) -- ver `_expected_games_played`.
+
+    Incluye OFFENSIVE_COMPARISON_STATS + team_record (a petición del
+    usuario, para la vista previa al pasar el ratón en webapp/) -- mismas
+    columnas que el resto de premios, aunque el ranking en sí siga siendo
+    puramente defensivo.
     """
     df = player_df.copy()
     df["games_played_expected"] = _expected_games_played(df, games_per_season)
@@ -708,9 +794,13 @@ def compute_all_defensive_teams(
         - 0.2 * df["PF_per36_projected"]
     )
     df["defensive_value"] = df["defensive_score_per36"] * df["projected_total_minutes"] / 36.0
+    df = _attach_team_record(df, team_record)
 
     cols = [
-        c for c in ["player_id", "player_name", "team_abbreviation", "_position_group", "games_played_expected", "defensive_value"]
+        c for c in
+        ["player_id", "player_name", "team_abbreviation", "team_record", "_position_group", "games_played_expected"]
+        + OFFENSIVE_COMPARISON_STATS
+        + ["defensive_value"]
         if c in df.columns
     ]
     return _pick_positional_teams(df[cols], "defensive_value", team_names)

@@ -576,7 +576,7 @@ table.data-table {
   position: fixed;
   pointer-events: none;
   z-index: 30;
-  min-width: 220px;
+  width: 300px;
   background: var(--surface-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -630,8 +630,9 @@ table.data-table {
 }
 
 .player-preview-stats {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 8px;
 }
 
 .player-preview-stat {
@@ -639,13 +640,17 @@ table.data-table {
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
+  min-width: 0;
 }
 
 .player-preview-stat-value {
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--accent-600);
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 .player-preview-stat-label {

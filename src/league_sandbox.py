@@ -313,6 +313,7 @@ def compute_hypothetical_awards(config: Dict[str, Any], league_result: Dict[str,
         mip = mip.merge(player_df[["player_id"] + extra_cols], on="player_id", how="left")
         if team_record:
             mip["team_record"] = mip["player_id"].map(team_record)
+        mip = mip.merge(ap.compute_latest_real_season_stats(career), on="player_id", how="left")
 
     return {
         "scope": "league",
@@ -325,6 +326,6 @@ def compute_hypothetical_awards(config: Dict[str, Any], league_result: Dict[str,
         "all_star": all_star,
         "all_star_nationality_quota": all_star_quota,
         "all_star_final": all_star_final,
-        "all_nba": ap.compute_all_nba_teams(player_df, games_per_season),
-        "all_defensive": ap.compute_all_defensive_teams(player_df, games_per_season),
+        "all_nba": ap.compute_all_nba_teams(player_df, games_per_season, team_record=team_record),
+        "all_defensive": ap.compute_all_defensive_teams(player_df, games_per_season, team_record=team_record),
     }
