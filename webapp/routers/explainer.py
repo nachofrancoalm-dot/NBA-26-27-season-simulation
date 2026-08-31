@@ -3,9 +3,9 @@ routers/explainer.py
 
 Pestaña "Explicador (IA)". Reutiliza src/llm_explainer.py sin cambios.
 explain_question() es de un solo turno (no recibe historial de
-conversación) -- el historial vive solo en el frontend, igual que
-st.session_state["explainer_history"] en dashboard/app.py, así que este
-router no guarda sesión de ningún tipo.
+conversación) -- el historial vive solo en un array a nivel de módulo en
+el frontend (ver `history` en explainer.js, se pierde al recargar),
+así que este router no guarda sesión de ningún tipo.
 """
 
 from __future__ import annotations

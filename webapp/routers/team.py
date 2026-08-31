@@ -54,8 +54,8 @@ def get_roster(mode: str = Query("per_game", pattern="^(per_game|totals)$")):
     roster_view = select_roster_view(
         overview, mode=mode, games_per_season=config["simulation"]["games_per_season"]
     )
-    # player_id no es una columna de select_roster_view (Streamlit nunca la
-    # muestra) -- se adjunta aquí solo para que el frontend sepa a quién
+    # player_id no es una columna visible de select_roster_view -- se
+    # adjunta aquí solo para que el frontend sepa a quién
     # pedir en el popup de doble clic; el orden de filas no cambia dentro
     # de select_roster_view, así que el zip por posición es seguro.
     roster_view = roster_view.assign(player_id=overview["player_id"].to_numpy())

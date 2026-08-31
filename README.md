@@ -68,7 +68,7 @@ result — including the ones that came back negative.
 
 **Stack:** Python (pandas, numpy, scipy, statsmodels/scikit-learn) for
 the modeling · `nba_api` for real data · FastAPI + vanilla JS for the
-web app (also ships a Streamlit dashboard) · pytest (465 tests) + GitHub
+web app · pytest (465 tests) + GitHub
 Actions CI.
 
 ---
@@ -90,8 +90,7 @@ Actions CI.
 - [x] Modelo de sinergia de alineación (`src/lineup_synergy.py`) — ver detalle abajo
 - [x] Motor de simulación Monte Carlo (`src/simulation.py`) — ver detalle abajo
 - [x] Backtesting contra comparables históricos (`src/backtesting.py`) — ver detalle abajo
-- [x] Dashboard interactivo (`dashboard/app.py`, Streamlit) — ver detalle abajo
-- [x] Frontend web propio (`webapp/`, FastAPI + HTML/CSS/JS), en paralelo a Streamlit — ver detalle abajo
+- [x] Frontend web propio (`webapp/`, FastAPI + HTML/CSS/JS) — única interfaz del proyecto, ver detalle abajo
 - [x] Simulación de liga completa (30 equipos reales) + playoffs (`src/league_simulation.py`) — ver detalle abajo
 
 ## Roadmap: capa de contexto de temporada (`src/context/`)
@@ -1197,31 +1196,26 @@ el docstring de `advanced_impact.py` para el detalle completo, incluida
 la recalibración de `game_score_to_net_rating_scale` que exigió (0.172 →
 0.1617).
 
-## Dashboard interactivo (`dashboard/app.py`)
+## Frontend web (`webapp/`)
 
-Explora todos los resultados anteriores sin correr comandos Python
-sueltos. Lee únicamente los CSV ya generados en `data/processed/` — no
-llama a la API ni corre simulaciones al vuelo (eso lo hacen
-`data_pipeline.py`/`simulation.py`/`backtesting.py`, ejecutados por
-separado primero).
+Única interfaz del proyecto: HTML/CSS/JS puro (sin frameworks ni
+dependencias de terceros) servido por un backend FastAPI. Hubo también
+un dashboard Streamlit (`dashboard/app.py`) en paralelo durante el
+desarrollo -- se retiró una vez `webapp/` cubrió todas sus pestañas, para
+no mantener dos interfaces con la misma información. `dashboard/data_loader.py`
+sigue vivo: es la capa de carga/combinación de datos (testeable,
+`tests/test_dashboard_data_loader.py`) que todos los routers de
+`webapp/routers/` reutilizan sin duplicar ninguna transformación, igual
+que `src/awards_projection.py` / `src/champion_profiles.py` /
+`src/llm_explainer.py` en Liga NBA.
 
 ```bash
-streamlit run dashboard/app.py
+uvicorn webapp.main:app --reload
+# abre http://localhost:8000
 ```
 
-### Navegación
+Tres pestañas de primer nivel:
 
-La barra lateral tiene la identidad del equipo, un **toggle global
-Totales / Por partido** (aplica a todas las tablas de jugadores, en vez
-de repetirlo en cada pestaña) y una **checklist de qué datasets están
-generados** (✅/⬜), para saber de un vistazo qué comando falta correr.
-
-Cuatro grupos de pestañas:
-
-- **🏠 Resumen** — landing page con los KPI más relevantes: victorias
-  medias/P10/P90 de tu simulación, probabilidades de playoffs/campeonato
-  frente a los 30 equipos (si corriste `--league`) y el candidato a MVP
-  del momento, con un puntero a dónde ver el resto del detalle.
 - **🏀 Mi equipo** (sub-pestañas):
   - **Roster y proyecciones** — tabla combinada de `aging_curve.py` +
     `injury_model.py` + `fatigue_accumulation.py` por jugador, con
@@ -1229,7 +1223,9 @@ Cuatro grupos de pestañas:
     **GP** (partidos jugados) y **MPG** (minutos/partido) REALES de la
     temporada más reciente registrada de cada jugador -- distinto de
     `minutes_projection`, que es el minutaje ASUMIDO para la temporada
-    simulada.
+    simulada. Incluye el roster hipotético editable (añadir/quitar/
+    sustituir cualquier jugador de los 30 equipos, ver sección de
+    arriba sobre el sandbox de liga).
   - **Simulación Monte Carlo** — distribución de victorias y Net Rating
     de `simulation_results.csv`.
   - **Sinergia de alineación** — tabla completa de
@@ -1239,38 +1235,33 @@ Cuatro grupos de pestañas:
     de Backtesting arriba).
 - **🏆 Liga NBA** (sub-pestañas):
   - **Liga y Playoffs** — victorias medias y probabilidades de
-    playoffs/campeonato de los 30 equipos, selector para navegar
-    cualquier equipo (con las mismas columnas GP/MPG) y un botón
-    **"Simular un bracket de playoffs"** — una realización concreta
-    (play-in, ronda 1, semis y finales de conferencia con emparejamiento
-    y ganador de cada serie), distinta cada vez que se pulsa.
-    **"Simular calendario de la temporada"** (`league_simulation.run_single_league_season_simulation`)
-    -- lo mismo pero para la temporada regular completa: el resultado de
-    CADA partido de una realización concreta, navegable y filtrable por
-    equipo, con boxscore ILUSTRATIVO por jugador (media por-partido de
-    temporada ya proyectada + ruido, categorías independientes -- no una
-    simulación conjunta jugada a jugada) y un widget de head-to-head
-    entre dos equipos cualesquiera sobre ese mismo calendario. Usa el
-    calendario REAL publicado por la NBA cuando existe
-    (`data_pipeline.build_league_schedule_dataset`, dentro de
-    `--league`) -- fechas, rivales, descanso y ventaja de campo reales;
-    si no, cae a un calendario sintético round-robin (día 1 a N, sin
-    fechas reales). Esto también alimenta standings/playoffs
-    (`build_league_simulation_dataset`): con calendario real, cada
-    equipo juega los partidos que de verdad tiene programados (hoy 80 de
-    82 -- quedan 2 plazas de la fase eliminatoria de la NBA Cup por
-    resolver más adelante en la temporada, no se inventan), en las
-    fechas reales, con la ventaja de jugar en casa aplicada de verdad.
+    playoffs/campeonato de los 30 equipos, selector de escenario con/sin
+    lesiones, explorador de equipo (con las mismas columnas GP/MPG,
+    incluido tu roster hipotético si hay una liga simulada activa), un
+    simulador de bracket de playoffs con árbol visual (una realización
+    concreta -- play-in, ronda 1, semis y finales de conferencia --
+    distinta cada vez que se pulsa) y un simulador de calendario de
+    temporada completo (`league_simulation.run_single_league_season_simulation`):
+    el resultado de CADA partido de una realización concreta, navegable
+    y filtrable por equipo, con boxscore ILUSTRATIVO por jugador (media
+    por-partido de temporada ya proyectada + ruido, categorías
+    independientes -- no una simulación conjunta jugada a jugada) y un
+    widget de head-to-head entre dos equipos cualesquiera sobre ese
+    mismo calendario. Usa el calendario REAL publicado por la NBA
+    cuando existe (`data_pipeline.build_league_schedule_dataset`) --
+    fechas, rivales, descanso y ventaja de campo reales; si no, cae a un
+    calendario sintético round-robin.
   - **Premios individuales** — heurísticas de MVP, DPOY, 6.º Hombre,
-    ROY, MIP y (si hay datos de los 30 equipos) COY sobre las
-    proyecciones ya calculadas, vía `src/awards_projection.py`. **NO son
-    una predicción de la votación real de los medios** -- cada fórmula
-    (Game Score proyectado ponderado por victorias del equipo para MVP,
-    un proxy de robos/tapones/rebote defensivo para DPOY, mejora real
-    entre las dos últimas temporadas para MIP, equipo que más superó su
-    récord real del año anterior como proxy de COY porque este proyecto
-    no modela entrenadores...) está documentada con sus limitaciones en
-    el docstring del módulo.
+    ROY, MIP y COY sobre las proyecciones ya calculadas, vía
+    `src/awards_projection.py`. **NO son una predicción de la votación
+    real de los medios** -- cada fórmula (Game Score proyectado
+    ponderado por victorias del equipo para MVP, un proxy de
+    robos/tapones/rebote defensivo para DPOY, mejora real entre las dos
+    últimas temporadas para MIP, equipo que más superó su récord real
+    del año anterior como proxy de COY porque este proyecto no modela
+    entrenadores...) está documentada con sus limitaciones en el
+    docstring del módulo.
+  - **Campeones reales** — comparables históricos (`champion_profiles.py`).
 - **🤖 Explicador (IA)** — chat en lenguaje natural sobre TODOS los datos
   ya calculados en las otras pestañas (`src/llm_explainer.py`, vía la
   API de Groq — modelos open-weight servidos con inferencia muy rápida).
@@ -1299,58 +1290,19 @@ Cuatro grupos de pestañas:
   avisa pero se puede seguir pegando texto a mano (fase 1 no depende de
   esta variable).
 
-La lógica de carga/combinación de datos vive en `dashboard/data_loader.py`
-(testeable, `tests/test_dashboard_data_loader.py`); `app.py` solo
-renderiza y se mantiene lo más fino posible — el renderizado de
-Streamlit no se testea de forma práctica con `pytest` (sí se verifica
-con `streamlit.testing.v1.AppTest` que el script completo corre sin
-excepciones). Dos excepciones a "solo lee CSV" en `data_loader.py`: el
-botón de bracket ejecuta una simulación en vivo
-(`league_simulation.simulate_single_bracket`, rápida — reutiliza los CSV
-de rosters ya cacheados, sin red) y `compute_awards_summary()` calcula
-los premios sobre los CSV ya generados. Si un CSV necesario no existe
-todavía, cada pestaña muestra qué comando correr para generarlo, en vez
-de fallar en seco.
-
 Las stats **totales** de temporada se muestran redondeadas a entero (son
 proyecciones continuas, pero "1600 PTS" se lee mejor que "1600.34" —
 los decimales en un total no aportan precisión real, solo ruido visual).
 Las stats **por partido** mantienen 1 decimal (ahí sí importa: 22.7 PPG
 vs. 23 PPG es una diferencia real a lo largo de una temporada).
 
-El tema visual (color de acento) está en `.streamlit/config.toml`.
-
-## Frontend web (`webapp/`)
-
-Interfaz alternativa en HTML/CSS/JS puro (sin frameworks ni dependencias
-de terceros) para un acabado visual más cuidado, en paralelo al dashboard
-de Streamlit — **no lo reemplaza**. Backend FastAPI que reutiliza
-`dashboard/data_loader.py` (y, en Liga NBA, `src/awards_projection.py` /
-`src/champion_profiles.py` / `src/llm_explainer.py`) sin duplicar ninguna
-transformación de datos.
-
-```bash
-uvicorn webapp.main:app --reload
-# abre http://localhost:8000
-```
-
-Tres pestañas de primer nivel (sin la de "Resumen" de Streamlit —
-duplicaba exactamente los mismos 4 datos ya visibles en Simulación, sin
-aportar nada propio): 🏀 Mi equipo (Roster, Simulación Monte Carlo con
-los botones en vivo, Sinergia de alineación, Backtesting — incluido el
-sweep de 450+ casos), 🏆 Liga NBA (Liga y Playoffs con explorador de
-equipo, selector de escenario con/sin lesiones, simulador de bracket
-con árbol visual, calendario de temporada navegable con boxscore por
-partido y head-to-head entre equipos, Premios individuales, Campeones
-reales) y 🤖
-Explicador (IA, chat contra Groq). Los gráficos (histogramas, línea de
-Net Rating,
-scatter de calibración) son SVG hecho a mano, sin librería externa. Los
-logos de equipo/NBA se cargan en vivo desde `cdn.nba.com` (nunca se
-guardan en el repo, que es público) y caen a una insignia con las
-iniciales del equipo si la imagen no carga. Tema oscuro fijo con un
-degradado de marca (azul marino → negro → rojo muy oscuro) en
-`webapp/static/css/tokens.css`. Tests en `tests/test_webapp_api.py`.
+Los gráficos (histogramas, línea de Net Rating, scatter de calibración)
+son SVG hecho a mano, sin librería externa. Los logos de equipo/NBA se
+cargan en vivo desde `cdn.nba.com` (nunca se guardan en el repo, que es
+público) y caen a una insignia con las iniciales del equipo si la imagen
+no carga. Tema oscuro fijo con un degradado de marca (azul marino →
+negro → rojo muy oscuro) en `webapp/static/css/tokens.css`. Tests en
+`tests/test_webapp_api.py`.
 
 ## Instalación
 
@@ -1467,9 +1419,8 @@ nba-superteam-sim/
 │       └── game_win_predictor_injury_signal.py  # positivo: disponibilidad de jugadores clave mejora el Brier score, incluso en versión pregame desplegable
 ├── notebooks/                      # exploración y prototipado de modelos
 ├── dashboard/
-│   ├── app.py                      # dashboard Streamlit (4 pestañas)
-│   └── data_loader.py              # carga/combinación de CSV, testeable
-├── webapp/                         # frontend HTML/CSS/JS (Fase 1, en paralelo a Streamlit)
+│   └── data_loader.py              # carga/combinación de CSV, testeable -- capa de datos de webapp/ (el dashboard Streamlit que vivió aquí se retiró)
+├── webapp/                         # única interfaz del proyecto: HTML/CSS/JS + FastAPI
 │   ├── main.py                     # FastAPI: monta routers + sirve static/
 │   ├── serializers.py              # DataFrame -> JSON (NaN/NaT -> None)
 │   ├── routers/                    # /api/status, /api/roster, /api/simulation, ...

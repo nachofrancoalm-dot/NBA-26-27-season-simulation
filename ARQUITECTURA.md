@@ -54,7 +54,7 @@ flowchart TD
     end
 
     subgraph view["8. Visualización"]
-        G1[dashboard/app.py]
+        G1[webapp/ - FastAPI + JS]
     end
 
     A1 --> B1
@@ -109,7 +109,8 @@ rosters reales en vez de solo el del config, y un motor de partido
 equipo-contra-equipo distinto (ver sección 7 del documento). El
 backtesting (7) reutiliza literalmente las mismas funciones de 1-5, pero
 con datos históricos reales en vez del roster/calendario hipotético del
-config. El dashboard (8) no calcula nada — solo lee los CSV que 1-7 ya
+config. La interfaz web (8, `webapp/`) no calcula nada — su capa de
+datos (`dashboard/data_loader.py`) solo lee los CSV que 1-7 ya
 escribieron en `data/processed/`.
 
 ## 2. Orden de ejecución de principio a fin
@@ -153,12 +154,12 @@ python src/data_pipeline.py --league
 # 6c. Proyectar los 30 equipos, simular temporada regular + playoffs
 python -c "from src.league_simulation import build_league_simulation_dataset; from src.config_loader import load_config; build_league_simulation_dataset(load_config())"
 
-# 8. Dashboard (lee todos los CSV anteriores, incluida la liga si existe)
-streamlit run dashboard/app.py
+# 8. Interfaz web (lee todos los CSV anteriores, incluida la liga si existe)
+uvicorn webapp.main:app --reload
 ```
 
 `schedule_strength.py`, `performance_curve.py`, `opponent_weighting.py`
-y `conference_adjustment.py` alimentan al **análisis y al dashboard**,
+y `conference_adjustment.py` alimentan al **análisis y a la interfaz web**,
 pero **no** al motor de simulación (5) directamente — el motor consume
 `injury_model`, `fatigue_accumulation`, `aging_curve` y
 `lineup_synergy`. Ver la sección 4 para el porqué.
@@ -187,7 +188,7 @@ directamente de `injury_risk.csv`/`fatigue_risk.csv`.
 Los otros cuatro (`schedule_strength`, `performance_curve`,
 `opponent_weighting`, `conference_adjustment`) sirven para **analizar y
 validar los 4 `historical_comparables`** — son la base analítica del
-backtesting y del dashboard, pero el motor hacia delante (`simulation.py`
+backtesting y de la interfaz web, pero el motor hacia delante (`simulation.py`
 para el roster hipotético) no los consume directamente porque:
 - `schedule_strength.py` necesitaría el calendario real del equipo
   simulado, que no existe (`simulation.py` muestrea uno sintético en su
@@ -436,8 +437,8 @@ playoffs / llega a cada ronda / gana el título) y
 `league_player_projections.csv` (proyección individual de cada uno de
 los ~450 jugadores de los 30 equipos, con las mismas stats por partido
 que `aging_curve_projection.csv`) — visibles en la pestaña "Liga y
-Playoffs" del dashboard, con un selector para navegar cualquiera de los
-30 equipos y ver su roster proyectado.
+Playoffs" de la interfaz web, con un selector para navegar cualquiera de
+los 30 equipos y ver su roster proyectado.
 
 > **Bug real encontrado al correr contra los 30 equipos reales:**
 > `simulate_playoffs_once` pasaba las 15 seeds completas de cada
@@ -495,11 +496,13 @@ lo que de verdad pasó). Ver el README para la tabla de resultados
 (Warriors 2016-17 en percentil razonable, Heat/Nets/Suns en percentiles
 extremos — el hallazgo central del proyecto).
 
-## 9. Dashboard: solo lectura
+## 9. Interfaz web (`webapp/`): solo lectura
 
-`dashboard/app.py` no calcula nada — `dashboard/data_loader.py` solo lee
-los CSV que las secciones 1-8 ya escribieron en `data/processed/`. Si
-falta un CSV, cada pestaña muestra qué comando correr para generarlo.
+`webapp/` (FastAPI + JS, única interfaz del proyecto -- ver README) no
+calcula nada por sí misma: sus routers reutilizan `dashboard/data_loader.py`,
+que solo lee los CSV que las secciones 1-8 ya escribieron en
+`data/processed/`. Si falta un CSV, cada pestaña muestra qué comando
+correr para generarlo.
 
 - **Toggle Totales / Por partido** — `load_roster_overview()` devuelve
   TODAS las columnas (totales de temporada y por-partido a la vez);

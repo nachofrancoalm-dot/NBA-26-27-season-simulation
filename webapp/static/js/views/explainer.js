@@ -1,10 +1,9 @@
 import { api } from "../api.js";
 import { card, el, emptyState } from "../ui.js";
 
-// Historial en memoria del módulo -- se pierde al recargar la página,
-// igual que st.session_state["explainer_history"] se pierde al
-// reiniciar el server de Streamlit. explain_question() es de un solo
-// turno (no manda historial al modelo), así que no hace falta más.
+// Historial en memoria del módulo -- se pierde al recargar la página.
+// explain_question() es de un solo turno (no manda historial al
+// modelo), así que no hace falta persistirlo.
 const history = [];
 let rendered = false;
 

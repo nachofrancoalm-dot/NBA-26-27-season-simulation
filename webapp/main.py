@@ -1,15 +1,14 @@
 """
 main.py
 
-Backend FastAPI del frontend web (Fase 1 + Fase 2: todas las pestañas del
-dashboard de Streamlit). Sirve la API JSON bajo /api/* y los archivos
-estáticos del frontend en /. No reimplementa ninguna lógica de datos:
-cada endpoint reutiliza dashboard/data_loader.py (ya puro, ya testeado),
-src/awards_projection.py, src/champion_profiles.py y src/llm_explainer.py
--- las mismas funciones que Streamlit ya usa.
-
-Streamlit (dashboard/app.py) sigue funcionando sin cambios como interfaz
-secundaria -- este backend es un frontend en paralelo, no un reemplazo.
+Backend FastAPI de la interfaz web -- única interfaz del proyecto (el
+dashboard de Streamlit que existió en paralelo, dashboard/app.py, se
+retiró; ver el aviso en el propio README). Sirve la API JSON bajo /api/*
+y los archivos estáticos del frontend en /. No reimplementa ninguna
+lógica de datos: cada endpoint reutiliza dashboard/data_loader.py (ya
+puro, ya testeado -- ver su docstring, es la capa de datos compartida,
+ya no depende de Streamlit), src/awards_projection.py,
+src/champion_profiles.py y src/llm_explainer.py.
 
 Uso:
     uvicorn webapp.main:app --reload

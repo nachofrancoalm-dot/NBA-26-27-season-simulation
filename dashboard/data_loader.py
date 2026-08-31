@@ -1,18 +1,21 @@
 """
 data_loader.py
 
-Funciones puras de carga/combinación de los CSV en data/processed/ para
-el dashboard de Streamlit (dashboard/app.py). Separado de app.py a
-propósito: la lógica de qué datos se muestran es testeable (ver
-tests/test_dashboard_data_loader.py); el renderizado con st.* no lo es de
-forma práctica, así que app.py se mantiene lo más fino posible.
+Funciones puras de carga/combinación de los CSV en data/processed/ --
+la capa de datos que consume webapp/ (cada router de webapp/routers/
+importa de aquí en vez de leer CSV por su cuenta). Vivió originalmente
+junto a un dashboard de Streamlit (dashboard/app.py, retirado del
+proyecto -- webapp/ es ahora la única interfaz) precisamente porque ya
+estaba separado de esa capa de renderizado: la lógica de qué datos se
+muestran es testeable (ver tests/test_dashboard_data_loader.py) con
+independencia de cómo se pinte.
 
 Ninguna función aquí llama a la API -- todo lee CSV ya generados por el
 pipeline (data_pipeline.py, aging_curve.py, injury_model.py,
 fatigue_accumulation.py, simulation.py, backtesting.py, lineup_synergy.py,
 league_simulation.py). Si un CSV no existe todavía, se devuelve None --
-app.py decide cómo avisar al usuario, esta capa no lanza excepciones por
-archivos faltantes.
+el caller (webapp/) decide cómo avisar al usuario, esta capa no lanza
+excepciones por archivos faltantes.
 
 CUATRO EXCEPCIONES a "solo lee CSV": run_single_bracket_simulation() sí
 ejecuta código en vivo (una simulación de bracket de playoffs) -- es
@@ -28,7 +31,7 @@ cada partido y boxscore ilustrativo por jugador, para el botón "Simular
 calendario de la temporada" (a diferencia del bracket y del resto de la
 liga, SÍ persiste CSV propios -- league_single_season_game_log.csv /
 league_single_season_player_box_scores.csv -- porque son caros de
-regenerar en cada rerender de Streamlit). compute_awards_summary() no
+regenerar en cada request). compute_awards_summary() no
 llama a la API ni simula nada nuevo, pero sí importa lógica de negocio
 de src/awards_projection.py (en vez de solo leer y reformatear un CSV)
 para calcular los premios individuales sobre los CSV ya generados.
@@ -103,8 +106,7 @@ GAMES_MINUTES_DISPLAY_COLUMNS: Dict[str, str] = {
 
 # Leyenda completa de todas las columnas que puede mostrar la pestaña de
 # roster (y la de liga, que comparte casi las mismas) -- una sola fuente
-# de verdad para los tooltips de columna y la leyenda de texto en
-# dashboard/app.py.
+# de verdad para los tooltips de columna y la leyenda de texto en webapp/.
 ROSTER_STAT_GLOSSARY: Dict[str, str] = {
     "PPG": "Puntos por partido (proyectados)",
     "RPG": "Rebotes por partido (proyectados)",
@@ -179,8 +181,8 @@ LEAGUE_GLOSSARY: Dict[str, str] = {
     "seed": "Posición dentro de su conferencia, ordenada por victorias medias simuladas (1 = mejor)",
 }
 
-# "situacion" es texto, no numérico -- NumberColumn no aplica, se documenta
-# aparte para el texto de leyenda (ver render_glossary_expander en app.py).
+# "situacion" es texto, no numérico -- se documenta aparte para el texto
+# de leyenda (glosario expandible en webapp/).
 STANDINGS_SITUATION_GLOSSARY = (
     "**situacion** — según el seed dentro de la conferencia: **Clasifica directo** "
     "(seeds 1-6), **Play-in** (seeds 7-10, juegan por las 2 últimas plazas de playoffs), "
@@ -381,8 +383,8 @@ def load_league_player_projections(config: Dict[str, Any], scenario: str = "with
     Proyecciones por jugador de los 30 equipos (league_simulation.py).
     None si no se ha corrido. `scenario="no_injuries"` lee la variante
     sin riesgo de lesión (ver league_simulation._apply_scenario) --
-    default sin cambios, mismo archivo de siempre, así que Streamlit
-    sigue funcionando igual sin tocar sus llamadas.
+    default sin cambios, mismo archivo de siempre, así que los callers
+    existentes siguen funcionando igual sin tocar sus llamadas.
     """
     from league_simulation import _scenario_suffix
 
@@ -679,7 +681,7 @@ def compute_awards_summary(
     all_star_quota = ap.check_all_star_nationality_quota(all_star)
     # Selección FINAL, con los añadidos del comisionado si la cuota
     # natural no llega al mínimo (a petición explícita del usuario) --
-    # ver el warning "commissioner_pick" que consume dashboard/app.py.
+    # ver el warning "commissioner_pick" que consume webapp/routers/awards.py.
     all_star_final = ap.add_commissioner_picks_for_nationality_quota(
         player_df, all_star, all_star_quota, team_win_pct=team_win_pct
     )

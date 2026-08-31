@@ -117,7 +117,7 @@ DEFAULT_ROTATION_SIZE = 10  # tamaño de rotación real NBA -- ver docstring de 
 # solo se pone a cero el risk_score de todo el mundo (ver
 # _apply_scenario) antes de simular. "with_injuries" escribe los mismos
 # nombres de archivo que el proyecto ya usaba antes de que existiera el
-# concepto de escenario, así que no rompe nada existente (Streamlit,
+# concepto de escenario, así que no rompe nada existente (webapp/,
 # tests) que llame sin pasar `scenario`.
 SCENARIO_WITH_INJURIES = "with_injuries"
 SCENARIO_NO_INJURIES = "no_injuries"
