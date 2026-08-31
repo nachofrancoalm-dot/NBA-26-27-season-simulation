@@ -944,6 +944,145 @@ def build_league_pt_defend_dataset(config: Dict[str, Any], force_refresh: bool =
     return combined
 
 
+def fetch_league_2man_lineup_stats(
+    season: str,
+    raw_dir: Path,
+    force_refresh: bool = False,
+) -> pd.DataFrame:
+    """
+    Net rating REAL de cada pareja de jugadores que compartió cancha esa
+    temporada (`leaguedashlineups`, group_quantity=2, measure_type
+    Advanced) -- para scripts/experiments/lineup_synergy_signal.py: la
+    investigación de si los dos efectos de src/lineup_synergy.py
+    (usage_clash, playmaking_spacing_synergy) predicen algo real sobre
+    net rating de pareja, o si los pesos actuales (nunca calibrados
+    contra datos) están adivinando. UNA llamada por temporada, liga
+    entera -- mismo patrón barato que fetch_league_hustle_stats/
+    fetch_league_pt_defend_stats. `GROUP_ID` viene como
+    "-player_id_a-player_id_b-" (guiones incluidos); el experimento se
+    encarga de parsearlo, no este fetcher.
+    """
+    from nba_api.stats.endpoints import leaguedashlineups
+
+    cache_path = raw_dir / "league_2man_lineups" / f"{season}.csv"
+
+    def _fetch():
+        stats = leaguedashlineups.LeagueDashLineups(
+            season=season, group_quantity="2", measure_type_detailed_defense="Advanced", per_mode_detailed="Totals"
+        )
+        return stats.get_data_frames()[0]
+
+    return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
+
+
+def build_league_2man_lineup_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Net rating de parejas de jugadores para las temporadas del
+    `backtest_sweep` (config["backtest_sweep"]["seasons"], 16 temporadas
+    2010-11..2025-26 -- ya el rango que usa el resto de la validación
+    empírica de este proyecto, no hace falta uno nuevo). Guarda
+    data/processed/league_2man_lineups.csv.
+    """
+    paths = get_paths(config)
+    seasons = config.get("backtest_sweep", {}).get("seasons", [])
+    frames = []
+    for season in tqdm(seasons, desc="2-man lineup net ratings"):
+        try:
+            df = fetch_league_2man_lineup_stats(season, paths["raw"], force_refresh)
+        except Exception as exc:  # noqa: BLE001 -- ver _download_*_for_cases
+            print(f"  AVISO: temporada {season} saltada ({type(exc).__name__}: {exc})")
+            continue
+        if not df.empty:
+            frames.append(df.assign(season=season))
+        time.sleep(API_CALL_DELAY_SECONDS)
+
+    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    out_path = paths["processed"] / "league_2man_lineups.csv"
+    combined.to_csv(out_path, index=False)
+    print(f"Guardado: {out_path} ({len(combined)} parejas, {len(frames)} temporadas)")
+    return combined
+
+
+# Cuatro categorías de seguimiento (`leaguedashptstats`) usadas para
+# probar candidatos NUEVOS de sinergia de pareja en
+# scripts/experiments/lineup_synergy_signal.py, más allá de
+# usage_clash/playmaking_spacing_synergy (que salieron sin apoyo
+# empírico -- ver CLAUDE.md): volumen de tiro creado por uno mismo
+# (PullUpShot) vs. recibido/catch-and-shoot (CatchShoot) -- pareja
+# "tirador con balón + tirador sin balón"; penetraciones (Drives) de un
+# manejador vs. presencia interior de un grande -- proxy de pick-and-roll
+# (nba_api no expone frecuencia de bloqueo-y-continuación real); y
+# volumen de poste (PostTouch) -- pareja "anotador de poste + creador".
+LINEUP_SYNERGY_TRACKING_MEASURE_TYPES = ["CatchShoot", "PullUpShot", "Drives", "PostTouch"]
+
+
+def fetch_league_tracking_stats(
+    season: str,
+    pt_measure_type: str,
+    raw_dir: Path,
+    force_refresh: bool = False,
+) -> pd.DataFrame:
+    """
+    Una categoría de `leaguedashptstats` (tracking SportVU/Second
+    Spectrum) para TODOS los jugadores de una temporada -- UNA llamada,
+    mismo patrón barato que fetch_league_hustle_stats/
+    fetch_league_pt_defend_stats. `pt_measure_type` debe ser uno de
+    LINEUP_SYNERGY_TRACKING_MEASURE_TYPES (u otro valor válido de
+    `nba_api.stats.library.parameters.PtMeasureType`, pero ese es el uso
+    real de este proyecto).
+    """
+    from nba_api.stats.endpoints import leaguedashptstats
+
+    cache_path = raw_dir / "league_tracking_stats" / pt_measure_type / f"{season}.csv"
+
+    def _fetch():
+        stats = leaguedashptstats.LeagueDashPtStats(
+            season=season, pt_measure_type=pt_measure_type, player_or_team="Player", per_mode_simple="Totals"
+        )
+        return stats.get_data_frames()[0]
+
+    return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
+
+
+def build_league_tracking_stats_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Las 4 categorías de LINEUP_SYNERGY_TRACKING_MEASURE_TYPES para las
+    temporadas del `backtest_sweep`, unidas en un solo CSV ancho (una
+    fila por PLAYER_ID+season, una columna por estadística de cada
+    categoría -- todas comparten PLAYER_ID/season como clave, así que un
+    merge sucesivo es más simple que concatenar). Guarda
+    data/processed/league_tracking_stats.csv. Temporadas o categorías sin
+    datos (tracking no disponible antes de cierto año) se saltan sin
+    abortar el resto, mismo criterio que build_league_pt_defend_dataset.
+    """
+    paths = get_paths(config)
+    seasons = config.get("backtest_sweep", {}).get("seasons", [])
+
+    season_frames = []
+    for season in tqdm(seasons, desc="Tracking stats (4 categorías/temporada)"):
+        merged_season = None
+        for measure_type in LINEUP_SYNERGY_TRACKING_MEASURE_TYPES:
+            try:
+                df = fetch_league_tracking_stats(season, measure_type, paths["raw"], force_refresh)
+            except Exception as exc:  # noqa: BLE001 -- ver _download_*_for_cases
+                print(f"  AVISO: {season}/{measure_type} saltada ({type(exc).__name__}: {exc})")
+                continue
+            if df.empty:
+                continue
+            keep_cols = [c for c in df.columns if c == "PLAYER_ID" or c not in ("PLAYER_NAME", "TEAM_ID", "TEAM_ABBREVIATION", "AGE", "GP", "W", "L")]
+            df = df[keep_cols]
+            merged_season = df if merged_season is None else merged_season.merge(df, on="PLAYER_ID", how="outer", suffixes=("", f"_{measure_type}_dup"))
+            time.sleep(API_CALL_DELAY_SECONDS)
+        if merged_season is not None:
+            season_frames.append(merged_season.assign(season=season))
+
+    combined = pd.concat(season_frames, ignore_index=True) if season_frames else pd.DataFrame()
+    out_path = paths["processed"] / "league_tracking_stats.csv"
+    combined.to_csv(out_path, index=False)
+    print(f"Guardado: {out_path} ({len(combined)} filas, {len(season_frames)} temporadas)")
+    return combined
+
+
 def build_team_schedule_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
     """
     Filtra el calendario completo de la liga a los partidos del equipo del
