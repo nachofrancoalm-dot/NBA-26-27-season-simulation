@@ -4,12 +4,19 @@ __pycache__/
 .pytest_cache/
 data/raw/*.csv
 data/raw/**/*.csv
+!data/raw/player_common_info/*.csv
 # data/processed/ SÍ se versiona a propósito (a diferencia de data/raw/):
 # es el output ya calculado que necesitan webapp/ y dashboard/ para
 # funcionar en un despliegue limpio (git clone + pip install, sin volver
 # a llamar a nba_api ni recalcular nada) -- ~50MB, dentro de límites
 # normales de GitHub. data/raw/ sigue sin versionarse porque SÍ es
 # reproducible desde cero vía `python -m data_pipeline` (ver README).
+# EXCEPCIÓN: data/raw/player_common_info/ SÍ se versiona (~700KB) --
+# webapp/routers/players.py lee este caché DIRECTAMENTE para el popup de
+# bio/posición de jugador (ver su docstring: a propósito nunca llama a
+# fetch_player_common_info desde un request HTTP, por el rate-limiting
+# agresivo de stats.nba.com), así que sin este caché en el repo el popup
+# sale sin posición/bio en un despliegue limpio como Render.
 .env
 CLAUDE.md
 .claude/
