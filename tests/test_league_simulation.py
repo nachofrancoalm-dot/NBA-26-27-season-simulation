@@ -498,6 +498,62 @@ def test_project_team_roster_does_not_dilute_star_minutes_with_bench_churn():
     assert sum(rotation_minutes) == pytest.approx(240.0)
 
 
+def test_project_team_roster_does_not_zero_out_a_rotation_player_with_a_short_recent_season():
+    # Regresión de un hallazgo real (reportado por el usuario): Dereck
+    # Lively II (DAL) salía con 0 minutos proyectados en Liga NBA pese a
+    # ser titular real -- su última temporada fue corta por una lesión
+    # (7 partidos, 16.4 MPG), y el ranking de rotación usaba SOLO esa
+    # fila, así que caía fuera del top-N pese a sus dos temporadas
+    # previas completas a ~23 MPG. Números reales de Lively.
+    injured_star_seasons = pd.DataFrame(
+        [
+            {
+                "PLAYER_ID": 1, "SEASON_ID": season, "PLAYER_AGE": age, "GP": gp, "MIN": minutes,
+                "PTS": minutes * 0.4, "AST": 0, "REB": 0, "STL": 0, "BLK": 0, "TOV": 0,
+                "FG3M": 0, "FG3A": 0, "OREB": 0, "DREB": 0, "FGM": 0, "FGA": 0,
+                "FTM": 0, "FTA": 0, "PF": 0,
+            }
+            for season, age, gp, minutes in (
+                ("2023-24", 19, 55, 1294),
+                ("2024-25", 20, 36, 833),
+                ("2025-26", 21, 7, 115),
+            )
+        ]
+    )
+    # 10 compañeros de rotación de una sola temporada, con MPG en bruto
+    # de 17 a 35 -- todos por encima del MPG ingenuo de la última
+    # temporada del jugador lesionado (16.4), pero varios por debajo de
+    # su MPG ponderado por fiabilidad (~22.6).
+    role_players = [(pid, name, raw_min, 70) for pid, (name, raw_min) in enumerate(
+        [
+            ("Role A", 35.0), ("Role B", 32.0), ("Role C", 29.0), ("Role D", 26.0),
+            ("Role E", 24.0), ("Role F", 22.0), ("Role G", 20.0), ("Role H", 19.0),
+            ("Role I", 18.0), ("Role J", 17.0),
+        ],
+        start=2,
+    )]
+    role_roster, role_regular = _minutes_only_roster(role_players)
+
+    roster = pd.concat(
+        [pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "Injured Star"}]), role_roster], ignore_index=True
+    )
+    regular = pd.concat([injured_star_seasons, role_regular], ignore_index=True)
+    config = {
+        "team": {"season": "2026-27"}, "simulation": {"games_per_season": 82},
+        "lineup_synergy": {}, "league_simulation": {},
+    }
+
+    result = project_team_roster(roster, regular, pd.DataFrame(), config)
+    minutes_by_id = {
+        pid: row["minutes_projection"] for pid, row in zip(roster["PLAYER_ID"], result["player_rows"])
+    }
+
+    # El jugador lesionado ahora SÍ entra en la rotación real (top 10 de
+    # 11), y el compañero más débil (17 MPG en bruto, id=11) queda fuera.
+    assert minutes_by_id[1] > 0.0
+    assert minutes_by_id[11] == 0.0
+
+
 def test_project_team_roster_handles_player_with_no_history():
     roster = pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "Rookie Player"}])
     empty_regular = pd.DataFrame(columns=["PLAYER_ID", "SEASON_ID", "PLAYER_AGE", "GP", "MIN"]).astype(

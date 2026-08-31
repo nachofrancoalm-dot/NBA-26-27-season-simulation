@@ -21,6 +21,7 @@ from aging_curve import (  # noqa: E402
     compute_game_score_per36,
     compute_per36_stats,
     compute_recency_weighted_baseline,
+    compute_reliability_weighted_minutes_per_game,
     project_player_season,
     zero_player_projection,
 )
@@ -107,6 +108,56 @@ def test_recency_weighted_baseline_downweights_a_short_recent_season():
     # temporadas completas (PTS/36 ~26-27), no a la corta (~20.7) --
     # es decir, debe salir MÁS ALTO que si solo pesara la recencia.
     assert baseline["PTS_per36"] > recency_only_baseline
+
+
+def test_reliability_weighted_minutes_per_game_favors_full_seasons_over_a_short_recent_one():
+    """Caso real: Dereck Lively II (DAL) jugó temporadas completas de
+    ~23 MPG y una última temporada de solo 7 partidos (16.4 MPG) por una
+    fractura de pie -- el MPG ponderado debe quedar mucho más cerca de
+    su rol habitual (~23) que del promedio ingenuo de la última
+    temporada sola, para que no caiga fuera del top-N de rotación de
+    league_simulation.project_team_roster por una muestra corta."""
+    seasons = _seasons(
+        [
+            {"season": "2023-24", "age": 19, "gp": 55, "min": 1294},
+            {"season": "2024-25", "age": 20, "gp": 36, "min": 833},
+            {"season": "2025-26", "age": 21, "gp": 7, "min": 115},
+        ]
+    )
+    weighted_mpg = compute_reliability_weighted_minutes_per_game(seasons, n_seasons=3, half_life_seasons=1.5)
+
+    naive_last_season_mpg = 115 / 7
+    assert weighted_mpg > naive_last_season_mpg
+    # Debe quedar razonablemente cerca del nivel de las dos temporadas
+    # completas (~23 MPG), no colapsado hacia la corta (~16.4).
+    assert weighted_mpg == pytest.approx(22.39, abs=0.1)
+
+
+def test_reliability_weighted_minutes_per_game_does_not_inflate_a_genuine_role_reduction():
+    """Caso real (Caleb Martin, DAL) que un primer intento de este fix
+    rompía: una temporada actual con muestra GRANDE (58 partidos) a rol
+    de banquillo (14.8 MPG), tras ser titular hace 2 temporadas (~27
+    MPG). Con partidos suficientes, la temporada actual YA es fiable --
+    NO debe mezclarse con el pasado ni inflarse hacia el rol antiguo."""
+    seasons = _seasons(
+        [
+            {"season": "2023-24", "age": 27, "gp": 64, "min": 1757},  # titular, ~27.5 MPG
+            {"season": "2024-25", "age": 28, "gp": 45, "min": 1218},  # todavía titular, ~27.1 MPG
+            {"season": "2025-26", "age": 29, "gp": 58, "min": 856},  # rol nuevo de banquillo, ~14.8 MPG
+        ]
+    )
+    weighted_mpg = compute_reliability_weighted_minutes_per_game(seasons, n_seasons=3, half_life_seasons=1.5)
+    assert weighted_mpg == pytest.approx(856 / 58)
+
+
+def test_reliability_weighted_minutes_per_game_matches_last_season_with_one_season_only():
+    seasons = _seasons([{"season": "2025-26", "age": 25, "gp": 40, "min": 1000}])
+    assert compute_reliability_weighted_minutes_per_game(seasons) == pytest.approx(25.0)
+
+
+def test_reliability_weighted_minutes_per_game_empty_input_returns_zero():
+    empty = _seasons([{"season": "2025-26", "age": 25, "gp": 40, "min": 1000}]).iloc[0:0]
+    assert compute_reliability_weighted_minutes_per_game(empty) == 0.0
 
 
 def test_recency_weighted_baseline_matches_pure_recency_when_minutes_equal():

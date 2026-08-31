@@ -271,6 +271,88 @@ def compute_recency_weighted_baseline(
     return baseline
 
 
+# Partidos mínimos para que la temporada más reciente de un jugador se
+# considere una muestra suficiente de su rol REAL -- ver
+# compute_reliability_weighted_minutes_per_game. ~1/4 de una temporada de
+# 82 partidos: por debajo de eso (vuelta de lesión a mitad de temporada,
+# llamado puntual) el MPG de esa sola temporada es demasiado ruidoso para
+# fijar el rol del jugador sin mirar historial.
+MIN_RELIABLE_GAMES_FOR_MPG = 20
+
+
+def compute_reliability_weighted_minutes_per_game(
+    player_seasons: pd.DataFrame,
+    n_seasons: int = DEFAULT_N_SEASONS_LOOKBACK,
+    half_life_seasons: float = DEFAULT_RECENCY_HALF_LIFE_SEASONS,
+    min_reliable_games: int = MIN_RELIABLE_GAMES_FOR_MPG,
+) -> float:
+    """
+    Minutos/partido reales de un jugador para fijar su ROL actual.
+
+    Si la temporada más reciente tiene >= `min_reliable_games` partidos,
+    se usa tal cual (MIN/GP de esa temporada, comportamiento IDÉNTICO al
+    anterior) -- una temporada con una muestra así de grande YA es una
+    medida fiable del rol actual del jugador, sea cual sea ese rol.
+
+    Si no (vuelta de lesión a mitad de temporada, llamado puntual), se
+    hace una media ponderada por recencia Y por fiabilidad (GP de la
+    temporada / max(GP) de la ventana) de las últimas `n_seasons`.
+
+    POR QUÉ, Y POR QUÉ NO SIEMPRE PROMEDIAR (dos casos reales opuestos
+    encontrados en Liga NBA al investigar esto):
+
+    1. Dereck Lively II (DAL): 7 partidos/16.4 MPG en 2025-26 (vuelta de
+       una fractura de pie), tras 55 partidos/23.5 MPG y 36 partidos/23.1
+       MPG las dos temporadas anteriores. `league_simulation.project_team_roster`
+       decide qué `rotation_size` jugadores forman la rotación real de un
+       equipo a partir del MIN/GP de la ÚLTIMA temporada ÚNICAMENTE --
+       con eso, Lively caía FUERA de la rotación (0 minutos proyectados)
+       pese a tener un Game Score/36 de 19.8, propio de titular. Aquí SÍ
+       hace falta mirar atrás: su muestra de 7 partidos es demasiado
+       corta para fijar su rol.
+
+    2. Caleb Martin (DAL): 58 partidos/14.8 MPG en 2025-26 -- rol de
+       banquillo REAL y bien medido (58 partidos es una muestra grande),
+       tras ser titular en Miami hace 2 temporadas (~27 MPG). Un primer
+       intento de este fix que promediaba SIEMPRE las últimas N
+       temporadas (sin este umbral) inflaba a Martin hacia sus ~27 MPG de
+       hace 2 años y lo hacía desplazar a Daniel Gafford (GS/36=17.7, rol
+       de rotación real y actual) de la rotación de Dallas -- un cambio
+       de equipo/rol genuino, MAL confundido con una muestra corta. Con
+       58 partidos, su temporada actual YA es fiable tal cual, no hace
+       falta (ni conviene) mirar atrás.
+
+    La diferencia entre los dos casos es GP de la temporada más reciente
+    (7 vs. 58) -- de ahí el umbral, en vez de promediar siempre como en
+    el primer intento.
+    """
+    df = dedupe_traded_seasons(player_seasons)
+    recent = _most_recent_n_seasons(df, n_seasons)
+    if recent.empty:
+        return 0.0
+
+    most_recent_gp = float(recent.iloc[0]["GP"])
+    if most_recent_gp >= min_reliable_games:
+        most_recent_min = float(recent.iloc[0]["MIN"])
+        return most_recent_min / most_recent_gp if most_recent_gp > 0 else 0.0
+
+    seasons_ago = recent.index.to_numpy()
+    recency_weights = 0.5 ** (seasons_ago / half_life_seasons)
+
+    games = recent["GP"].to_numpy()
+    max_games = games.max()
+    reliability_weights = games / max_games if max_games > 0 else np.ones_like(games, dtype=float)
+
+    weights = recency_weights * reliability_weights
+    total_weight = weights.sum()
+    if total_weight <= 0:
+        return 0.0
+
+    minutes = recent["MIN"].to_numpy()
+    mpg_per_season = np.divide(minutes, games, out=np.zeros_like(minutes, dtype=float), where=games > 0)
+    return float((weights * mpg_per_season).sum() / total_weight)
+
+
 def _annual_rate_for_age(age: float, curve: List[Dict[str, float]]) -> float:
     for breakpoint in curve:
         if age <= breakpoint["up_to_age"]:

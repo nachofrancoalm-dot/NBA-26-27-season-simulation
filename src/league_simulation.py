@@ -74,6 +74,7 @@ from season_utils import dedupe_traded_seasons, season_start_year  # noqa: E402
 from aging_curve import (  # noqa: E402
     DEFAULT_N_SEASONS_LOOKBACK,
     DEFAULT_RECENCY_HALF_LIFE_SEASONS,
+    compute_reliability_weighted_minutes_per_game,
     project_player_season,
 )
 from advanced_impact import (  # noqa: E402
@@ -215,6 +216,18 @@ def project_team_roster(
     trata como 0 minutos -- no afectan de forma relevante a la fuerza de
     un equipo en una aproximación de este tipo, y diluir la rotación real
     con ellos es precisamente lo que causaba el problema.
+
+    TERCER problema real, encontrado por el usuario (caso Dereck Lively
+    II, DAL: 0 MPG proyectados pese a Game Score/36=19.8, propio de
+    titular): los minutos "en bruto" del ranking anterior venían de la
+    ÚLTIMA temporada únicamente -- un jugador de rotación real con una
+    temporada corta por lesión caía por debajo del corte de
+    `rotation_size` aunque sus temporadas previas mostraran un rol
+    claramente de rotación. Arreglado usando
+    `aging_curve.compute_reliability_weighted_minutes_per_game()` (mismo
+    criterio recencia+fiabilidad que `compute_recency_weighted_baseline`,
+    el fix ya aplicado a la línea base por-36 para el caso Tatum) en vez
+    de una sola fila -- validado contra el backtest sweep de 480 casos.
     """
     player_ids = roster_slice["PLAYER_ID"].astype(int).tolist()
     player_names = roster_slice.set_index(roster_slice["PLAYER_ID"].astype(int))["PLAYER"].to_dict()
@@ -243,6 +256,11 @@ def project_team_roster(
     aging_half_life = aging_cfg.get("recency_half_life_seasons", DEFAULT_RECENCY_HALF_LIFE_SEASONS)
 
     # --- Paso 1: minutos "en bruto" de cada jugador, sin proyectar todavía ---
+    # Ponderados por recencia + fiabilidad (compute_reliability_weighted_minutes_per_game),
+    # NO solo la última temporada -- ver su docstring (caso Dereck Lively
+    # II: una sola temporada corta por lesión lo sacaba de la rotación
+    # pese a ser titular real). `recent_row` (la fila más reciente sola)
+    # se sigue usando aparte, más abajo, para current_age/current_year.
     raw_minutes: Dict[int, float] = {}
     recent_rows: Dict[int, Any] = {}
     for player_id in player_ids:
@@ -250,10 +268,9 @@ def project_team_roster(
         if player_regular.empty:
             raw_minutes[player_id] = 0.0
             continue
-        recent_row = _most_recent_season_row(player_regular)
-        recent_rows[player_id] = recent_row
-        raw_minutes[player_id] = (
-            float(recent_row["MIN"]) / float(recent_row["GP"]) if float(recent_row["GP"]) > 0 else 0.0
+        recent_rows[player_id] = _most_recent_season_row(player_regular)
+        raw_minutes[player_id] = compute_reliability_weighted_minutes_per_game(
+            player_regular, aging_n_seasons, aging_half_life
         )
 
     # Solo la rotación (top N por minutos en bruto) participa en la
