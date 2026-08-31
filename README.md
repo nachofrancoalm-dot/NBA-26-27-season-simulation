@@ -13,7 +13,7 @@ código.
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Tests](https://img.shields.io/badge/tests-465%20passing-brightgreen)
 
-🔗 **Live demo:** _deploying — link coming soon_ · 📄 [Full architecture walkthrough](ARQUITECTURA.md)
+🔗 **Live demo:** [nba-superteam-sim.onrender.com](https://nba-superteam-sim.onrender.com) (free tier — first load can take ~30-60s if it's been idle) · 📄 [Full architecture walkthrough](ARQUITECTURA.md)
 
 ## What this is
 
