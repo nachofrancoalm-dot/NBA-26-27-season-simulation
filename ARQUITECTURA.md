@@ -8,6 +8,13 @@ literatura citada, decisiones de calibración); este documento explica
 
 ## 1. Mapa completo
 
+Versión simplificada (8 etapas, la que conviene mirar primero):
+
+![Diagrama de arquitectura](docs/screenshots/architecture.png)
+
+Versión completa (todos los CSV intermedios y qué produce cada uno, útil
+para seguir el flujo de datos exacto):
+
 ```mermaid
 flowchart TD
     subgraph ingest["1. Ingesta -- src/data_pipeline.py"]
