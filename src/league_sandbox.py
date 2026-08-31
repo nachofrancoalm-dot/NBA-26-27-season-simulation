@@ -301,7 +301,7 @@ def compute_hypothetical_awards(config: Dict[str, Any], league_result: Dict[str,
 
     rookie_ids = ap.compute_rookie_player_ids(career)
     bench_ids = ap.compute_bench_player_ids(career)
-    all_star = ap.compute_all_star_selections(player_df, games_per_season, team_win_pct=team_win_pct)
+    all_star = ap.compute_all_star_selections(player_df, games_per_season, team_win_pct=team_win_pct, team_record=team_record)
     all_star_quota = ap.check_all_star_nationality_quota(all_star)
     all_star_final = ap.add_commissioner_picks_for_nationality_quota(
         player_df, all_star, all_star_quota, team_win_pct=team_win_pct

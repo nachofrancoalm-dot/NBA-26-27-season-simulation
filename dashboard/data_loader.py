@@ -693,7 +693,7 @@ def compute_awards_summary(
 
     rookie_ids = ap.compute_rookie_player_ids(career)
     bench_ids = ap.compute_bench_player_ids(career)
-    all_star = ap.compute_all_star_selections(player_df, games_per_season, team_win_pct=team_win_pct)
+    all_star = ap.compute_all_star_selections(player_df, games_per_season, team_win_pct=team_win_pct, team_record=team_record)
     all_star_quota = ap.check_all_star_nationality_quota(all_star)
     # Selección FINAL, con los añadidos del comisionado si la cuota
     # natural no llega al mínimo (a petición explícita del usuario) --

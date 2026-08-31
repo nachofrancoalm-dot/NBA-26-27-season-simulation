@@ -491,6 +491,7 @@ def compute_all_star_selections(
     player_df: pd.DataFrame,
     games_per_season: int,
     team_win_pct: Optional[Dict[Any, float]] = None,
+    team_record: Optional[Dict[Any, str]] = None,
     conference_col: str = "conference",
     n_per_conference: int = DEFAULT_ALL_STARS_PER_CONFERENCE,
     n_starters_per_conference: int = DEFAULT_ALL_STAR_STARTERS_PER_CONFERENCE,
@@ -532,9 +533,13 @@ def compute_all_star_selections(
     df["season_value"] = _season_value(df)
     if team_win_pct:
         df["team_win_pct"] = df["player_id"].map(team_win_pct).fillna(0.5)
+    df = _attach_team_record(df, team_record)
 
     cols = [
-        c for c in ["player_id", "player_name", "team_abbreviation", conference_col, "country", "season_value", "team_win_pct"]
+        c for c in
+        ["player_id", "player_name", "team_abbreviation", "team_record", conference_col, "country"]
+        + OFFENSIVE_COMPARISON_STATS
+        + ["season_value", "team_win_pct"]
         if c in df.columns
     ]
 

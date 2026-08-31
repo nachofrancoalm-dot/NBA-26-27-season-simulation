@@ -1301,8 +1301,14 @@ Tres pestañas de primer nivel:
     solo la proyección, compara cada stat "temporada real anterior →
     proyectada" (`awards_projection.compute_latest_real_season_stats`),
     ya que MIP se vota sobre una mejora que YA ocurrió, no sobre una
-    proyección. COY sigue en tabla (es un premio de equipo, sin
-    jugador). Los quintetos **All-NBA** y **All-Defensive**
+    proyección. **Entrenador del Año** y **All-Star** también son
+    ranking visual, no tabla: COY (premio de EQUIPO, sin jugador --
+    este proyecto no modela entrenadores) usa `teamLeaderboardChart()`,
+    con el escudo del equipo en vez de una foto de jugador y abre el
+    popup de EQUIPO al hacer clic; el All-Star reutiliza
+    `leaderboardChart()` normal, dividido en dos columnas Este/Oeste,
+    con una etiqueta "Titular"/"Reserva" en cada fila. Los quintetos
+    **All-NBA** y **All-Defensive**
     (`compute_all_nba_teams`/`compute_all_defensive_teams`, formato
     clásico 2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot) se
     dibujan directamente sobre una media cancha real

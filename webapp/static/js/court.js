@@ -179,9 +179,9 @@ export function courtLineup(records, { title, teamIds = {}, season } = {}) {
     );
     const preview = (event) =>
       showPlayerPreview(event, {
-        playerId: rec.player_id,
-        playerName: rec.player_name,
-        teamAbbreviation: rec.team_abbreviation,
+        photo: playerPhoto(rec.player_id, rec.player_name, 40),
+        name: rec.player_name,
+        subtitle: rec.team_abbreviation,
         caption: season ? `Temporada proyectada ${season}` : null,
         stats: lineupStats(rec),
       });

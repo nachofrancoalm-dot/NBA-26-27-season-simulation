@@ -1216,3 +1216,16 @@ td.cell-clickable:focus-visible {
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
 }
+
+/* Etiqueta corta opcional en una fila del leaderboard (p.ej. "Titular"
+   vs. "Reserva" en el All-Star -- ver compute_all_star_selections). */
+.leaderboard-tag {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-card-alt);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}

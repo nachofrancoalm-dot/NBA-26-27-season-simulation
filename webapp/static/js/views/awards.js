@@ -5,7 +5,7 @@ import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
 import { getHypotheticalLeague, clearHypotheticalLeague, hypotheticalBanner } from "../hypothetical-league.js";
 import { courtLineup } from "../court.js";
-import { leaderboardChart } from "../leaderboard.js";
+import { leaderboardChart, teamLeaderboardChart } from "../leaderboard.js";
 
 /** Doble clic en jugador Y en equipo para cualquier tabla de premios --
  * dataTable() ya soporta varias columnas con doble clic a la vez (ver
@@ -108,19 +108,39 @@ function buildLeaderboardConfig(season) {
       statsFn: (r) => fullStats(r, { prevPrefix: "prev_" }),
       captionFn: (r) => `Real ${r.prev_season || "?"} → Proyectada ${season}`,
     },
+    all_star: {
+      valueKey: "season_value",
+      statsFn: (r) => fullStats(r, { valueKey: "season_value", valueLabel: "Valor All-Star" }),
+      captionFn: projectedCaption,
+    },
+  };
+}
+
+/** COY es un premio de EQUIPO (este proyecto no modela entrenadores en
+ * absoluto, ver awards_projection.compute_coy_candidates) -- barra por
+ * win_improvement (victorias proyectadas menos las REALES del año
+ * anterior), vista previa con las 3 columnas que ya tenía la tabla. */
+function coyConfig() {
+  return {
+    valueKey: "win_improvement",
+    valueFormat: (v) => (typeof v === "number" ? `+${v.toFixed(1)}` : "—"),
+    statsFn: (r) => [
+      Number.isFinite(r.prior_wins) ? { label: "Victorias año anterior (real)", value: fmt1(r.prior_wins) } : null,
+      Number.isFinite(r.wins_mean) ? { label: "Victorias proyectadas", value: fmt1(r.wins_mean) } : null,
+      Number.isFinite(r.win_improvement) ? { label: "Mejora", value: `+${fmt1(r.win_improvement)}` } : null,
+    ].filter(Boolean),
   };
 }
 
 /** Ranking visual (foto + barra, ver leaderboard.js) para los premios
  * individuales con una columna de "valor" clara -- reemplaza la tabla
- * a petición del usuario ("más minimalista y visual"). COY sigue en
- * tabla: es un premio de EQUIPO (sin player_name/player_id), no encaja
- * en un ranking de jugadores. */
-function awardBlock(emoji, title, records, teamIds, config) {
+ * a petición del usuario ("más minimalista y visual"). `chartFn`:
+ * leaderboardChart (jugadores) o teamLeaderboardChart (COY, equipos). */
+function awardBlock(emoji, title, records, teamIds, config, chartFn = leaderboardChart) {
   const body =
     records && records.length
       ? config
-        ? leaderboardChart(records, { ...config, teamIds })
+        ? chartFn(records, { ...config, teamIds })
         : dataTable(records, {}, awardsInteractions(teamIds))
       : el("p", { class: "caption" }, "Sin candidatos.");
   return el("div", {}, [el("h3", {}, `${emoji} ${title}`), body]);
@@ -187,13 +207,13 @@ export async function render(container) {
       ]),
       el("div", { class: "grid-2", style: "margin-top: 16px;" }, [
         awardBlock("🎖️", "6.º Hombre", data.sixth_man, teamIds, leaderboardConfig.sixth_man),
-        awardBlock("📋", "Entrenador del Año", data.coy, teamIds, null),
+        awardBlock("📋", "Entrenador del Año", data.coy, teamIds, coyConfig(), teamLeaderboardChart),
       ]),
       glossaryExpander(Object.entries(data.glossary), "Leyenda de columnas"),
     ])
   );
 
-  cards.push(allStarCard(data, teamIds));
+  cards.push(allStarCard(data, teamIds, leaderboardConfig.all_star));
   cards.push(card([allTeamSection("🏀 Quintetos All-NBA", data.all_nba, teamIds, season)]));
   cards.push(card([allTeamSection("🛡️ Quintetos All-Defensive", data.all_defensive, teamIds, season)]));
   cards.push(card([glossaryExpander(Object.entries(data.season_awards_glossary), "Leyenda — premios de fin de temporada")]));
@@ -201,11 +221,11 @@ export async function render(container) {
   container.replaceChildren(...cards);
 }
 
-function allStarCard(data, teamIds) {
+function allStarCard(data, teamIds, config) {
   const records = data.all_star || [];
   const conferences = [...new Set(records.map((r) => r.conference).filter(Boolean))];
 
-  const tables =
+  const leaderboards =
     conferences.length > 1
       ? el(
           "div",
@@ -213,12 +233,15 @@ function allStarCard(data, teamIds) {
           conferences.map((conf) =>
             el("div", {}, [
               el("h3", {}, conf),
-              dataTable(records.filter((r) => r.conference === conf), {}, awardsInteractions(teamIds)),
+              leaderboardChart(
+                records.filter((r) => r.conference === conf),
+                { ...config, teamIds }
+              ),
             ])
           )
         )
       : records.length
-      ? dataTable(records, {}, awardsInteractions(teamIds))
+      ? leaderboardChart(records, { ...config, teamIds })
       : el("p", { class: "caption" }, "Sin candidatos.");
 
   const quota = data.all_star_nationality_quota;
@@ -242,8 +265,8 @@ function allStarCard(data, teamIds) {
 
   return card([
     el("h2", {}, "⭐ All-Star"),
-    el("p", { class: "caption" }, "Titular/Reserva es solo una etiqueta sobre el ranking -- no simula el voto real."),
-    tables,
+    el("p", { class: "caption" }, "Titular/Reserva es solo una etiqueta sobre el ranking -- no simula el voto real. Clic en un jugador (o pasa el ratón) para ver su detalle."),
+    leaderboards,
     banner,
   ]);
 }
