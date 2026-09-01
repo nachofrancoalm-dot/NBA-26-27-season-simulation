@@ -49,9 +49,7 @@ def _team_proj(game_score: float, n_players: int = 5, fatigue: float = 0.0, risk
 
 
 def _team_proj_with_player_rows(player_id: int, player_name: str, pts_projected: float, games_per_season: int) -> dict:
-    """Como _team_proj pero con UN jugador y player_rows -- lo que
-    necesita simulate_single_league_season_player_box_scores (que no lee
-    game_score_per36/risk_scores, solo player_rows)."""
+    # como _team_proj pero con un jugador y player_rows, para simulate_single_league_season_player_box_scores
     return {
         "player_ids": [player_id],
         "player_rows": [{
@@ -101,9 +99,7 @@ def test_simulate_league_regular_season_favors_stronger_team():
 
 
 def test_simulate_league_regular_season_wins_mean_unaffected_by_team_quality_uncertainty():
-    """Mismo chequeo que en test_simulation.py: ruido de media cero, no
-    debe mover wins.mean() de forma perceptible -- solo ensanchar la
-    dispersión dentro de la distribución de cada equipo."""
+    # ruido de media cero: no debe mover wins.mean(), solo ensanchar la dispersión
     team_ids = [1, 2]
     projections = {1: _team_proj(game_score=25.0), 2: _team_proj(game_score=5.0)}
     schedule = build_round_robin_schedule(team_ids, games_per_season=20, rng=np.random.default_rng(3))
@@ -229,13 +225,8 @@ def test_simulate_playoffs_once_produces_a_valid_champion():
 
 
 def test_playoff_game_score_penalizes_injury_risk():
-    """
-    Regresión de un bug real: los playoffs asumían roster a PLENA SALUD,
-    así que un equipo de estrellas frágiles era castigado 82 partidos en
-    temporada regular y luego llegaba a playoffs milagrosamente sano --
-    llegando a tener MÁS probabilidad de título que el mejor equipo de
-    temporada regular. Ver el docstring de _sample_team_game_score.
-    """
+    # regression: los playoffs asumían roster a plena salud, así que un equipo de estrellas frágiles
+    # llegaba a playoffs milagrosamente sano, con más probabilidad de título que el mejor equipo real
     cfg = {**DEFAULT_MONTE_CARLO_CONFIG, "game_variance_std": 0.0}  # sin ruido
     healthy = _team_proj(game_score=15.0, risk=0.0)
     fragile = _team_proj(game_score=15.0, risk=0.5)  # mismo talento, la mitad del tiempo lesionado
@@ -245,7 +236,6 @@ def test_playoff_game_score_penalizes_injury_risk():
     fragile_scores = [_sample_team_game_score(fragile, np.random.default_rng(i), cfg) for i in range(n)]
 
     assert np.mean(fragile_scores) < np.mean(healthy_scores)
-    # Con risk=0.5 se espera aproximadamente la mitad de la produccion.
     assert np.mean(fragile_scores) == pytest.approx(np.mean(healthy_scores) * 0.5, rel=0.15)
 
 
@@ -254,9 +244,7 @@ def test_playoff_game_score_is_unaffected_by_risk_when_risk_is_zero():
     proj = _team_proj(game_score=15.0, risk=0.0)
 
     score = _sample_team_game_score(proj, np.random.default_rng(1), cfg)
-
-    # 5 jugadores x 15 GS/36 x 36 min / 36 = 75, sin ruido ni fatiga.
-    assert score == pytest.approx(75.0)
+    assert score == pytest.approx(75.0)  # 5 jugadores x 15 GS/36 x 36 min / 36, sin ruido ni fatiga
 
 
 def test_playoff_home_court_helps_the_home_team():
@@ -286,7 +274,7 @@ def test_playoff_game_is_neutral_when_home_flag_is_none():
 
 
 def test_series_home_court_favors_the_higher_seed():
-    """El formato 2-2-1-1-1 da 4 de 7 partidos en casa al mejor seed."""
+    # el formato 2-2-1-1-1 da 4 de 7 partidos en casa al mejor seed
     cfg = {**DEFAULT_MONTE_CARLO_CONFIG, "game_variance_std": 0.0}
     a = _team_proj(game_score=12.0)
     b = _team_proj(game_score=12.0)
@@ -306,23 +294,18 @@ def test_series_home_court_favors_the_higher_seed():
 def test_series_home_game_pattern_is_the_real_2_2_1_1_1():
     from league_simulation import SERIES_HOME_GAMES_FOR_HIGHER_SEED as pattern
 
-    # El mejor seed es local en los partidos 1, 2, 5 y 7 (4 de 7).
     assert pattern == (True, True, False, False, True, False, True)
     assert sum(pattern) == 4
 
 
 def test_series_winner_gives_home_court_to_the_better_seed_not_list_order():
-    """
-    Regresión: a partir de semifinales el orden de la lista NO garantiza
-    que el primero sea el mejor seed (si el 8 elimina al 1). La ventaja
-    de campo debe seguir al seed real, no a la posición en la tupla.
-    """
+    # regression: a partir de semifinales el orden de la lista no garantiza que el primero sea el
+    # mejor seed (si el 8 elimina al 1) -- la ventaja de campo debe seguir al seed real, no a la posición
     from league_simulation import _series_winner
 
     cfg = {**DEFAULT_MONTE_CARLO_CONFIG, "game_variance_std": 0.0}
     projections = {1: _team_proj(game_score=12.0), 2: _team_proj(game_score=12.0)}
-    # El equipo 2 es MEJOR seed (rank 0) aunque se pase en segunda posición.
-    seed_rank = {1: 5, 2: 0}
+    seed_rank = {1: 5, 2: 0}  # equipo 2 es mejor seed (rank 0) aunque se pase en segunda posición
 
     wins_for_2 = sum(
         _series_winner(1, 2, projections, np.random.default_rng(i), cfg, seed_rank=seed_rank) == 2
@@ -333,10 +316,8 @@ def test_series_winner_gives_home_court_to_the_better_seed_not_list_order():
 
 
 def test_simulate_playoffs_once_with_15_teams_per_conference_like_real_nba():
-    # 15 equipos por conferencia (30 en total), no 10 -- los seeds 11-15
-    # deben quedar eliminados antes del play-in. Regresión: resolve_play_in
-    # exige exactamente 10 seeds y simulate_playoffs_once le pasaba las 15
-    # sin recortar.
+    # regression: resolve_play_in exige exactamente 10 seeds y simulate_playoffs_once le
+    # pasaba las 15 sin recortar -- los seeds 11-15 deben quedar eliminados antes del play-in
     east_ids = list(range(1, 16))
     west_ids = list(range(16, 31))
     team_conference = {tid: "East" for tid in east_ids}
@@ -350,19 +331,14 @@ def test_simulate_playoffs_once_with_15_teams_per_conference_like_real_nba():
     assert result["nba_champion"] in east_ids + west_ids
     assert len(result["east_8"]) == 8
     assert len(result["west_8"]) == 8
-    # Los peores 5 de cada conferencia (11-15 por wins) no deben aparecer.
+    # los peores 5 de cada conferencia no deben aparecer
     assert not set(result["east_8"]) & {11, 12, 13, 14, 15}
     assert not set(result["west_8"]) & {26, 27, 28, 29, 30}
 
 
 def test_project_team_roster_normalizes_total_minutes_to_240():
-    # Regresión: sin normalizar, un roster con rotación históricamente
-    # profunda (varios jugadores con muchos minutos/partido reales el año
-    # pasado) podía sumar muy por encima de los 240 minutos que existen de
-    # verdad en un partido (5 posiciones x 48 min), inflando artificialmente
-    # su Game Score de equipo frente a rosters con rotaciones más cortas --
-    # Utah llegó a sumar 449 minutos "en bruto" y lideraba las
-    # probabilidades de título injustamente.
+    # regression: sin normalizar, un roster con rotación profunda podía sumar muy por encima de
+    # los 240 minutos reales de un partido, inflando su Game Score (Utah llegó a sumar 449 minutos)
     roster = pd.DataFrame(
         [{"PLAYER_ID": 1, "PLAYER": "Heavy Minutes A"}, {"PLAYER_ID": 2, "PLAYER": "Heavy Minutes B"}]
     )
@@ -379,24 +355,13 @@ def test_project_team_roster_normalizes_total_minutes_to_240():
     )
     config = {"team": {"season": "2026-27"}, "simulation": {"games_per_season": 82}, "lineup_synergy": {}}
 
-    # Minutos "en bruto" por jugador: 3200/82 ≈ 39 -> suma bruta ≈ 78 (por
-    # debajo de 240 en este caso sintético, pero el mismo mecanismo aplica
-    # en la dirección contraria cuando la suma bruta excede 240).
     result = project_team_roster(roster, regular, pd.DataFrame(), config)
     assert sum(result["minutes_projection"]) == pytest.approx(240.0)
 
 
 def test_project_team_roster_reads_aging_curve_config_instead_of_ignoring_it():
-    """
-    BUG REAL: project_team_roster() llamaba a project_player_season() sin
-    pasar n_seasons/half_life_seasons, así que ignoraba
-    config["aging_curve"] por completo y usaba siempre los defaults del
-    módulo -- solo build_aging_projection_dataset() (roster propio) lo
-    leía. Un jugador con una temporada vieja floja y una reciente muy
-    fuerte debe proyectar MÁS alto con n_seasons_lookback=1 (solo cuenta
-    la reciente) que con n_seasons_lookback=2 (la vieja floja diluye la
-    media) -- si el config no se lee, el resultado sería idéntico.
-    """
+    # regression: project_team_roster() no pasaba n_seasons/half_life_seasons a
+    # project_player_season() y por tanto ignoraba config["aging_curve"] por completo
     roster = pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "Breakout Player"}])
     regular = pd.DataFrame(
         [
@@ -414,8 +379,7 @@ def test_project_team_roster_reads_aging_curve_config_instead_of_ignoring_it():
             },
         ]
     )
-    # season == la más reciente de los datos -> sin ajuste de edad
-    # (target_age == current_age), aísla el efecto del recency-weighting.
+    # season == la más reciente de los datos -> sin ajuste de edad, aísla el efecto del recency-weighting
     base_config = {"team": {"season": "2025-26"}, "simulation": {"games_per_season": 82}, "lineup_synergy": {}}
 
     only_recent = project_team_roster(
@@ -424,15 +388,14 @@ def test_project_team_roster_reads_aging_curve_config_instead_of_ignoring_it():
     )
     diluted_by_old_season = project_team_roster(
         roster, regular, pd.DataFrame(),
-        # half_life muy grande -> pesos casi planos entre las 2 temporadas
-        {**base_config, "aging_curve": {"n_seasons_lookback": 2, "recency_half_life_seasons": 100.0}},
+        {**base_config, "aging_curve": {"n_seasons_lookback": 2, "recency_half_life_seasons": 100.0}},  # pesos casi planos
     )
 
     assert only_recent["game_score_per36"][0] > diluted_by_old_season["game_score_per36"][0]
 
 
 def _minutes_only_roster(rows):
-    """rows: lista de (player_id, name, raw_minutes_per_game, gp)."""
+    # rows: lista de (player_id, name, raw_minutes_per_game, gp)
     roster = pd.DataFrame([{"PLAYER_ID": pid, "PLAYER": name} for pid, name, _, _ in rows])
     regular = pd.DataFrame(
         [
@@ -449,15 +412,8 @@ def _minutes_only_roster(rows):
 
 
 def test_project_team_roster_does_not_dilute_star_minutes_with_bench_churn():
-    # Regresión: la primera versión de la normalización a 240 escalaba
-    # TODO el roster por igual, y una estrella real (Luka Dončić, ~35.8
-    # min/partido
-    # reales en los Lakers) terminaba con 26.98 -- diluida por muchos
-    # suplentes de fondo de plantilla que solo jugaron unos pocos
-    # partidos por movimiento de plantilla (lesiones, llamados de
-    # two-way), no por mérito. La rotación real de los Lakers (top 10
-    # por minutos) ya sumaba ~257, cerca de 240 -- el roster COMPLETO
-    # (19 jugadores, muchos con 1-15 partidos) sumaba 318.
+    # regression: la normalización a 240 escalaba todo el roster por igual, diluyendo a una
+    # estrella real (Luka Dončić, ~35.8 min/partido) con suplentes de fondo de plantilla
     star_and_bench = [
         (1, "Star Player", 35.8, 64),  # rotación real, como Luka
         (2, "Starter A", 34.5, 70),
@@ -469,8 +425,7 @@ def test_project_team_roster_does_not_dilute_star_minutes_with_bench_churn():
         (8, "Rotation D", 21.9, 45),
         (9, "Rotation E", 17.4, 55),
         (10, "Rotation F", 16.0, 50),
-        # Fuera de la rotación real (top 10) -- jugadores de fondo de
-        # plantilla con pocos partidos, como en el roster real de UTA.
+        # fuera de la rotación real (top 10) -- pocos partidos, como en el roster real de UTA
         (11, "Deep Bench A", 15.8, 9),
         (12, "Deep Bench B", 14.7, 4),
         (13, "Deep Bench C", 10.2, 14),
@@ -486,25 +441,17 @@ def test_project_team_roster_does_not_dilute_star_minutes_with_bench_churn():
     result = project_team_roster(roster, regular, pd.DataFrame(), config)
 
     star_minutes = result["player_rows"][0]["minutes_projection"]
-    # Con la rotación real (top 10) sumando ~257.5, el factor de escala es
-    # ~0.93 -- la estrella debe quedar cerca de sus 35.8 reales, no caer a ~27.
-    assert star_minutes > 30.0
-    # Los jugadores fuera de la rotación (índices 10-14, ids 11-15) deben
-    # quedar en 0 -- no diluyen la normalización de la rotación real.
+    assert star_minutes > 30.0  # cerca de sus 35.8 reales, no diluida a ~27
     bench_minutes = [row["minutes_projection"] for row in result["player_rows"][10:]]
-    assert all(m == 0.0 for m in bench_minutes)
-    # La rotación (los 10 primeros) debe sumar exactamente 240.
+    assert all(m == 0.0 for m in bench_minutes)  # fuera de la rotación, no diluyen la normalización
     rotation_minutes = [row["minutes_projection"] for row in result["player_rows"][:10]]
     assert sum(rotation_minutes) == pytest.approx(240.0)
 
 
 def test_project_team_roster_does_not_zero_out_a_rotation_player_with_a_short_recent_season():
-    # Regresión: Dereck Lively II (DAL) salía con 0 minutos proyectados en
-    # Liga NBA pese a
-    # ser titular real -- su última temporada fue corta por una lesión
-    # (7 partidos, 16.4 MPG), y el ranking de rotación usaba SOLO esa
-    # fila, así que caía fuera del top-N pese a sus dos temporadas
-    # previas completas a ~23 MPG. Números reales de Lively.
+    # regression: Dereck Lively II salía con 0 minutos pese a ser titular real -- su última
+    # temporada fue corta por lesión (7 partidos) y el ranking usaba solo esa fila, ignorando
+    # sus 2 temporadas previas completas a ~23 MPG
     injured_star_seasons = pd.DataFrame(
         [
             {
@@ -520,10 +467,8 @@ def test_project_team_roster_does_not_zero_out_a_rotation_player_with_a_short_re
             )
         ]
     )
-    # 10 compañeros de rotación de una sola temporada, con MPG en bruto
-    # de 17 a 35 -- todos por encima del MPG ingenuo de la última
-    # temporada del jugador lesionado (16.4), pero varios por debajo de
-    # su MPG ponderado por fiabilidad (~22.6).
+    # 10 compañeros con MPG de 17 a 35, todos por encima del MPG ingenuo del lesionado (16.4)
+    # pero varios por debajo de su MPG ponderado por fiabilidad (~22.6)
     role_players = [(pid, name, raw_min, 70) for pid, (name, raw_min) in enumerate(
         [
             ("Role A", 35.0), ("Role B", 32.0), ("Role C", 29.0), ("Role D", 26.0),
@@ -548,9 +493,7 @@ def test_project_team_roster_does_not_zero_out_a_rotation_player_with_a_short_re
         pid: row["minutes_projection"] for pid, row in zip(roster["PLAYER_ID"], result["player_rows"])
     }
 
-    # El jugador lesionado ahora SÍ entra en la rotación real (top 10 de
-    # 11), y el compañero más débil (17 MPG en bruto, id=11) queda fuera.
-    assert minutes_by_id[1] > 0.0
+    assert minutes_by_id[1] > 0.0  # ahora sí entra en la rotación real (top 10 de 11)
     assert minutes_by_id[11] == 0.0
 
 
@@ -572,8 +515,7 @@ def test_project_team_roster_handles_player_with_no_history():
 
 
 def test_project_team_roster_includes_position_from_roster_slice():
-    """Necesario para los quintetos All-NBA/All-Defensive de
-    awards_projection.py, que exigen posición real -- ver POSITION_GROUPS."""
+    # necesario para los quintetos All-NBA/All-Defensive, que exigen posición real
     roster = pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "Veteran Player", "POSITION": "F"}])
     regular = pd.DataFrame(
         [
@@ -593,8 +535,7 @@ def test_project_team_roster_includes_position_from_roster_slice():
 
 
 def test_project_team_roster_position_is_none_without_a_position_column():
-    """Roster sin POSITION (esquema antiguo/sintético) no debe fallar --
-    solo excluye a esos jugadores de los quintetos, no rompe el resto."""
+    # roster sin POSITION no debe fallar -- solo excluye a esos jugadores de los quintetos
     roster = pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "No Position Data"}])
     regular = pd.DataFrame(
         [
@@ -666,8 +607,7 @@ def own_team_config(tmp_path):
 def test_project_own_team_for_league_uses_config_minutes_not_real_minutes(own_team_config):
     result = project_own_team_for_league(own_team_config)
 
-    # 30 (config) en vez de 2870/82=35 (real, de aging_curve_projection.csv).
-    assert result["minutes_projection"][0] == pytest.approx(30.0)
+    assert result["minutes_projection"][0] == pytest.approx(30.0)  # 30 de config, no 2870/82=35 real
     assert result["player_rows"][0]["minutes_projection"] == pytest.approx(30.0)
     assert result["player_rows"][0]["player_name"] == "Hypothetical Star"
     assert result["risk_scores"][0] == pytest.approx(0.3)
@@ -684,9 +624,7 @@ def test_project_own_team_for_league_merges_position_when_available(own_team_con
 
 
 def test_project_own_team_for_league_degrades_gracefully_without_positions_csv(own_team_config):
-    """roster_positions.csv es opcional -- sin él, el equipo propio
-    simplemente no participa en los quintetos All-NBA/All-Defensive
-    (ver awards_projection._position_group), pero el resto no debe fallar."""
+    # roster_positions.csv es opcional -- sin él, el equipo propio no participa en los quintetos, pero no rompe
     result = project_own_team_for_league(own_team_config)
 
     assert result["player_rows"][0]["position"] is None
@@ -702,12 +640,8 @@ def test_project_own_team_for_league_raises_when_player_missing_from_aging_csv(o
 def test_load_and_project_all_teams_overrides_own_team_with_hypothetical_roster(own_team_config):
     processed = Path(own_team_config["paths"]["processed_data_dir"])
 
-    # Roster REAL de 2 franquicias (999 = la propia -- con OTRO jugador,
-    # simulando que la franquicia real no tiene al fichaje hipotético --
-    # 111 = una rival). Se reusan abreviaciones reales (PHI/BOS) porque
-    # TEAM_CONFERENCE solo reconoce las 30 franquicias reales; el team_id
-    # numérico en sí es arbitrario, no tiene que coincidir con el team_id
-    # real de esas siglas.
+    # roster real de 2 franquicias (999 = la propia, con otro jugador; 111 = rival). Se reusan
+    # abreviaciones reales (PHI/BOS) porque TEAM_CONFERENCE solo reconoce las 30 franquicias reales
     pd.DataFrame(
         [
             {"PLAYER_ID": 1, "PLAYER": "Hypothetical Star", "team_id": 999, "team_abbreviation": "PHI"},
@@ -735,23 +669,15 @@ def test_load_and_project_all_teams_overrides_own_team_with_hypothetical_roster(
     team_ids, team_abbrev_by_id, team_conference, team_projections = load_and_project_all_teams(own_team_config)
 
     own_projection = team_projections[999]
-    # El roster real de la franquicia 999 tenía a "Real Roster Player" (id 3),
-    # pero la proyección usada es la hipotética -- solo el player_id 1 del
-    # roster de team_config.yaml, con SUS minutos configurados (30, no un
-    # valor derivado del roster/minutos reales).
+    # el roster real tenía a "Real Roster Player" (id 3), pero se usa la proyección hipotética
     assert own_projection["player_ids"] == [1]
     assert own_projection["minutes_projection"][0] == pytest.approx(30.0)
-    # El equipo rival (111) no se toca -- sigue proyectado desde su roster real.
-    assert team_projections[111]["player_ids"] == [4]
+    assert team_projections[111]["player_ids"] == [4]  # el equipo rival no se toca
 
 
 def test_load_and_project_all_teams_merges_country_for_real_teams(own_team_config):
-    """
-    country NO viene en league_rosters.csv (CommonTeamRoster no la trae)
-    -- es un lookup global por player_id desde league_player_countries.csv
-    (data_pipeline.build_league_player_countries_dataset), necesario para
-    el chequeo de cuota de nacionalidad del All-Star.
-    """
+    # country no viene en league_rosters.csv -- es un lookup global desde league_player_countries.csv,
+    # necesario para el chequeo de cuota de nacionalidad del All-Star
     processed = Path(own_team_config["paths"]["processed_data_dir"])
     pd.DataFrame(
         [{"PLAYER_ID": 4, "PLAYER": "Rival Player", "team_id": 111, "team_abbreviation": "BOS"}]
@@ -833,20 +759,12 @@ def test_project_team_roster_applies_the_advanced_adjustment():
     plain = project_team_roster(roster, regular, pd.DataFrame(), config)
     adjusted = project_team_roster(roster, regular, pd.DataFrame(), config, advanced_context=context)
 
-    # NET_RATING muy por encima de la media de liga -> más impacto.
-    assert adjusted["game_score_per36"][0] > plain["game_score_per36"][0]
+    assert adjusted["game_score_per36"][0] > plain["game_score_per36"][0]  # NET_RATING sobre la media -> más impacto
 
 
 def test_exported_player_row_carries_the_same_metric_the_simulation_uses():
-    """
-    BUG REAL: el ajuste se aplicaba a la lista que consume la simulación
-    pero NO a `projection`, que es lo que se vuelca en
-    league_player_projections.csv -- y ese CSV es el que lee
-    simulation.compute_league_average_game_score_per36 para su línea base.
-    Simulación y línea base quedaban medidas en escalas distintas, que es
-    exactamente el desajuste entre motores que este proyecto ya arrastró
-    dos veces (normalización de minutos, escala a diferencial).
-    """
+    # regression: el ajuste se aplicaba a la lista que consume la simulación pero no a `projection`,
+    # que es lo que se vuelca en league_player_projections.csv y lee compute_league_average_game_score_per36
     from advanced_impact import build_advanced_context
 
     roster, regular = _minutes_only_roster([(1, "Buen defensor", 30.0, 80)])
@@ -857,8 +775,7 @@ def test_exported_player_row_carries_the_same_metric_the_simulation_uses():
     exported = result["player_rows"][0]
 
     assert exported["game_score_per36"] == pytest.approx(result["game_score_per36"][0])
-    # Y el Game Score de caja puro sigue disponible para comparar.
-    assert exported["game_score_per36_box"] < exported["game_score_per36"]
+    assert exported["game_score_per36_box"] < exported["game_score_per36"]  # Game Score de caja puro sigue disponible
 
 
 def test_simulate_single_league_season_game_log_each_team_plays_games_per_season():
@@ -874,8 +791,7 @@ def test_simulate_single_league_season_game_log_each_team_plays_games_per_season
 
     games_played = game_log["home_team_id"].value_counts().add(game_log["away_team_id"].value_counts(), fill_value=0)
     assert (games_played == 6).all()
-    # El ganador de cada partido es SIEMPRE uno de los dos equipos que lo jugaron.
-    assert all(
+    assert all(  # el ganador es siempre uno de los dos equipos que jugaron
         row.winner_team_id in (row.home_team_id, row.away_team_id) for row in game_log.itertuples()
     )
     for tid in team_ids:
@@ -910,9 +826,8 @@ def test_simulate_single_league_season_game_log_favors_stronger_team():
 
 
 def test_simulate_single_league_season_player_box_scores_zeroes_out_unavailable_players():
-    """Un jugador NO disponible ese partido (misma máscara que decidió el
-    resultado) aparece en 0 en TODAS las categorías -- nunca se sortea
-    una disponibilidad aparte para el boxscore."""
+    # un jugador no disponible aparece en 0 en todas las categorías -- nunca se sortea
+    # una disponibilidad aparte para el boxscore
     game_log = pd.DataFrame([
         {"game_id": 0, "day": 0, "home_team_id": 1, "home_game_index": 0, "away_team_id": 2, "away_game_index": 0}
     ])
@@ -930,14 +845,11 @@ def test_simulate_single_league_season_player_box_scores_zeroes_out_unavailable_
     present_row = box_scores[box_scores["player_id"] == 200].iloc[0]
     for stat in ["PTS", "REB", "AST", "STL", "BLK", "TOV", "3PM"]:
         assert absent_row[stat] == 0.0
-    # Disponible, con media de 20 PPG -- debe dar algo cercano a esa media, no 0.
-    assert present_row["PTS"] > 10.0
+    assert present_row["PTS"] > 10.0  # disponible, con media de 20 PPG
 
 
 def test_simulate_single_league_season_player_box_scores_centers_on_season_per_game_mean():
-    """Sin varianza en la 'ausencia' (siempre disponible), promediando
-    muchos partidos sintéticos el boxscore debe converger a la media
-    por-partido de temporada YA proyectada (PTS_projected / games_per_season)."""
+    # siempre disponible: promediando muchos partidos, el boxscore debe converger a PTS_projected / games_per_season
     games_per_season = 82
     n_games = 500
     game_log = pd.DataFrame([
@@ -969,8 +881,7 @@ def test_compute_head_to_head_record_counts_wins_and_ignores_other_matchups():
     game_log = pd.DataFrame([
         {"game_id": 0, "day": 0, "home_team_id": 1, "away_team_id": 2, "winner_team_id": 1},
         {"game_id": 1, "day": 10, "home_team_id": 2, "away_team_id": 1, "winner_team_id": 2},
-        # Partido contra un TERCER equipo -- no debe contar en el H2H de 1 vs 2.
-        {"game_id": 2, "day": 20, "home_team_id": 1, "away_team_id": 3, "winner_team_id": 1},
+        {"game_id": 2, "day": 20, "home_team_id": 1, "away_team_id": 3, "winner_team_id": 1},  # tercer equipo, no cuenta
     ])
 
     record = compute_head_to_head_record(game_log, 1, 2)
@@ -982,7 +893,7 @@ def test_compute_head_to_head_record_counts_wins_and_ignores_other_matchups():
 
 def test_real_schedule_to_games_assigns_per_team_sequential_indices_and_sorts_chronologically():
     abbreviation_to_team_id = {"AAA": 1, "BBB": 2, "CCC": 3}
-    # A proposito fuera de orden cronologico en el DataFrame de entrada.
+    # a propósito fuera de orden cronológico en el DataFrame de entrada
     schedule_df = pd.DataFrame([
         {"gameDate": "2026-10-23", "homeTeam_teamTricode": "AAA", "awayTeam_teamTricode": "CCC"},
         {"gameDate": "2026-10-20", "homeTeam_teamTricode": "AAA", "awayTeam_teamTricode": "BBB"},
@@ -992,24 +903,21 @@ def test_real_schedule_to_games_assigns_per_team_sequential_indices_and_sorts_ch
     games = real_schedule_to_games(schedule_df, abbreviation_to_team_id)
 
     assert len(games) == 3
-    # Orden cronologico, no el orden de entrada.
-    assert [g["date"] for g in games] == sorted(g["date"] for g in games)
+    assert [g["date"] for g in games] == sorted(g["date"] for g in games)  # orden cronológico, no de entrada
 
     game_20, game_21, game_23 = games
-    # AAA vs BBB el 10-20 -- primer partido de ambos, sin historial previo.
+    # AAA vs BBB el 10-20: primer partido de ambos, sin historial previo
     assert game_20["home_team_id"] == 1 and game_20["home_game_index"] == 0
     assert game_20["away_team_id"] == 2 and game_20["away_game_index"] == 0
     assert not game_20["is_b2b_home"] and not game_20["is_b2b_away"]
 
-    # BBB vs CCC el 10-21 -- BBB jugo el dia anterior (back-to-back real);
-    # CCC juega su primer partido (no back-to-back).
+    # BBB vs CCC el 10-21: BBB jugó el día anterior (b2b real); CCC juega su primer partido
     assert game_21["home_team_id"] == 2 and game_21["home_game_index"] == 1
     assert game_21["is_b2b_home"] is True
     assert game_21["away_team_id"] == 3 and game_21["away_game_index"] == 0
     assert not game_21["is_b2b_away"]
 
-    # AAA vs CCC el 10-23 -- ambos con 2+ dias de descanso, ningun back-to-back.
-    # Cada equipo tiene su PROPIO indice secuencial (2o partido para los tres).
+    # AAA vs CCC el 10-23: ambos con descanso, ningún b2b, cada equipo con su propio índice secuencial
     assert game_23["home_team_id"] == 1 and game_23["home_game_index"] == 1
     assert not game_23["is_b2b_home"]
     assert game_23["away_team_id"] == 3 and game_23["away_game_index"] == 1
@@ -1047,12 +955,10 @@ def test_simulate_league_regular_season_real_schedule_is_deterministic_with_same
 
 
 def test_simulate_league_regular_season_real_schedule_applies_home_court_advantage():
-    """Dos equipos IDENTICOS salvo quien juega en casa -- con ventaja de
-    campo activa, el local debe ganar mas que sin ella. Antes de esta
-    funcion, league_simulation.py nunca aplicaba home_court_advantage
-    (confirmado por grep) aunque el dato de local/visitante ya existiera."""
+    # regression: league_simulation.py nunca aplicaba home_court_advantage aunque el dato de
+    # local/visitante ya existiera -- dos equipos idénticos, con ventaja activa el local debe ganar más
     projections = {1: _team_proj(game_score=15.0), 2: _team_proj(game_score=15.0)}
-    games = [_real_game("2026-10-20", 1, 0, 2, 0)]  # equipo 1 SIEMPRE local aqui
+    games = [_real_game("2026-10-20", 1, 0, 2, 0)]  # equipo 1 siempre local aquí
 
     with_hca = simulate_league_regular_season_real_schedule(
         projections, games, n_seasons=5000,
@@ -1075,6 +981,6 @@ def test_simulate_single_league_season_game_log_real_schedule_uses_real_dates_an
     )
 
     assert len(game_log) == 2
-    assert game_log.iloc[0]["day"] == "2026-10-20"  # fecha REAL, no un entero sintetico
+    assert game_log.iloc[0]["day"] == "2026-10-20"  # fecha real, no un entero sintético
     assert game_log.iloc[1]["home_team_id"] == 2 and game_log.iloc[1]["home_game_index"] == 1
     assert 1 in availability_by_team and 2 in availability_by_team

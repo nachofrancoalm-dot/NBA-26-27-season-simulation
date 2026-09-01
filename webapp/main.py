@@ -1,14 +1,10 @@
 """
 main.py
 
-Backend FastAPI de la interfaz web -- única interfaz del proyecto (el
-dashboard de Streamlit que existió en paralelo, dashboard/app.py, se
-retiró; ver el aviso en el propio README). Sirve la API JSON bajo /api/*
-y los archivos estáticos del frontend en /. No reimplementa ninguna
-lógica de datos: cada endpoint reutiliza dashboard/data_loader.py (ya
-puro, ya testeado -- ver su docstring, es la capa de datos compartida,
-ya no depende de Streamlit), src/awards_projection.py,
-src/champion_profiles.py y src/llm_explainer.py.
+Backend FastAPI de la interfaz web -- única interfaz del proyecto. Sirve
+la API JSON bajo /api/* y los estáticos del frontend en /. No reimplementa
+lógica de datos: cada endpoint reutiliza dashboard/data_loader.py,
+src/awards_projection.py, src/champion_profiles.py y src/llm_explainer.py.
 
 Uso:
     uvicorn webapp.main:app --reload
@@ -30,15 +26,11 @@ from webapp.routers import awards, champions, explainer, league, players, sandbo
 
 
 class RevalidatingStaticFiles(StaticFiles):
-    """StaticFiles fuerza al navegador a revalidar (If-Modified-Since/ETag)
-    en cada carga en vez de reutilizar la caché ciegamente. Sin esto, tras
-    editar un .js/.css el navegador puede seguir sirviendo la versión
-    vieja desde caché heurística durante horas (visto en producción: el
-    bracket de playoffs se quedó con el layout viejo tras una edición de
-    CSS/JS porque el navegador no volvió a pedir el archivo). No usa
-    no-store porque eso forzaría re-descargar el archivo entero cada vez
-    -- no-cache sigue permitiendo una respuesta 304 barata cuando el
-    archivo no cambió."""
+    """Fuerza al navegador a revalidar (If-Modified-Since/ETag) en cada
+    carga -- sin esto, tras editar un .js/.css el navegador puede seguir
+    sirviendo la versión vieja desde caché heurística (visto en
+    producción). `no-cache`, no `no-store`: sigue permitiendo un 304
+    barato cuando el archivo no cambió."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         async def send_with_no_cache(message):

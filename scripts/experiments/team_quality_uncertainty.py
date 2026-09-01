@@ -2,37 +2,22 @@
 team_quality_uncertainty.py
 
 EXPERIMENTO, no forma parte del pipeline de producción. Calibra
-`monte_carlo.team_quality_uncertainty_std` (ver
-simulation.sample_team_quality_noise, desactivado por defecto con
+`monte_carlo.team_quality_uncertainty_std` (desactivado por defecto con
 std=0.0) contra el backtest sweep de 480 casos reales.
 
-QUÉ PROBLEMA ATACA (y cuál NO): dos síntomas observados -- (1) poca
-diferencia de victorias medias entre equipos en la predicción 26-27, y
-(2) 42% de los 480 casos del backtest caen en el 20% más extremo de
+Dos síntomas motivan esto: poca diferencia de victorias medias entre
+equipos, y 42% de los 480 casos cayendo en el 20% más extremo de
 percentiles (debería rondar el 20%). `aging_curve_shrinkage.py` ya
-descartó con evidencia que (1) se deba al encogimiento de la proyección
-de talento -- barrido completo del grid, dispersión prácticamente
-idéntica en todo el rango. `team_quality_uncertainty_std` es DE MEDIA
-CERO, así que por construcción NO puede mover wins_mean (se cancela al
-promediar miles de temporadas simuladas, ver los tests de regresión en
-tests/test_simulation.py) -- este experimento ataca ÚNICAMENTE el
-síntoma (2), la calibración de las bandas P10-P90.
+descartó que el primer síntoma venga del encogimiento de la proyección de
+talento. `team_quality_uncertainty_std` es de media cero, así que no
+puede mover wins_mean por construcción -- este experimento ataca solo el
+segundo síntoma, la calibración de las bandas P10-P90.
 
-DISEÑO
-------
-Para cada candidato de `team_quality_uncertainty_std`, corre el backtest
-completo (`backtesting._run_backtest_cases`, la MISMA función que usa
-`build_backtest_sweep_dataset`, nunca reimplementada) sobre los 480
-casos, con `n_seasons` REDUCIDO (ver `EXPERIMENT_N_SEASONS`) para que la
-búsqueda sea barata -- la métrica de interés (`pct_within_p10_p90`,
-agregada sobre 480 casos) ya tiene muestra grande a nivel población
-aunque cada P10/P90 individual sea algo más ruidoso con menos
-temporadas por caso. Usa la línea base de era ya calculada
-(`league_game_score_baseline.csv`, de la última corrida de
-`build_backtest_sweep_dataset`) en vez de recalcularla -- puede quedar
-ligeramente desactualizada si `game_score_to_net_rating_scale` se
-recalibró después, pero es de sobra para elegir un orden de magnitud de
-`std`, que es lo que pide este experimento.
+Método: para cada candidato de std, corre el backtest completo
+(`backtesting._run_backtest_cases`, función real de producción) sobre los
+480 casos con n_seasons reducido (búsqueda barata; la métrica agregada
+sobre 480 casos sigue teniendo muestra grande), y mide
+`pct_within_p10_p90`.
 
 Uso:
     python scripts/experiments/team_quality_uncertainty.py
@@ -92,11 +77,7 @@ def _load_inputs(config: Dict[str, Any]):
 def run_backtest_with_std(
     config: Dict[str, Any], team_quality_std: float, n_seasons: int, cases=None, inputs=None,
 ) -> pd.DataFrame:
-    """Corre `_run_backtest_cases` (núcleo real de producción, no
-    reimplementado) con `team_quality_uncertainty_std` inyectado en
-    `config["monte_carlo"]` y `simulation.n_seasons` reducido para la
-    búsqueda. `inputs`/`cases` opcionales para no releer los CSV en cada
-    punto del grid."""
+    """Corre `_run_backtest_cases` (núcleo real de producción) con `team_quality_uncertainty_std` inyectado y n_seasons reducido. `inputs`/`cases` opcionales para no releer CSV en cada punto del grid."""
     if inputs is None:
         cases, rosters, player_regular_stats, player_playoff_stats, standings, game_log, advanced_context, league_baseline_by_season = _load_inputs(config)
     else:

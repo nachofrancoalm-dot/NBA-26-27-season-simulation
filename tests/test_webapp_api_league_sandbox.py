@@ -1,9 +1,4 @@
-"""
-Tests de POST /api/sandbox/league -- separado de test_webapp_api.py porque
-necesita una abreviatura de equipo REAL (TEAM_CONFERENCE la resuelve),
-a diferencia del resto de la suite de la API que usa "TST" como equipo
-de prueba genérico.
-"""
+"""Tests de POST /api/sandbox/league; separado porque necesita una abreviatura de equipo real (TEAM_CONFERENCE)."""
 
 import sys
 from pathlib import Path

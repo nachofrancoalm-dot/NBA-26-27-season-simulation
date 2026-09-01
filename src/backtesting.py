@@ -1,43 +1,30 @@
 """
 backtesting.py
 
-Valida el motor de simulación (simulation.py + lineup_synergy.py +
-aging_curve.py + injury_model.py + fatigue_accumulation.py) corriéndolo
-retrospectivamente sobre los 4 `historical_comparables` reales, con su
-roster y calendario reales -- no el roster/calendario hipotético de
-team_config.yaml que usa `simulation.build_simulation_dataset`.
+Valida el motor de simulación corriéndolo retrospectivamente sobre los 4
+`historical_comparables` reales (y, en `build_backtest_sweep_dataset`,
+sobre un sweep de 30 equipos x N temporadas), con su roster y calendario
+reales -- no el roster/calendario hipotético de team_config.yaml.
 
-REGLA DE NO LOOK-AHEAD (la más importante de este módulo)
--------------------------------------------------------------
-Para cada caso histórico, la proyección de cada jugador SOLO puede usar
-sus temporadas ANTERIORES a la temporada del caso -- nunca la temporada
-que se está prediciendo ni las posteriores. `filter_seasons_before()` es
-la única puerta de entrada a los datos de carrera de un jugador en este
-módulo.
+Regla de no look-ahead (la más importante de este módulo): para cada
+caso, la proyección de cada jugador solo puede usar sus temporadas
+anteriores a la del caso -- nunca la que se está prediciendo ni las
+posteriores. `filter_seasons_before()` es la única puerta de entrada a
+los datos de carrera de un jugador en este módulo. Excepción deliberada:
+la edad y los minutos/partido reales de esa temporada sí se usan (son
+insumos externos, como `minutes_projection` en la simulación hacia
+delante) -- lo que el modelo predice es rendimiento, riesgo y desgaste,
+no la asignación de minutos.
 
-Excepciones deliberadas (NO son look-ahead, son insumos externos igual
-que en la simulación hacia delante):
-- La EDAD del jugador esa temporada (de historical_comparables_rosters.csv,
-  no de sus stats de carrera) y sus MINUTOS/PARTIDO reales esa temporada
-  sí se usan. Un front office real conoce la edad de sus jugadores y
-  decide minutos de antemano -- igual que `minutes_projection` en
-  team_config.yaml para el roster hipotético. Lo que el modelo predice es
-  RENDIMIENTO, RIESGO y DESGASTE, no la asignación de minutos.
-
-VENTAJA METODOLÓGICA SOBRE LA SIMULACIÓN HACIA DELANTE
------------------------------------------------------------
-Como estas temporadas ya se jugaron, se construye el calendario REAL
+Como estas temporadas ya se jugaron, se construye el calendario real
 (rival de cada partido, back-to-backs reales) en vez de muestrear uno
 sintético -- ver `build_real_schedule_context()`.
 
-MÉTRICA DE VALIDACIÓN
-------------------------
-Por cada caso: se corren `simulation.n_seasons` temporadas Monte Carlo
-con el roster y calendario reales, se obtiene la distribución simulada de
-victorias, y se calcula en qué percentil de esa distribución cae el
-resultado REAL. Un percentil razonable (10-90) indica que el motor no
-está lejos de la realidad; un percentil extremo (0 o 100) señala una
-desconexión entre el modelo y lo que de verdad pasó.
+Métrica de validación: por cada caso se corren `simulation.n_seasons`
+temporadas Monte Carlo con el roster y calendario reales, y se calcula
+en qué percentil de la distribución simulada cae el resultado real. Un
+percentil extremo (0 o 100) señala una desconexión entre el modelo y lo
+que de verdad pasó.
 """
 
 from __future__ import annotations
@@ -138,23 +125,20 @@ def project_historical_player(
     recency_half_life_seasons: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Proyección, risk_score y fatigue_score de UN jugador para el caso
+    Proyección, risk_score y fatigue_score de un jugador para el caso
     histórico `target_season`, usando solo temporadas anteriores (ver
     filter_seasons_before).
 
-    `advanced_context` (de `advanced_impact.build_advanced_context`): si
-    se pasa junto con `player_id`, el `game_score_per36` devuelto es la
-    métrica COMPUESTA (Game Score + ajuste por NET_RATING, ver
-    src/advanced_impact.py) en vez del Game Score puro. Opcional para que
-    el backtest siga corriendo sin `league_advanced_player_stats.csv`.
+    `advanced_context`: si se pasa junto con `player_id`, el
+    `game_score_per36` devuelto es la métrica compuesta en vez del Game
+    Score puro; opcional para que el backtest corra sin
+    `league_advanced_player_stats.csv`.
 
-    `n_seasons_lookback`/`recency_half_life_seasons`: IMPORTANTE pasarlos
-    explícitos aquí -- sin ellos, `project_player_season` cae a los
-    defaults del módulo e ignora `config["aging_curve"]` por completo
-    (mismo requisito que en `league_simulation.project_team_roster`, ver
-    su docstring). `None` (default) preserva ese comportamiento de
-    fallback; `project_backtest_team()` es quien los rellena desde
-    `config` cuando llama a esta función.
+    `n_seasons_lookback`/`recency_half_life_seasons` deben pasarse
+    explícitos -- sin ellos, `project_player_season` ignora
+    `config["aging_curve"]` (mismo requisito que en
+    `league_simulation.project_team_roster`). `project_backtest_team()`
+    los rellena desde `config`.
     """
     target_year = season_start_year(target_season)
     prior_regular = filter_seasons_before(player_regular_seasons, target_year)
@@ -317,44 +301,25 @@ def expected_team_game_score_equivalent(
     projection: Dict[str, Any], config: Dict[str, Any], games_in_season: int
 ) -> float:
     """
-    Game Score de equipo ESPERADO por partido de un equipo ya proyectado,
+    Game Score de equipo esperado por partido de un equipo ya proyectado,
     en las mismas unidades que la línea base y contando todo lo que la
     simulación le va a hacer: ausencias por lesión, desgaste de temporada,
     penalización de back-to-back y ajuste de sinergia.
 
-    POR QUÉ NO BASTA `projection["team_game_score"]`: ese valor es el del
-    equipo a PLENA SALUD y sin sinergia. Usarlo como línea base rompe la
-    restricción de suma cero por dos términos que NO se anulan entre sí y
-    que ninguno queda centrado:
-
-      - Las ausencias por lesión bajan el Game Score efectivo del equipo
-        promedio de ~88.7 a ~66.6 (medido en 2024-25), o sea unos -4.6
-        puntos de diferencial que la línea base no descontaba.
-      - `compute_game_synergy_adjustment` devuelve un valor SIEMPRE
-        POSITIVO (medido: +4.4 a +11.9, media +9.7 en 2024-25). Se suma
-        al net rating de todos los equipos por igual, así que desplaza a
-        la liga entera hacia arriba.
-
-    Los dos términos pueden cancelarse por casualidad con una escala de
-    conversión concreta, ocultando el problema -- con la escala 0.29
-    daban -6.4 y +9.7, cuya suma (+3.3) coincidía casi exactamente con el
-    error medio residual de -3.5 victorias que en su momento quedó sin
-    explicar. Recalibrar `game_score_to_net_rating_scale` cambia cuánto
-    pesa cada término por separado, así que puede destapar un sesgo que
-    antes parecía pequeño solo por la cancelación fortuita -- de ahí que
-    esta función esté centrada explícitamente en vez de depender de que
-    los dos errores seguían cancelándose.
+    No basta `projection["team_game_score"]` (equipo a plena salud, sin
+    sinergia): las ausencias por lesión bajan el Game Score efectivo del
+    equipo promedio (~-4.6 puntos de diferencial no descontados) y
+    `compute_game_synergy_adjustment` es siempre positivo (+4.4 a +11.9),
+    desplazando a la liga entera hacia arriba. Ambos términos pueden
+    cancelarse por casualidad con una escala de conversión concreta,
+    ocultando el problema -- por eso esta función se centra
+    explícitamente en vez de depender de esa cancelación fortuita.
 
     El ajuste de sinergia se divide por `game_score_to_net_rating_scale`
-    para expresarlo en unidades de Game Score, que son las de la línea
-    base -- la simulación lo suma DESPUÉS de aplicar la escala
-    (`run_monte_carlo`), así que hay que deshacer esa conversión.
-
-    Se estima por muestreo en vez de analíticamente porque
-    `compute_game_synergy_adjustment` va capada en [min, max]: la
-    esperanza de una forma cuadrática capada no tiene forma cerrada, y
-    reutilizar las mismas funciones que la simulación garantiza que la
-    línea base mide exactamente lo mismo que se le va a comparar.
+    para expresarlo en unidades de Game Score (la simulación lo suma
+    después de aplicar la escala). Se estima por muestreo, no
+    analíticamente, porque `compute_game_synergy_adjustment` va capada en
+    [min, max] y no tiene forma cerrada.
     """
     mc_config = dict(DEFAULT_MONTE_CARLO_CONFIG, **config.get("monte_carlo", {}))
     rng = np.random.default_rng(config.get("simulation", {}).get("random_seed", 42))
@@ -395,33 +360,22 @@ def compute_projected_league_baselines(
     advanced_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, float]:
     """
-    Línea base de "equipo promedio" POR TEMPORADA, definida como la MEDIA
-    del Game Score de equipo PROYECTADO de todos los casos de esa
-    temporada, expresada en las mismas unidades que
-    `league_average_game_score_per36` (Game Score/36).
+    Línea base de "equipo promedio" por temporada: la media del Game
+    Score de equipo proyectado de todos los casos de esa temporada,
+    expresada en las mismas unidades que `league_average_game_score_per36`.
 
-    POR QUÉ ESTA DEFINICIÓN Y NO LA MEDIA DE LOS JUGADORES DE LA LIGA:
-    por la restricción de SUMA CERO. En una liga real la media de
-    victorias es exactamente games/2, lo que en el modelo logístico
-    significa que el equipo promedio debe tener net_rating = 0. Eso solo
-    se cumple si la línea base es la media de lo que el modelo PROYECTA
-    para los equipos, no una media calculada por otra vía. Usar
-    `aging_curve.compute_league_game_score_baseline()` (media de los
-    jugadores de la liga) deja un sesgo residual de ~+5 puntos de Game
-    Score, porque el pipeline de proyección (media ponderada por recencia
-    de las 3 últimas temporadas + ajuste de edad, sobre los 10 de la
-    rotación) produce sistemáticamente más que la media de todo jugador
-    con >=500 minutos.
+    Se usa esta definición (y no la media de los jugadores de la liga)
+    por la restricción de suma cero: en una liga real la media de
+    victorias es games/2, así que el equipo promedio debe tener
+    net_rating = 0, y eso solo se cumple con la media de lo que el modelo
+    proyecta. `aging_curve.compute_league_game_score_baseline()` deja un
+    sesgo residual de ~+5 de Game Score.
 
     Solo tiene sentido cuando `cases` cubre la liga entera de cada
     temporada (el sweep de 30 equipos sí; los 4 comparables narrativos
-    NO -- para esos se usa el valor genérico del config).
-
-    `advanced_context` DEBE ser el mismo que se pase luego a
-    `_run_backtest_cases`. Si la línea base se calculara con Game Score
-    puro y los casos con la métrica compuesta, la restricción de suma cero
-    se rompería en silencio: los equipos se compararían contra una
-    referencia medida en otra escala.
+    usan el valor genérico del config). `advanced_context` debe ser el
+    mismo que se pase luego a `_run_backtest_cases`, o la restricción de
+    suma cero se rompe en silencio.
     """
     by_season: Dict[str, list] = {}
     for case in cases:
@@ -460,16 +414,16 @@ def run_backtest_case(
     advanced_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Corre el backtest completo (proyección + simulación) para UN caso histórico.
+    Corre el backtest completo (proyección + simulación) para un caso
+    histórico.
 
-    `league_baseline_per36`: Game Score/36 medio de la liga EN LA
-    TEMPORADA DEL CASO (ver aging_curve.compute_league_game_score_baseline).
-    Si se pasa, sustituye a `league_average_game_score_per36` del config
-    para este caso -- imprescindible para no premiar a los equipos
-    modernos solo por jugar en una era de más anotación (ver
-    "CALIBRACIÓN DE ERA" en el docstring de simulation.py). Si es None se
-    usa el valor del config, que es lo correcto solo si todos los casos
-    son de la misma temporada.
+    `league_baseline_per36`: Game Score/36 medio de la liga en la
+    temporada del caso. Si se pasa, sustituye a
+    `league_average_game_score_per36` del config -- imprescindible para
+    no premiar a equipos modernos solo por jugar en una era de más
+    anotación (ver docstring de simulation.py). Si es None se usa el
+    valor del config, correcto solo si todos los casos son de la misma
+    temporada.
     """
     case_roster = rosters[(rosters["comparable_name"] == case["name"]) & (rosters["season"] == case["season"])]
     player_ids = case_roster["PLAYER_ID"].astype(int).tolist()
@@ -551,15 +505,12 @@ def _run_backtest_cases(
     Núcleo compartido entre build_backtest_dataset (4 casos narrativos) y
     build_backtest_sweep_dataset (cientos de casos): corre
     run_backtest_case() para cada caso y arma el DataFrame resultado. Un
-    caso individual que falle (datos incompletos de una temporada/equipo
-    concreto -- ej. 0 partidos registrados) se SALTA con un aviso en vez
-    de abortar el sweep completo -- con 450 casos reales de 15 años de
-    historia NBA, algún hueco de datos es más probable que con los 4
-    casos elegidos a mano.
+    caso individual que falle (datos incompletos) se salta con un aviso
+    en vez de abortar el sweep completo.
 
     `league_baseline_by_season`: {season: game_score_per36 medio de la
-    liga esa temporada} -- ver run_backtest_case. Una temporada que no
-    esté en el dict usa el valor genérico del config.
+    liga esa temporada}. Una temporada que no esté en el dict usa el
+    valor genérico del config.
     """
     rows = []
     iterator = tqdm(cases, desc="Corriendo backtest") if show_progress else cases
@@ -581,13 +532,11 @@ def _run_backtest_cases(
 
 def load_league_baselines(processed_dir: Path) -> Dict[str, float]:
     """
-    Lee `league_game_score_baseline.csv` (lo genera
-    build_backtest_sweep_dataset) y devuelve {season: baseline_per36},
-    prefiriendo la columna `projected_team_baseline_per36` (media de los
-    EQUIPOS proyectados, la que cumple la restricción de suma cero) sobre
-    `league_game_score_per36` (media de los jugadores de la liga, que deja
-    un sesgo residual de ~+5 de Game Score). {} si el archivo no existe --
-    entonces el llamante cae al valor genérico del config.
+    Lee `league_game_score_baseline.csv` y devuelve {season:
+    baseline_per36}, prefiriendo `projected_team_baseline_per36` (media
+    de equipos proyectados, cumple la restricción de suma cero) sobre
+    `league_game_score_per36` (media de jugadores, sesgo residual de ~+5).
+    {} si el archivo no existe -- el llamante cae al valor genérico del config.
     """
     path = processed_dir / "league_game_score_baseline.csv"
     if not path.exists() or path.stat().st_size == 0:
@@ -632,10 +581,9 @@ def build_backtest_dataset(config: Dict[str, Any]) -> pd.DataFrame:
     standings = pd.read_csv(paths["processed"] / "historical_comparables_standings.csv")
     game_log = pd.read_csv(paths["processed"] / "historical_comparables_advanced_game_logs.csv")
 
-    # Reutiliza las líneas base por temporada que dejó el sweep, si existen.
-    # Los 4 comparables por su cuenta NO pueden calcularlas (son ~60
-    # jugadores de 4 superequipos, no una muestra de liga), pero sí pueden
-    # aprovechar las del sweep -- que cubren 2010-11..2024-25, o sea las 4.
+    # Reutiliza las líneas base por temporada que dejó el sweep, si
+    # existen -- los 4 comparables por su cuenta no pueden calcularlas
+    # (no son una muestra de liga).
     league_baseline_by_season = load_league_baselines(paths["processed"])
 
     result_df = _run_backtest_cases(
@@ -651,20 +599,13 @@ def build_backtest_dataset(config: Dict[str, Any]) -> pd.DataFrame:
 def compute_calibration_summary(sweep_results: pd.DataFrame) -> Dict[str, float]:
     """
     Resumen agregado de calibración sobre un DataFrame de resultados de
-    backtest (una fila por caso, columnas actual_wins/simulated_wins_mean
-    /simulated_wins_p10/simulated_wins_p90/actual_percentile -- ver
-    run_backtest_case). Si el motor de simulación predice bien:
-    - `pct_within_p10_p90` debería rondar el 80% (por construcción: P10
-      a P90 es el 80% central de la distribución simulada).
-    - `mean_percentile`/`median_percentile` deberían rondar 50 (sin
-      sesgo sistemático hacia sobreestimar o subestimar victorias).
-    - `mean_error_wins` (actual - predicho) positivo indica que el
-      modelo SUBESTIMA victorias en promedio; negativo, que las
-      SOBREESTIMA (ver el patrón de "fricción de superequipo" en el
-      README -- los 4 `historical_comparables` sesgan hacia negativo).
-    - `correlation_actual_vs_predicted` cercano a 1 indica que el modelo
-      SÍ distingue equipos buenos de malos (aunque esté mal calibrado en
-      el nivel absoluto de victorias); cercano a 0, que no.
+    backtest (ver run_backtest_case). Si el motor predice bien:
+    `pct_within_p10_p90` debería rondar 80%; `mean_percentile`/
+    `median_percentile` deberían rondar 50 (sin sesgo sistemático);
+    `mean_error_wins` (actual - predicho) positivo indica que el modelo
+    subestima victorias, negativo que las sobreestima;
+    `correlation_actual_vs_predicted` cercano a 1 indica que el modelo
+    distingue equipos buenos de malos.
     """
     if sweep_results.empty:
         return {
@@ -697,15 +638,14 @@ def compute_calibration_summary(sweep_results: pd.DataFrame) -> Dict[str, float]
 
 def build_backtest_sweep_dataset(config: Dict[str, Any]) -> pd.DataFrame:
     """
-    Backtesting sistemático a gran escala: corre el backtest para TODOS
+    Backtesting sistemático a gran escala: corre el backtest para todos
     los casos de `resolve_backtest_sweep_cases(config)` (30 equipos NBA x
-    cada temporada en config["backtest_sweep"]["seasons"], 450 casos por
-    defecto) y guarda data/processed/backtest_sweep_summary.csv (una fila
-    por caso) y data/processed/backtest_sweep_calibration.csv (resumen
-    agregado, ver compute_calibration_summary). Requiere haber corrido
-    antes `python src/data_pipeline.py --backtest-sweep` (ingesta cara,
-    horas la primera vez) -- a diferencia de build_backtest_dataset, NO
-    se ejecuta como parte del pipeline normal.
+    cada temporada en config["backtest_sweep"]["seasons"]) y guarda
+    backtest_sweep_summary.csv (una fila por caso) y
+    backtest_sweep_calibration.csv (resumen agregado, ver
+    compute_calibration_summary). Requiere haber corrido antes `python
+    src/data_pipeline.py --backtest-sweep` -- a diferencia de
+    build_backtest_dataset, no se ejecuta como parte del pipeline normal.
     """
     from config_loader import resolve_backtest_sweep_cases
 
@@ -740,20 +680,13 @@ def build_backtest_sweep_dataset(config: Dict[str, Any]) -> pd.DataFrame:
     standings = pd.read_csv(paths["processed"] / "backtest_sweep_standings.csv")
     game_log = pd.read_csv(paths["processed"] / "backtest_sweep_advanced_game_logs.csv")
 
-    # Línea base de liga POR TEMPORADA (ver aging_curve.compute_league_game_score_baseline
-    # y "CALIBRACIÓN DE ERA" en simulation.py). El sweep cubre los
-    # 30 equipos, así que su muestra de jugadores SÍ es representativa de
-    # la liga de cada temporada -- por eso se calcula aquí y no en el
-    # backtest de 4 casos narrativos, cuya muestra son solo ~60 jugadores
-    # de 4 superequipos (nada parecido a una media de liga).
-    # Primera pasada (barata, sin Monte Carlo): proyecta los 30 equipos de
-    # cada temporada y toma la MEDIA como línea base -- así el equipo
-    # promedio tiene net_rating 0 por construcción (restricción de suma
-    # cero). Ver compute_projected_league_baselines().
-    # Métrica de impacto compuesta (Game Score + NET_RATING, ver
-    # src/advanced_impact.py). None si falta el CSV o está desactivada en
-    # el config -- entonces todo el sweep corre con Game Score puro, que
-    # es como corría antes de integrarla.
+    # Línea base de liga por temporada: el sweep cubre los 30 equipos, así
+    # que su muestra sí es representativa de la liga (a diferencia de los
+    # 4 comparables narrativos, ~60 jugadores de 4 superequipos). Primera
+    # pasada barata (sin Monte Carlo) que toma la media como línea base --
+    # ver compute_projected_league_baselines().
+    # advanced_context: None si falta el CSV o está desactivado, entonces
+    # el sweep corre con Game Score puro.
     advanced_context = build_advanced_context(load_advanced_stats(paths["processed"]), config)
     print(
         "Métrica de impacto: "

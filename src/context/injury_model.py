@@ -5,49 +5,25 @@ Primer submódulo de la capa de contexto de temporada (ver roadmap en
 README.md): calcula un "risk_score" (0-1) de lesión por jugador a partir
 de su historial de disponibilidad en `roster_career_stats.csv`.
 
-LIMITACIÓN DE DATOS IMPORTANTE
--------------------------------
-nba_api NO expone un endpoint de historial de lesiones (fecha, tipo,
-gravedad). `CommonPlayerInfo` solo trae datos biográficos/de roster. Por
-eso este módulo usa como proxy la disponibilidad histórica -- partidos
-jugados (GP) vs. partidos de calendario esa temporada -- en vez de datos
-de lesión reales. Si en el futuro se integra una fuente externa con
-fechas de lesión concretas (p. ej. Pro Sports Transactions u otro feed
-pago), el componente de "recencia" debería recalcularse a nivel de
-partido/mes en vez de a nivel de temporada.
+nba_api no expone historial de lesiones (fecha/tipo/gravedad), así que
+este módulo usa como proxy la disponibilidad histórica -- partidos
+jugados (GP) vs. partidos de calendario esa temporada.
 
-DISEÑO DEL risk_score
-----------------------
-Tres componentes, cada uno 0-1, combinados con pesos configurables
-(nunca hardcodeados -- ver `config["injury_model"]` en team_config.yaml):
+El risk_score combina tres componentes 0-1 con pesos configurables
+(`config["injury_model"]`, default historical_load=0.45, recency=0.35,
+age=0.20 -- el historial concreto de un jugador pesa más que su edad en
+abstracto):
 
 1. `historical_load_score` -- % medio de partidos perdidos en las
-   últimas N temporadas (sin ponderar por recencia).
-2. `recency_score` -- % de partidos perdidos en las mismas N
-   temporadas, pero ponderado con decaimiento exponencial: una ausencia
-   en la temporada más reciente pesa más que una de hace 2-3 años. Esto
-   está respaldado por evidencia de que el historial de lesiones
-   reciente es el predictor individual más fuerte de una lesión futura
-   (Ruddy et al., "Individual and Combined Effects of Multiple Factors
-   on the Risk of Soft Tissue Non-contact Injuries in Elite Team Sport
-   Athletes", PMC6176657).
-3. `age_score` -- curva de riesgo por edad, deliberadamente NO
-   monótona-creciente sin límite. Epidemiología publicada (Mack et al.,
-   "Epidemiology of Injuries Among NBA Players: 2013-14 Through
-   2018-19", PMC11569584) muestra que la tasa de lesión/partidos
-   perdidos es más alta en el rango de 6-15 años de experiencia (~edad
-   27-34), y que los veteranos de carreras muy largas no muestran tasas
-   más altas -- probablemente por sesgo de supervivencia (los jugadores
-   propensos a lesionarse rara vez llegan a jugar a los 38-41 años).
-   Por eso la curva aquí sube y luego SE APLANA (no decrece, para no
-   premiar la edad extrema, pero tampoco sigue subiendo sin límite).
-
-Los pesos por defecto priorizan historial sobre edad
-(`historical_load=0.45, recency=0.35, age=0.20`): el historial de
-lesiones de un jugador concreto es más informativo que su edad en
-abstracto -- un jugador de 41 años con un historial reciente limpio
-(caso LeBron James) no debería recibir un risk_score inflado solo por
-su edad.
+   últimas N temporadas, sin ponderar por recencia.
+2. `recency_score` -- lo mismo pero con decaimiento exponencial por
+   recencia: el historial reciente es el predictor individual más
+   fuerte de lesión futura (Ruddy et al., PMC6176657).
+3. `age_score` -- curva de riesgo por edad que sube y luego SE APLANA
+   (no decrece, no sigue subiendo). La epidemiología (Mack et al.,
+   PMC11569584) muestra pico de incidencia en 6-15 años de experiencia
+   (~27-34 años) y sin tasas más altas en veteranos muy longevos,
+   probablemente por sesgo de supervivencia.
 """
 
 from __future__ import annotations
@@ -62,18 +38,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config_loader import get_paths  # noqa: E402
 from season_utils import dedupe_traded_seasons, season_start_year  # noqa: E402
 
-# -----------------------------------------------------------------------
-# Duración de temporada (partidos de calendario). 82 es el estándar; estas
-# son las excepciones históricas conocidas. Esto es un hecho de calendario
-# de la liga, no algo específico de equipo/jugador -- no viola la regla de
-# "nada hardcodeado en src/" del proyecto.
-# -----------------------------------------------------------------------
+# Duración de temporada (partidos de calendario). 82 es el estándar;
+# estas son las excepciones históricas conocidas (hecho de calendario de
+# la liga, no algo específico de equipo/jugador).
 _SEASON_LENGTH_EXCEPTIONS: Dict[str, int] = {
-    "2011-12": 66,  # temporada acortada por el lockout
-    "2019-20": 72,  # aproximación: la burbuja de COVID-19 dejó calendarios
-                     # de 64-75 partidos según equipo; 72 es un valor medio
-                     # conservador ante la falta de un total exacto por equipo.
-    "2020-21": 72,  # temporada acortada por COVID-19
+    "2011-12": 66,  # lockout
+    "2019-20": 72,  # burbuja COVID-19: varió 64-75 según equipo, 72 es una media conservadora
+    "2020-21": 72,  # COVID-19
 }
 _DEFAULT_SEASON_LENGTH = 82
 
@@ -83,11 +54,9 @@ DEFAULT_WEIGHTS: Dict[str, float] = {
     "age": 0.20,
 }
 
-# `peak_end_age` se documenta porque la literatura identifica ~32-36 como
-# la ventana de mayor incidencia, pero la fórmula no lo usa directamente:
-# el plateau ya se alcanza en `peak_start_age` y se mantiene plano después
-# (no decrece), evitando tanto una subida sin límite como premiar la edad
-# extrema con un score menor por "sesgo de supervivencia".
+# `peak_end_age` documenta la ventana de mayor incidencia (~32-36) pero la
+# fórmula no lo usa: el plateau ya se alcanza en `peak_start_age` y se
+# mantiene plano después.
 DEFAULT_AGE_CURVE: Dict[str, float] = {
     "low_risk_age": 24,
     "peak_start_age": 32,
@@ -161,12 +130,8 @@ def compute_recency_score(
 
 
 def compute_age_score(age: float, age_curve_params: Optional[Dict[str, float]] = None) -> float:
-    """
-    Curva de riesgo por edad: plana en `base_risk` hasta `low_risk_age`,
-    rampa lineal hasta `plateau_risk` en `peak_start_age`, y se mantiene
-    plana (no decrece, no sigue subiendo) a partir de ahí. Ver docstring
-    del módulo para la justificación (sesgo de supervivencia en veteranos).
-    """
+    """Plana en `base_risk` hasta `low_risk_age`, rampa lineal hasta
+    `plateau_risk` en `peak_start_age`, y se mantiene plana después."""
     params = {**DEFAULT_AGE_CURVE, **(age_curve_params or {})}
     low = params["low_risk_age"]
     peak_start = params["peak_start_age"]
@@ -267,12 +232,8 @@ def build_injury_risk_dataset(config: Dict[str, Any]) -> pd.DataFrame:
             }
         )
 
-    # Jugadores del roster sin NINGUNA temporada en roster_career_stats.csv
-    # (rookies de verdad, sin partidos de liga regular jugados todavía) --
-    # no aparecen en ningún group de arriba porque no tienen filas. Sin
-    # historial no hay evidencia de riesgo -- se asume el piso (0.0), no
-    # se inventa un valor "de liga" (mismo principio que
-    # aging_curve.zero_player_projection() / backtesting.project_historical_player()).
+    # Rookies sin filas en roster_career_stats.csv: sin historial no hay
+    # evidencia de riesgo, se asume el piso (0.0).
     roster_player_ids = {p["player_id"] for p in config["roster"] if p.get("player_id")}
     for player_id in roster_player_ids - covered_player_ids:
         player_name = next(p["name"] for p in config["roster"] if p.get("player_id") == player_id)

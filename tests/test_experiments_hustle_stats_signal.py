@@ -1,11 +1,6 @@
 """
-Test de la parte pura de scripts/experiments/hustle_stats_signal.py --
-build_team_hustle_features() (el join + ponderación por minutos). No
-cubre la regresión en sí (statsmodels sobre datos reales, es el
-experimento, no lógica que deba cubrir un test rápido) -- ver el
-docstring del módulo: experimento exploratorio que concluyó en un
-resultado negativo (ningún hustle stat aporta señal incremental sobre
-Game Score+NET_RATING, ver CLAUDE.md).
+Tests de build_team_hustle_features() en hustle_stats_signal.py (join +
+ponderación por minutos). No cubre la regresión en sí sobre datos reales.
 """
 
 import sys
@@ -47,17 +42,13 @@ def test_build_team_hustle_features_weights_by_minutes_not_a_plain_average(hustl
 
     assert len(features) == 1
     row = features.iloc[0]
-    # El titular (32 min) domina la media ponderada frente al suplente
-    # de garbage time (8 min, valores por partido absurdamente altos) --
-    # una media SIN ponderar daría (4+40)/2=22; ponderada por minutos
-    # debe quedar mucho más cerca del titular (4.0).
+    # sin ponderar daría (4+40)/2=22; ponderado por minutos debe acercarse al titular (4.0)
     assert row["CONTESTED_SHOTS"] == pytest.approx((4.0 * 32 + 40.0 * 8) / 40)
     assert row["CONTESTED_SHOTS"] < 15.0
 
 
 def test_build_team_hustle_features_skips_players_without_hustle_data(hustle_config):
-    # Un jugador del roster que no aparece en league_hustle_player_stats
-    # (p. ej. temporada sin tracking) no debe romper el join.
+    # un jugador sin fila en league_hustle_player_stats no debe romper el join
     extra_roster = pd.DataFrame([
         {"PLAYER_ID": 3, "PLAYER": "No Hustle Data", "comparable_name": "BOS 2015-16", "season": "2015-16"},
     ])
@@ -68,4 +59,4 @@ def test_build_team_hustle_features_skips_players_without_hustle_data(hustle_con
     )
 
     features = hss.build_team_hustle_features(hustle_config)
-    assert len(features) == 1  # el jugador sin datos se ignora, no genera una fila NaN
+    assert len(features) == 1

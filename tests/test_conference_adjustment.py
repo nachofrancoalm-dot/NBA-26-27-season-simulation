@@ -84,8 +84,7 @@ def test_conference_strength_index_win_pct_uses_correct_baseline():
 
 
 def test_adjusted_value_credits_playing_in_a_tougher_conference():
-    # Mismo Net Rating bruto, pero un equipo jugó en una conferencia más
-    # dura (índice positivo) -- su valor ajustado debe ser MAYOR.
+    # conferencia más dura (índice positivo) -- valor ajustado debe ser mayor
     raw_net_rating = 5.0
     adjusted_tough_conference = compute_conference_adjusted_value(raw_net_rating, conference_index=2.0)
     adjusted_weak_conference = compute_conference_adjusted_value(raw_net_rating, conference_index=-2.0)

@@ -3,88 +3,36 @@ injury_survival_model.py
 
 EXPERIMENTO, no forma parte del pipeline de producción. Investiga si un
 modelo de supervivencia (Cox proportional hazards, `lifelines`) predice
-mejor el riesgo de lesión de un jugador que el heurístico actual de
-`src/context/injury_model.py` (media ponderada a mano de tres
-componentes: historical_load=0.45, recency=0.35, age=0.20 -- pesos de
-literatura epidemiológica general, nunca ajustados a los datos de ESTE
-proyecto).
+mejor el riesgo de lesión que el heurístico actual de
+`src/context/injury_model.py` (media ponderada a mano: historical_load=
+0.45, recency=0.35, age=0.20, nunca ajustados a los datos del proyecto).
 
-RESULTADO: negativo, bien validado -- ver "CONCLUSIÓN" al final de este
-docstring. No todas las hipótesis de esta línea de experimentos ganan,
-pero se documentan con el mismo rigor que las que sí aportan señal.
+RESULTADO: negativo, bien validado.
 
-MISMAS COVARIABLES DE PARTIDA, PESOS APRENDIDOS EN VEZ DE FIJADOS A MANO
--------------------------------------------------------------------------
-No se reinventan las features -- se reutilizan
-`injury_model.compute_historical_load`/`compute_recency_score`/
-`compute_age_score` TAL CUAL sobre las temporadas ANTERIORES a la que se
-predice (mismo patrón de no-look-ahead que `backtesting.filter_seasons_before`).
-La pregunta que responde este experimento es específicamente: "¿son
-0.45/0.35/0.20 los pesos correctos, o los datos dicen otra cosa?".
+Reutiliza las mismas features del heurístico (`compute_historical_load`/
+`compute_recency_score`/`compute_age_score`, sobre temporadas anteriores
+a la objetivo, sin look-ahead) para preguntar si los pesos 0.45/0.35/0.20
+son correctos o los datos dicen otra cosa. `historical_load_prior` y
+`recency_prior` correlacionan r=0.974 (casi la misma señal dos veces) y
+producen un coeficiente de Cox negativo e inestable para
+historical_load_prior, así que se excluye del modelo, dejando solo
+recency_prior.
 
-COLINEALIDAD ENTRE COVARIABLES (mismo patrón que PIE/NET_RATING en
-advanced_impact.py): `historical_load_prior` (media simple de partidos
-perdidos) y `recency_prior` (la misma media, ponderada por recencia)
-correlacionan **r=0.974** entre sí -- casi la misma señal calculada dos
-veces. El ajuste de Cox con las 3 covariables originales da un
-coeficiente NEGATIVO y estable para `historical_load_prior` (más
-historial de lesiones -> MENOS riesgo, al revés de lo esperado) en los
-16 pliegues -- el mismo artefacto de colinealidad que ya hizo descartar
-PIE. Quitar `historical_load_prior` del modelo (dejando solo
-`recency_prior`, más motivada por la literatura) estabiliza los
-coeficientes sin cambiar el resultado de fondo.
+nba_api no expone fecha de lesión, solo GP por temporada -- se modela
+cada temporada-jugador como supervivencia con duration=GP y event=1 si
+GP < duración de temporada (censurado si GP == duración completa).
 
-CÓMO SE ENCAJA LA SUPERVIVENCIA EN DATOS QUE SOLO TIENEN GP AGREGADO
------------------------------------------------------------------------
-nba_api no expone fecha de lesión (ver el docstring de injury_model.py)
--- solo GP (partidos jugados) por temporada. Esto no impide un modelo de
-supervivencia real: se trata cada temporada de un jugador como una
-observación con "tiempo de supervivencia" = GP (partidos jugados antes
-de que la temporada termine para él) y "evento" = 1 si GP < duración de
-la temporada (algo le impidió completar el calendario -- lesión, DNP-CD,
-etc.), 0 si GP == duración de la temporada (CENSURADO -- la temporada
-terminó sin observar el evento, no significa "cero riesgo", solo que no
-se observó dentro del calendario). Es el mismo diseño que usan estudios
-reales de epidemiología deportiva con "partidos de una temporada" como
-ventana de observación. Limitación real, ya heredada del heurístico
-actual: no se distingue una racha de 20 partidos perdidos y luego 62
-jugados de 62 jugados y luego 20 perdidos -- ninguno de los dos modelos
-tiene datos para hacerlo.
+Validación: leave-one-season-out sobre las 16 temporadas del sweep
+(6.784 observaciones), prediciendo GP esperado y comparando contra el
+heurístico en las mismas unidades (partidos).
 
-VALIDACIÓN
-------------
-Leave-one-season-out sobre las 16 temporadas del backtest sweep (6.784
-observaciones jugador-temporada, `backtest_sweep_player_career_stats.csv`
--- mucho más rico que las 13 filas del roster propio). Para cada
-temporada excluida, se entrena con todas las demás y se predice GP
-esperado (`CoxPHFitter.predict_expectation`, el tiempo medio de
-supervivencia restringido -- directamente comparable a
-`games_per_season * (1 - risk_score)` del heurístico actual) sobre la
-temporada excluida, comparado contra el GP REAL de esa temporada.
-
-RESULTADOS (MAE en partidos, sobre las 6.784 observaciones fuera de
-muestra):
-    heurístico actual (0.45/0.35/0.20)                MAE 16.96  corr 0.503
-    Cox, recency+age (sin la señal colineal)          MAE 18.02  corr 0.493
-    OLS, mismas 2 features, pesos reajustados         MAE 17.23  corr 0.509
-    Cox, + minutos/partido de la temporada previa     MAE 17.79  corr 0.513
-
-CONCLUSIÓN: ninguna alternativa supera claramente al heurístico actual.
-La correlación mejora ligeramente en dos variantes (+0.006, +0.010) pero
-el error absoluto medio EMPEORA en las tres -- no hay una mejora limpia
-en ningún sentido. Añadir carga de minutos (una señal genuinamente nueva,
-no solo un reajuste de peso) tampoco ayuda -- su coeficiente sale
-negativo y estable (jugadores con más minutos/partido juegan MÁS
-partidos la temporada siguiente), que probablemente refleja selección
-(los entrenadores dan minutos pesados a jugadores que ya saben que son
-duraderos) más que un efecto causal de "más carga = más riesgo".
-
-**El heurístico actual ya está razonablemente bien calibrado para este
-problema concreto** -- no porque sea sofisticado, sino porque el
-problema (predecir partidos perdidos el año que viene a partir del
-historial reciente y la edad) tiene señal limitada y los tres
-componentes que ya usa capturan la mayor parte de lo que hay que
-capturar. Se deja `injury_model.py` SIN TOCAR.
+Resultado (MAE en partidos, out-of-fold): heurístico actual 16.96 (corr
+0.503) vs. Cox recency+age 18.02 (corr 0.493), OLS reajustado 17.23
+(corr 0.509), Cox + minutos previos 17.79 (corr 0.513). Ninguna
+alternativa mejora el MAE, aunque la correlación sube ligeramente en dos
+variantes. Conclusión: el heurístico ya está razonablemente calibrado
+para este problema (señal limitada, los tres componentes ya capturan la
+mayor parte); se deja injury_model.py sin tocar.
 
 Uso:
     python scripts/experiments/injury_survival_model.py
@@ -127,18 +75,7 @@ def build_survival_features(
     n_seasons_lookback: int = DEFAULT_N_SEASONS_LOOKBACK,
     half_life: float = DEFAULT_RECENCY_HALF_LIFE_SEASONS,
 ) -> pd.DataFrame:
-    """
-    Una fila por (jugador, temporada objetivo) para cada temporada en
-    `target_seasons` en la que el jugador tiene AL MENOS una temporada
-    previa registrada (sin historial previo no hay covariables que
-    calcular -- mismo principio de "sin evidencia, sin inventar" que
-    `compute_risk_score`). `duration`/`event` son el par de
-    supervivencia; `historical_load_prior`/`recency_prior`/`age_score`
-    son exactamente las mismas features que ya usa el heurístico,
-    calculadas SOLO con temporadas anteriores a la objetivo.
-    `mpg_prior`: minutos/partido de la temporada previa MÁS RECIENTE --
-    señal de carga de trabajo, no usada por el heurístico actual.
-    """
+    """Una fila por (jugador, temporada objetivo) con al menos una temporada previa registrada. `duration`/`event` son el par de supervivencia; el resto son las features del heurístico, calculadas solo con temporadas anteriores. `mpg_prior` es una feature extra no usada por el heurístico."""
     rows = []
     for player_id, player_group in player_career_stats.groupby("PLAYER_ID"):
         for target_season in target_seasons:
@@ -149,7 +86,7 @@ def build_survival_features(
 
             target_row = player_group[player_group["SEASON_ID"] == target_season]
             if target_row.empty:
-                continue  # el jugador no jugó esa temporada -- no hay duración que observar
+                continue  # no jugó esa temporada
             target_row = target_row.iloc[0]
 
             length = season_length(target_season)
@@ -181,8 +118,7 @@ def build_survival_features(
 
 
 def heuristic_expected_games(features: pd.DataFrame, weights: Dict[str, float]) -> np.ndarray:
-    """GP esperado del heurístico ACTUAL (pesos fijos), para comparar
-    contra el Cox/OLS en las mismas unidades (partidos, no risk_score)."""
+    """GP esperado del heurístico actual (pesos fijos), en las mismas unidades que Cox/OLS (partidos, no risk_score)."""
     risk = (
         weights["historical_load"] * features["historical_load_prior"]
         + weights["recency"] * features["recency_prior"]
@@ -192,15 +128,7 @@ def heuristic_expected_games(features: pd.DataFrame, weights: Dict[str, float]) 
 
 
 def run_loso(features: pd.DataFrame, covariates: List[str]) -> pd.DataFrame:
-    """
-    Leave-one-season-out: entrena Cox con todas las temporadas salvo una
-    y predice GP esperado sobre la excluida, comparado contra el
-    heurístico actual EN LAS MISMAS UNIDADES (partidos).
-    `historical_load_prior` se excluye de `covariates` por defecto --
-    colineal con `recency_prior` (r=0.974, ver docstring del módulo) --
-    pero sigue haciendo falta en `features` porque `heuristic_expected_games`
-    la usa para la comparación contra el heurístico real.
-    """
+    """Leave-one-season-out: entrena Cox con todas menos una temporada, predice GP esperado sobre la excluida, y compara contra el heurístico actual en las mismas unidades."""
     from lifelines import CoxPHFitter
 
     seasons = sorted(features["season"].unique())

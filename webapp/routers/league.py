@@ -1,17 +1,12 @@
 """
 routers/league.py
 
-Endpoints de la pestaña "Liga NBA -> Liga y Playoffs". Reutiliza
-dashboard/data_loader.py sin reimplementar transformaciones. team_id se
-adjunta con ABBREVIATION_TO_TEAM_ID (tabla estática ya existente en
-src/context/opponent_weighting.py) para que el frontend arme URLs de
-logo con el mismo mecanismo que ui.js ya usa desde la Fase 1.
+Endpoints de la pestaña "Liga NBA -> Liga y Playoffs". team_id se adjunta
+con ABBREVIATION_TO_TEAM_ID para que el frontend arme URLs de logo.
 
 Todos los endpoints de lectura aceptan `scenario` ("with_injuries" por
-defecto, o "no_injuries") -- ver league_simulation._apply_scenario. El
-único punto donde se DISPARA la simulación de un escenario es
-POST /simulate; los demás solo leen el CSV correspondiente, ya
-calculado.
+defecto, o "no_injuries"). Solo POST /simulate DISPARA la simulación de
+un escenario; los demás leen el CSV ya calculado.
 """
 
 from __future__ import annotations
@@ -63,14 +58,9 @@ def _require_league_data(config, scenario: str):
 
 @router.post("/simulate")
 def post_simulate(scenario: str = SCENARIO_QUERY):
-    """
-    Dispara una corrida COMPLETA (temporada regular + playoffs + tabla de
-    jugadores) para `scenario` y persiste los 3 CSV correspondientes
-    (con sufijo `_no_injuries` si aplica). Es lo que disparan los dos
-    botones "Simular con/sin lesiones" -- tarda del orden de un minuto o
-    más (no es instantáneo, el frontend debe mostrar un estado de carga
-    largo).
-    """
+    """Dispara una corrida COMPLETA (temporada regular + playoffs +
+    jugadores) para `scenario` y persiste los 3 CSV. Tarda del orden de
+    un minuto -- el frontend debe mostrar un estado de carga largo."""
     config = load_config()
     try:
         result = build_league_simulation_dataset(config, scenario=scenario)
@@ -127,9 +117,7 @@ def get_team(
     if team_regular.empty or team_playoff.empty:
         raise HTTPException(status_code=404, detail=f"Equipo '{abbreviation}' no encontrado.")
 
-    # Seed y conferencia -- misma clasificación que /league/standings, se
-    # recalcula aquí para no depender de que el frontend la haya pedido
-    # antes de abrir el popup de equipo.
+    # Seed y conferencia recalculados aquí (no dependen de /standings).
     conference = team_regular["conference"].iloc[0] if "conference" in team_regular.columns else None
     seed = None
     if conference:
@@ -158,10 +146,8 @@ def get_team(
             meta_columns=LEAGUE_PLAYER_META_COLUMNS,
             games_per_season=config["simulation"]["games_per_season"],
         )
-        # player_id se adjunta ANTES del sort_values de abajo (no después)
-        # para que viaje con la fila correcta -- select_roster_view
-        # preserva el orden de entrada, pero aquí se reordena a
-        # continuación por game_score_per36.
+        # player_id se adjunta ANTES del sort (select_roster_view preserva
+        # el orden de entrada) para que viaje con la fila correcta.
         view = view.assign(player_id=team_players["player_id"].to_numpy())
         response["players"] = df_to_records(view.sort_values("game_score_per36", ascending=False))
 
@@ -192,14 +178,9 @@ def _require_season_log(config, scenario: str) -> pd.DataFrame:
 
 @router.post("/simulate-season-log")
 def post_simulate_season_log(scenario: str = SCENARIO_QUERY):
-    """
-    Simula UNA temporada regular concreta (calendario + resultado de
-    cada partido + boxscore ilustrativo por jugador -- ver
-    league_simulation.run_single_league_season_simulation) y persiste
-    los CSV. Distinta tirada cada vez que se pulsa (seed por reloj) --
-    a diferencia de /simulate, esto no toca standings/playoffs/premios,
-    solo el detalle partido a partido.
-    """
+    """Simula UNA temporada regular concreta (calendario + resultado por
+    partido + boxscore) y persiste los CSV. Tirada distinta cada vez
+    (seed por reloj); no toca standings/playoffs/premios."""
     config = load_config()
     _require_league_data(config, scenario)  # necesita los 30 equipos ya proyectados/descargados
     result = run_single_league_season_simulation(config, scenario=scenario)

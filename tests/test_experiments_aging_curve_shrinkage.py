@@ -1,14 +1,7 @@
 """
-Test de la parte pura y barata de testear de
-scripts/experiments/aging_curve_shrinkage.py -- build_grid_features() y
-evaluate_grid(). No cubre run_loso() (repite evaluate_grid 16 veces sobre
-datos reales, es la parte "experimento", no lógica que pueda romperse en
-silencio) -- ver el docstring del módulo: experimento exploratorio, no
-módulo de producción de src/.
-
-Usa DataFrames sintéticos con el esquema de backtest_sweep_rosters.csv /
-_player_career_stats.csv / _standings.csv -- mismo patrón que
-tests/test_experiments_bayesian_calibration.py, no requiere red.
+Tests de build_grid_features() y evaluate_grid() en aging_curve_shrinkage.py.
+No cubre run_loso() (repite evaluate_grid sobre datos reales, es la parte
+"experimento"). DataFrames sintéticos, no requiere red.
 """
 
 import sys
@@ -92,16 +85,12 @@ def test_build_grid_features_returns_one_row_per_case_and_grid_point(sweep_confi
     grid = [(1, 0.5), (3, 1.5)]
     features = acs.build_grid_features(sweep_config, grid)
 
-    # 2 equipos con datos x 2 combinaciones del grid = 4 filas.
     assert len(features) == 4
     assert set(features["n_seasons_lookback"]) == {1, 3}
     assert set(zip(features["comparable_name"], features["n_seasons_lookback"])) == {
         ("BOS 2010-11", 1), ("BOS 2010-11", 3), ("MIA 2010-11", 1), ("MIA 2010-11", 3),
     }
-    # BOS tiene 3 temporadas previas (una con PTS mucho más bajo) -- con
-    # n_seasons_lookback=1 (solo la más reciente) su Game Score de equipo
-    # debe ser distinto que con n_seasons_lookback=3 (promediado con la
-    # temporada floja).
+    # lookback=1 (solo la temporada más reciente) debe diferir de lookback=3 (promediado con la floja)
     bos = features[features["comparable_name"] == "BOS 2010-11"].set_index("n_seasons_lookback")
     assert bos.loc[1, "team_game_score"] != pytest.approx(bos.loc[3, "team_game_score"])
 
@@ -112,7 +101,6 @@ def test_evaluate_grid_ranks_by_closeness_to_target_spread(sweep_config):
     ranked = acs.evaluate_grid(features)
 
     assert len(ranked) == 2
-    # Ordenado por |gap_to_target| ascendente -- la combinación más
-    # cercana al objetivo de dispersión va primero.
+    # ordenado por |gap_to_target| ascendente
     assert ranked["gap_to_target"].abs().is_monotonic_increasing
     assert {"talent_std_pts", "target_talent_std_pts", "correlation"}.issubset(ranked.columns)

@@ -1,49 +1,26 @@
 """
 conference_adjustment.py
 
-Sexto y último submódulo del roadmap de contexto de temporada (ver
-README.md): normaliza la fuerza relativa Este/Oeste por temporada, para
-poder comparar el récord y el Net Rating de los `historical_comparables`
-entre sí aunque cada uno juegue en una conferencia y temporada distinta
-(Heat 2010-11 Este, Warriors 2016-17 Oeste, Nets 2020-21 Este, Suns
-2022-23 Oeste).
+Sexto submódulo del roadmap de contexto de temporada (ver README.md):
+normaliza la fuerza relativa Este/Oeste por temporada, para poder
+comparar el récord y el Net Rating de los `historical_comparables`
+entre sí aunque cada uno juegue en una conferencia y temporada distinta.
 
-FUNDAMENTO ESTADÍSTICO
-------------------------
-En una temporada NBA, tanto las victorias como el punto de diferencial
-son de suma cero A NIVEL DE LIGA completa (30 equipos): la media de
-WinPCT de los 30 equipos es exactamente 0.5, y la media de DiffPointsPG
-es exactamente 0. Pero esto NO es cierto por separado dentro de cada
-conferencia -- los partidos INTRA-conferencia sí son de suma cero dentro
-del grupo, pero los partidos INTER-conferencia no lo son: si el Oeste le
-gana más partidos de los que pierde al Este esa temporada, el WinPCT
-medio del Oeste sube por encima de 0.5 y el del Este baja por debajo,
-exactamente en la magnitud contraria. Esa desviación de la media de
-conferencia respecto a la línea base (0.5 para WinPCT, 0 para
-DiffPointsPG) es una medida directa y sin necesidad de datos adicionales
-de cuánto más dura era esa conferencia esa temporada.
+Fundamento: a nivel de liga, WinPCT medio y DiffPointsPG medio son
+exactamente 0.5 y 0 (suma cero), pero no dentro de cada conferencia por
+separado, ya que los partidos inter-conferencia no son de suma cero
+dentro del grupo. La desviación de la media de conferencia respecto a
+esa línea base mide directamente cuánto más dura era esa conferencia esa
+temporada, sin datos adicionales.
 
-DISEÑO
-------
-1. `compute_conference_strength_index()` -- por (temporada, conferencia):
-   media de la métrica elegida (DiffPointsPG por defecto, más estable
-   que WinPCT al ser continua en vez de binaria) menos su línea base.
-   Un índice positivo = conferencia más fuerte esa temporada.
-2. `compute_conference_adjusted_value()` -- resta el índice de
-   conferencia al valor bruto del equipo: jugar en una conferencia más
-   dura resta menos (o incluso suma) al valor ajustado, dando crédito por
-   el contexto más difícil.
-3. `build_conference_adjustment_dataset()` -- combina
-   `historical_comparables_standings.csv` (récord/DiffPointsPG real de
-   cada comparable, generado por data_pipeline.py) con
-   `performance_curve_summary.csv` (Net Rating estimado ya calculado por
-   performance_curve.py) para producir, por caso histórico: WinPCT
-   crudo vs. ajustado, y Net Rating crudo vs. ajustado por conferencia.
-   A diferencia de opponent_weighting.py (que recalcula su propia métrica
-   por partido para mantenerse autocontenido), este módulo SÍ depende del
-   resumen ya agregado de performance_curve.py -- comparar résumenes
-   entre casos es exactamente su propósito, no tendría sentido
-   recalcular la serie completa de partidos otra vez.
+`compute_conference_strength_index()` calcula ese índice por
+(temporada, conferencia); `compute_conference_adjusted_value()` resta el
+índice al valor bruto del equipo (crédito por conferencia más dura);
+`build_conference_adjustment_dataset()` combina
+`historical_comparables_standings.csv` con `performance_curve_summary.csv`
+(a diferencia de opponent_weighting.py, este módulo sí depende del
+resumen ya agregado de performance_curve.py, porque comparar résumenes
+entre casos es su propósito).
 """
 
 from __future__ import annotations

@@ -57,9 +57,7 @@ def test_net_rating_estimate_sign_matches_plus_minus():
 
 
 def test_rolling_net_rating_smooths_early_variance():
-    # Partidos alternando +30/-30 -- el rolling de ventana 10 debe quedar
-    # cerca de 0 (se cancelan), mientras que el estimate por partido es
-    # ruidoso (+/- grande).
+    # partidos alternando +30/-30 -- el rolling debe cancelarse cerca de 0
     rows = [
         {"date": f"2010-11-{i+1:02d}", "plus_minus": 30 if i % 2 == 0 else -30}
         for i in range(10)
@@ -72,8 +70,7 @@ def test_rolling_net_rating_smooths_early_variance():
 
 
 def test_slow_start_detected_via_early_vs_rest_and_trend_slope():
-    # Primeros 10 partidos flojos (plus_minus bajo), últimos 10 partidos
-    # fuertes (plus_minus alto) -- simula integración de superequipo.
+    # primeros 10 partidos flojos, últimos 10 fuertes -- simula integración de superequipo
     rows = [{"date": f"2010-{11 if i < 20 else 12}-{(i % 28) + 1:02d}", "plus_minus": (2 if i < 10 else 18)} for i in range(20)]
     games = _games(rows)
     rolling = compute_rolling_net_rating(games, window=5)

@@ -10,9 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from league_simulation import TEAM_CONFERENCE  # noqa: E402
 from league_sandbox import compute_hypothetical_awards, simulate_hypothetical_league  # noqa: E402
 
-# Los 29 equipos reales que NO son mi equipo hipotético (PHI) -- se
-# necesitan abreviaturas REALES porque simulate_hypothetical_league
-# resuelve la conferencia de cada equipo vía TEAM_CONFERENCE.
+# los 29 equipos reales que no son el equipo hipotético (PHI) -- se necesitan abreviaturas
+# reales porque simulate_hypothetical_league resuelve la conferencia vía TEAM_CONFERENCE
 OTHER_TEAMS = [abbrev for abbrev in TEAM_CONFERENCE if abbrev != "PHI"]
 
 
@@ -64,10 +63,7 @@ def league_config(tmp_path):
             next_id += 1
             row = _player_row(player_id, f"Player {player_id}", abbrev, 12.0 + slot, 28.0 - slot * 4, team_id)
             rows.append(row)
-            # Los primeros 5 jugadores creados se "prestan" al roster
-            # hipotético (siguen existiendo también en su equipo real en
-            # el CSV -- la decisión de diseño confirmada es no tocar los
-            # otros 29 equipos).
+            # los primeros 5 jugadores se "prestan" al roster hipotético sin quitarlos de su equipo real
             if len(hypothetical_player_ids) < 5:
                 hypothetical_player_ids.append(player_id)
 
@@ -102,10 +98,7 @@ def test_simulate_hypothetical_league_keeps_other_29_teams_untouched(league_conf
     result = simulate_hypothetical_league(config, player_ids, n_seasons=20, n_playoff_seasons=20)
 
     other_rows_after = result["player_projections_df"][result["player_projections_df"]["team_id"] != config["team"]["team_id"]]
-    # Mismo número de jugadores en los otros 29 equipos que en el pool
-    # original -- confirma que no se quitó a nadie de su equipo real por
-    # haberlo "prestado" al roster hipotético.
-    assert len(other_rows_after) == len(pool_before)
+    assert len(other_rows_after) == len(pool_before)  # nadie se quitó de su equipo real al ser "prestado"
 
 
 def test_simulate_hypothetical_league_recalculates_borrowed_player_stats(league_config):
@@ -115,8 +108,7 @@ def test_simulate_hypothetical_league_recalculates_borrowed_player_stats(league_
     my_rows = result["player_projections_df"][result["player_projections_df"]["team_id"] == config["team"]["team_id"]]
     assert len(my_rows) == len(player_ids)
     assert (my_rows["team_abbreviation"] == "PHI").all()
-    # game_score_per36 es intrínseco al jugador -- no debe cambiar por
-    # jugar en un equipo hipotético.
+    # game_score_per36 es intrínseco al jugador -- no debe cambiar por jugar en un equipo hipotético
     original = pd.read_csv(Path(config["paths"]["processed_data_dir"]) / "league_player_projections.csv").set_index(
         "player_id"
     )
@@ -130,8 +122,7 @@ def test_simulate_hypothetical_league_playoff_rounds_are_monotonic(league_config
     result = simulate_hypothetical_league(config, player_ids, n_seasons=200, n_playoff_seasons=200)
 
     playoff = result["playoff_df"]
-    # playoffs >= semis >= finales de conf. >= Finales >= título, para
-    # cada equipo -- mismo chequeo de sanidad que ya tiene league_simulation.
+    # playoffs >= semis >= finales de conf. >= Finales >= título, para cada equipo
     assert (playoff["playoff_pct"] >= playoff["conf_semis_pct"] - 1e-9).all()
     assert (playoff["conf_semis_pct"] >= playoff["conf_finals_pct"] - 1e-9).all()
     assert (playoff["conf_finals_pct"] >= playoff["finals_pct"] - 1e-9).all()
@@ -150,10 +141,7 @@ def test_compute_hypothetical_awards_returns_expected_keys(league_config):
 
 
 def test_compute_hypothetical_awards_mvp_can_include_hypothetical_team_player(league_config):
-    """Un jugador con game_score_per36 muy alto en el roster hipotético
-    debe poder aparecer como candidato a MVP -- confirma que
-    player_projections_df realmente se usa para los premios, no solo el
-    de los otros 29 equipos."""
+    # confirma que player_projections_df se usa para los premios, no solo el de los otros 29 equipos
     config, player_ids = league_config
     result = simulate_hypothetical_league(config, player_ids, n_seasons=20, n_playoff_seasons=20)
     awards = compute_hypothetical_awards(config, result, top_n=50)

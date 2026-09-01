@@ -4,41 +4,27 @@ fatigue_accumulation.py
 Segundo submódulo de la capa de contexto de temporada (ver roadmap en
 README.md): calcula un "fatigue_score" (0-1) por jugador que mide desgaste
 acumulado por carga de minutos a lo largo de la carrera -- distinto de
-`injury_model.py`, que mide riesgo a partir de partidos perdidos.
+`injury_model.py`, que mide riesgo a partir de partidos perdidos. No
+tiene variable de edad explícita: el desgaste por carrera larga ya se
+refleja en `cumulative_load_score` (más temporadas = más minutos
+acumulados).
 
-A diferencia de injury_model.py, este módulo NO tiene una variable de edad
-explícita. El desgaste por carrera larga ya se refleja de forma natural en
-`cumulative_load_score` (más temporadas jugadas = más minutos acumulados),
-así que añadir edad como componente aparte duplicaría esa señal.
+Lee `roster_career_stats.csv` y `roster_playoff_career_stats.csv`
+(generados por `data_pipeline.py`); un jugador sin playoffs una
+temporada dada cuenta como 0 minutos esa temporada, no como dato
+faltante.
 
-INPUTS
-------
-- `roster_career_stats.csv` (temporada regular, generado por
-  `data_pipeline.py`).
-- `roster_playoff_career_stats.csv` (playoffs, mismo pipeline). Un
-  jugador sin apariciones en playoffs una temporada dada simplemente no
-  tiene fila para esa SEASON_ID -- se trata como 0 minutos/partidos de
-  playoffs esa temporada, no como dato faltante.
+El fatigue_score combina tres componentes 0-1 con pesos configurables en
+`config["fatigue_model"]` (sin literatura que justifique una jerarquía
+clara, los pesos por defecto son similares entre sí):
 
-DISEÑO DEL fatigue_score
---------------------------
-Tres componentes 0-1, pesos configurables en `config["fatigue_model"]`
-(nunca hardcodeados). A diferencia de injury_model.py, aquí no hay
-literatura publicada que justifique una jerarquía clara entre
-componentes, así que los pesos por defecto son similares entre sí:
-
-1. `cumulative_load_score` -- minutos totales de carrera (regular +
-   playoffs), normalizados con un tope configurable de "carrera
-   longeva" (curva lineal-y-saturada: simple y transparente, no se
-   inventa una curva no lineal sin evidencia que la respalde).
-2. `recent_intensity_score` -- minutos/partido (regular + playoffs) en
-   las últimas N temporadas frente a un umbral configurable de "uso
-   pesado", ponderado por recencia con decaimiento exponencial (mismo
-   estilo que injury_model.py, implementado de forma independiente para
-   mantener cada submódulo autocontenido).
+1. `cumulative_load_score` -- minutos totales de carrera frente a un
+   tope configurable de "carrera longeva" (curva lineal-y-saturada).
+2. `recent_intensity_score` -- minutos/partido en las últimas N
+   temporadas frente a un umbral de "uso pesado", ponderado por
+   recencia con decaimiento exponencial.
 3. `sustained_streak_score` -- nº de temporadas recientes consecutivas
-   sin una caída de carga (sin "temporada de descarga/descanso"), con
-   retornos decrecientes vía curva de saturación exponencial.
+   sin caída de carga, con retornos decrecientes vía saturación exponencial.
 """
 
 from __future__ import annotations
@@ -250,10 +236,7 @@ def build_fatigue_dataset(config: Dict[str, Any]) -> pd.DataFrame:
         )
         rows.append({"player_id": player_id, "player_name": player_name, **result})
 
-    # Jugadores del roster sin NINGUNA temporada en roster_career_stats.csv
-    # (rookies de verdad) -- sin historial no hay carga acumulada que
-    # medir, se asume el piso (0.0). Mismo principio que injury_model.py
-    # / aging_curve.zero_player_projection() para el mismo caso.
+    # Rookies sin historial: sin carga acumulada que medir, se asume el piso (0.0).
     roster_player_ids = {p["player_id"] for p in config["roster"] if p.get("player_id")}
     for player_id in roster_player_ids - covered_player_ids:
         player_name = next(p["name"] for p in config["roster"] if p.get("player_id") == player_id)

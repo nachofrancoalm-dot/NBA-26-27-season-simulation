@@ -2,29 +2,17 @@
 pt_defend_signal.py
 
 EXPERIMENTO, no forma parte del pipeline de producción. Investiga si
-`PCT_PLUSMINUS` (defensa por tracking -- ver
-data_pipeline.fetch_league_pt_defend_stats: cuánto empeora el % de tiro
-REAL del rival cuando este jugador es el defensor más cercano, frente a
-su % de tiro normal) aporta señal PREDICTIVA que Game Score+NET_RATING
-no capturan -- misma pregunta que hustle_stats_signal.py (que dio
-resultado NEGATIVO), pero con una métrica de impacto defensivo directo
-en vez de actividad/esfuerzo.
+`PCT_PLUSMINUS` (defensa por tracking: cuánto empeora el % de tiro real
+del rival cuando este jugador es el defensor más cercano) aporta señal
+predictiva que Game Score+NET_RATING no capturan -- misma pregunta que
+hustle_stats_signal.py (negativo), con una métrica de impacto defensivo
+directo en vez de actividad/esfuerzo.
 
-NOTA METODOLÓGICA: usar el PCT_PLUSMINUS de la MISMA temporada que se
-predice da R²=0.69, pero es una violación de la regla de no-look-ahead
-de este proyecto (ver backtesting.py y
-advanced_impact.adjusted_game_score_per36, que sí la respetan). Un
-equipo que defendió bien DURANTE una temporada correlaciona con su
-diferencial DURANTE esa misma temporada casi por definición -- no es una
-predicción, es casi tautológico, así que ese R² no es un resultado
-válido. El diseño correcto usa SOLO la temporada PREVIA de cada jugador
-(mismo patrón que advanced_impact.compute_recency_weighted_advanced):
-"¿la defensa por tracking del año pasado predice el resultado de este
-año?", la pregunta real que hay que responder.
-
-LIMITACIÓN DE DATOS: disponible desde 2013-14 (Second Spectrum) -- para
-usar la temporada PREVIA como predictor, el primer caso utilizable es
-2014-15 (con datos de tracking de 2013-14).
+Nota metodológica: usar el PCT_PLUSMINUS de la MISMA temporada que se
+predice da R²=0.69, pero es casi tautológico (viola no-look-ahead) --
+el diseño correcto usa solo la temporada PREVIA de cada jugador. Datos
+disponibles desde 2013-14 (Second Spectrum), primer caso utilizable
+2014-15.
 
 Uso:
     python scripts/experiments/pt_defend_signal.py
@@ -45,29 +33,13 @@ from season_utils import season_start_year  # noqa: E402
 
 
 def build_team_pt_defend_features(config: dict) -> pd.DataFrame:
-    """
-    Una fila por caso (equipo-temporada) con `team_pct_plusminus_prior`:
-    PCT_PLUSMINUS de la TEMPORADA ANTERIOR de cada jugador del roster de
-    ese caso (no look-ahead), agregado a nivel de equipo ponderando por
-    los minutos/partido REALES que ese jugador jugó en la temporada del
-    caso (de backtest_sweep_player_career_stats.csv -- el peso de "cuánto
-    pesa este jugador en el equipo" tiene que venir de la temporada que
-    se está prediciendo, no de la anterior).
-
-    Jugador sin temporada previa de tracking (rookie, o su año anterior
-    cae antes de 2013-14): se excluye de la ponderación, igual que
-    project_historical_player con un rookie sin historial -- no se
-    inventa un valor de liga.
-    """
+    """Una fila por caso (equipo-temporada) con `team_pct_plusminus_prior`: PCT_PLUSMINUS de la temporada ANTERIOR de cada jugador (no look-ahead), ponderado por sus minutos/partido reales en la temporada del caso. Jugadores sin temporada previa de tracking (rookies) se excluyen de la ponderación."""
     paths = get_paths(config)
     rosters = pd.read_csv(paths["processed"] / "backtest_sweep_rosters.csv")
     player_stats = pd.read_csv(paths["processed"] / "backtest_sweep_player_career_stats.csv")
     pt_defend = pd.read_csv(paths["processed"] / "league_pt_defend_stats.csv")
     pt_defend = pt_defend[pt_defend["D_FGA"] > 0][["PLAYER_ID", "season", "D_FGA", "PCT_PLUSMINUS"]]
-    # Un jugador traspasado a mitad de temporada puede tener más de una
-    # fila para la misma (PLAYER_ID, season) -- colapsar ponderando por
-    # D_FGA, mismo criterio que advanced_impact.compute_recency_weighted_advanced
-    # usa para colapsar temporadas partidas por traspaso.
+    # Colapsa filas de traspaso a mitad de temporada, ponderando por D_FGA.
     pt_defend_collapsed = (
         pt_defend.assign(_weighted=pt_defend["PCT_PLUSMINUS"] * pt_defend["D_FGA"])
         .groupby(["PLAYER_ID", "season"])
@@ -79,9 +51,7 @@ def build_team_pt_defend_features(config: dict) -> pd.DataFrame:
         pid: g.set_index("season")["PCT_PLUSMINUS"] for pid, g in pt_defend_collapsed.groupby("PLAYER_ID")
     }
 
-    # Minutos/partido REALES del jugador en la temporada del caso (el
-    # peso para agregar a nivel de equipo) -- mismo criterio que
-    # aging_curve_shrinkage.py.
+    # Minutos/partido reales del jugador en la temporada del caso (peso de agregación).
     minutes_lookup = {}
     for _, row in player_stats.iterrows():
         gp = row.get("GP", 0)

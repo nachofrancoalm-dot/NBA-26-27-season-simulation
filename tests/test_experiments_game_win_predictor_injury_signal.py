@@ -1,15 +1,8 @@
 """
-Test de la parte pura de
-scripts/experiments/game_win_predictor_injury_signal.py --
-select_key_players(), compute_missing_key_players(),
-compute_recently_missing_key_players() y build_matchups_with_injury_signal().
-No cubre fetch_key_player_game_logs() (pega a la API real) ni
-run_loso_three_way() (entrena de verdad, lento) -- ver el docstring del
-módulo: RESULTADO POSITIVO con el ORÁCULO (disponibilidad real
-retrospectiva, Brier 0.2173 -> 0.2152 en el sweep completo de 16
-temporadas) pero no desplegable; ver el docstring para el resultado de
-la versión PREGAME realista (recently_missing_key_players), que sí lo
-sería.
+Tests de select_key_players(), compute_missing_key_players(),
+compute_recently_missing_key_players() y build_matchups_with_injury_signal()
+en game_win_predictor_injury_signal.py. No cubre fetch_key_player_game_logs()
+(API real) ni run_loso_three_way() (entrena de verdad, lento).
 """
 
 import sys
@@ -31,12 +24,9 @@ def test_select_key_players_picks_top_n_by_minutes_per_game():
         {"TeamID": 1, "season": "2020-21", "PLAYER_ID": 30},
     ])
     career = pd.DataFrame([
-        # jugador 10: 30 MPG esa temporada -- el mas usado
-        {"PLAYER_ID": 10, "SEASON_ID": "2020-21", "GP": 70, "MIN": 2100, "player_name": "Estrella"},
-        # jugador 20: 10 MPG -- rol menor
-        {"PLAYER_ID": 20, "SEASON_ID": "2020-21", "GP": 70, "MIN": 700, "player_name": "Rol menor"},
-        # jugador 30: fila de una temporada DISTINTA -- no debe usarse (filtro SEASON_ID == season)
-        {"PLAYER_ID": 30, "SEASON_ID": "2019-20", "GP": 82, "MIN": 3000, "player_name": "Temporada equivocada"},
+        {"PLAYER_ID": 10, "SEASON_ID": "2020-21", "GP": 70, "MIN": 2100, "player_name": "Estrella"},  # 30 MPG
+        {"PLAYER_ID": 20, "SEASON_ID": "2020-21", "GP": 70, "MIN": 700, "player_name": "Rol menor"},  # 10 MPG
+        {"PLAYER_ID": 30, "SEASON_ID": "2019-20", "GP": 82, "MIN": 3000, "player_name": "Temporada equivocada"},  # otra temporada, no debe usarse
     ])
 
     key_players = gwpis.select_key_players(rosters, career, top_n=1)
@@ -62,7 +52,7 @@ def test_compute_missing_key_players_counts_absences_on_exact_date():
         {"TeamID": 1, "season": "2020-21", "PLAYER_ID": 100, "player_name": "A", "mpg": 30},
         {"TeamID": 1, "season": "2020-21", "PLAYER_ID": 200, "player_name": "B", "mpg": 28},
     ])
-    # Jugador 100 SI tiene fila esa fecha (jugo); jugador 200 NO (falto).
+    # jugador 100 tiene fila esa fecha (jugó); jugador 200 no (faltó)
     key_player_game_logs = pd.DataFrame([
         {"Player_ID": 100, "season": "2020-21", "GAME_DATE": "2020-12-25"},
     ])
@@ -72,8 +62,7 @@ def test_compute_missing_key_players_counts_absences_on_exact_date():
 
 
 def test_compute_missing_key_players_returns_nan_when_team_season_not_covered():
-    # Equipo-temporada fuera del alcance del piloto (no se seleccionaron
-    # jugadores clave para el) -- NaN, no 0 ("no se comprobo" != "nadie falto").
+    # equipo-temporada sin jugadores clave seleccionados -- NaN, no 0 ("no se comprobó" != "nadie faltó")
     team_game_features = pd.DataFrame([
         {"TEAM_ID": 999, "season": "2020-21", "GAME_DATE": pd.Timestamp("2020-12-25")},
     ])
@@ -97,7 +86,7 @@ def test_compute_recently_missing_key_players_looks_only_at_prior_team_games():
         {"TeamID": 1, "season": "2020-21", "PLAYER_ID": 100, "player_name": "Siempre presente", "mpg": 30},
         {"TeamID": 1, "season": "2020-21", "PLAYER_ID": 200, "player_name": "Falto una vez", "mpg": 28},
     ])
-    # jugador 100 jugo los 4 partidos; jugador 200 se perdio el 2o (dates[1]).
+    # jugador 100 jugó los 4 partidos; jugador 200 se perdió el 2o (dates[1])
     key_player_game_logs = pd.DataFrame([
         {"Player_ID": 100, "season": "2020-21", "GAME_DATE": d.strftime("%Y-%m-%d")} for d in dates
     ] + [
@@ -106,17 +95,12 @@ def test_compute_recently_missing_key_players_looks_only_at_prior_team_games():
 
     result = gwpis.compute_recently_missing_key_players(team_game_features, key_players, key_player_game_logs, window=3)
 
-    # Los primeros 3 partidos no tienen 3 partidos previos -> NaN.
-    assert result.iloc[0:3].isna().all()
-    # El 4o partido (indice 3) mira los 3 anteriores (indices 0,1,2) --
-    # el jugador 200 falto en dates[1], dentro de esa ventana -> cuenta 1.
-    assert result.iloc[3] == 1
+    assert result.iloc[0:3].isna().all()  # sin 3 partidos previos -> NaN
+    assert result.iloc[3] == 1  # ventana [0,1,2]: jugador 200 faltó en dates[1]
 
 
 def test_compute_recently_missing_key_players_never_counts_the_current_game_itself():
-    # Si el jugador falta HOY (el partido que se esta prediciendo) pero
-    # jugo los 3 partidos anteriores, no debe contar -- eso es
-    # disponibilidad de HOY (oraculo), no tendencia PREGAME.
+    # faltar HOY (el partido que se predice) no debe contar -- eso es oráculo, no tendencia pregame
     dates = [pd.Timestamp(f"2020-12-{d:02d}") for d in [1, 3, 5, 7]]
     team_game_features = pd.DataFrame([
         {"TEAM_ID": 1, "season": "2020-21", "GAME_DATE": d} for d in dates
@@ -124,7 +108,7 @@ def test_compute_recently_missing_key_players_never_counts_the_current_game_itse
     key_players = pd.DataFrame([
         {"TeamID": 1, "season": "2020-21", "PLAYER_ID": 100, "player_name": "Falta hoy", "mpg": 30},
     ])
-    # jugador 100 jugo los 3 primeros partidos, falto en el 4o (dates[3]).
+    # jugador 100 jugó los 3 primeros partidos, faltó en el 4o (dates[3])
     key_player_game_logs = pd.DataFrame([
         {"Player_ID": 100, "season": "2020-21", "GAME_DATE": d.strftime("%Y-%m-%d")} for d in dates[:3]
     ])
@@ -159,5 +143,4 @@ def test_build_matchups_with_injury_signal_computes_home_away_diff():
     matchups = gwpis.build_matchups_with_injury_signal(team_game_features, key_players, key_player_game_logs)
 
     assert len(matchups) == 1
-    # local (TEAM_ID=1): 0 ausentes; visitante (TEAM_ID=2): 1 ausente -> diff = -1
-    assert matchups.iloc[0]["missing_key_players_diff"] == -1
+    assert matchups.iloc[0]["missing_key_players_diff"] == -1  # local 0 ausentes, visitante 1

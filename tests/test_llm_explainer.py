@@ -1,8 +1,4 @@
-"""
-Tests de src/llm_explainer.py. build_context_snapshot() se prueba contra
-CSV sintéticos (sin red); explain_question() se prueba mockeando el
-cliente de Anthropic -- nunca llamamos a la API real en los tests.
-"""
+"""Tests de src/llm_explainer.py; explain_question() mockea el cliente Groq, nunca llama a la API real."""
 
 import sys
 from pathlib import Path
@@ -54,7 +50,7 @@ def test_build_context_snapshot_includes_real_numbers_when_csvs_exist(config):
             {
                 "player_id": 1, "player_name": "Player One", "game_score_per36": 20.0,
                 "PTS_projected": 2050, "REB_projected": 410, "AST_projected": 656,
-                "projected_total_minutes": 2788.0,  # 34.0 min/partido x 82 partidos
+                "projected_total_minutes": 2788.0,  # 34.0 min/partido x 82
             }
         ]
     ).to_csv(processed / "aging_curve_projection.csv", index=False)
@@ -74,11 +70,7 @@ def test_build_context_snapshot_includes_real_numbers_when_csvs_exist(config):
 
 
 def test_build_context_snapshot_includes_league_wide_injury_risk_by_team(config):
-    """
-    Regresión: preguntas del tipo "¿qué equipo ha tenido más lesiones?"
-    no se podían responder porque el snapshot solo incluía el riesgo de
-    lesión del roster propio, no el de los 30 equipos reales de la liga.
-    """
+    """Regresión: el snapshot solo incluía el riesgo del roster propio, no el de los 30 equipos de la liga."""
     processed = Path(config["paths"]["processed_data_dir"])
     pd.DataFrame(
         [
@@ -92,9 +84,7 @@ def test_build_context_snapshot_includes_league_wide_injury_risk_by_team(config)
 
     assert "Riesgo de lesion medio por equipo" in snapshot
     assert "Riesgo de lesion por equipo (liga completa): NO DISPONIBLE" not in snapshot
-    # AAA (media 0.50) debe listarse antes que BBB (0.10) -- ordenado
-    # de mayor a menor riesgo, que es justo lo que hace falta para
-    # responder "qué equipo tiene más riesgo de lesión".
+    # Ordenado de mayor a menor riesgo: AAA (0.50) antes que BBB (0.10).
     section = snapshot.split("## Riesgo de lesion medio por equipo")[1].split("##")[0]
     assert section.find("AAA") < section.find("BBB")
     assert "AAA: risk_score medio = 0.50" in snapshot
@@ -142,8 +132,7 @@ def test_explain_question_grounds_the_prompt_with_the_snapshot(config, monkeypat
     assert answer == "Respuesta grounded."
     assert captured["api_key"] == "test-key"
     assert captured["model"] == "llama-3.3-70b-versatile"
-    # El snapshot va en el mensaje de system, no en el del usuario final --
-    # así el modelo queda "grounded" en los datos reales ya calculados.
+    # El snapshot va en el mensaje de system, no en el del usuario.
     system_message = captured["messages"][0]
     assert system_message["role"] == "system"
     assert "Victorias medias: 52.5" in system_message["content"]
@@ -158,8 +147,7 @@ def test_retrieve_relevant_news_snippets_returns_empty_without_news_text():
 
 
 def test_retrieve_relevant_news_snippets_returns_empty_when_nothing_overlaps():
-    # Cero solapamiento lexico (ni siquiera stopwords compartidas) --
-    # no hay que forzar un fragmento irrelevante en el contexto.
+    # Cero solapamiento lexico: no debe forzarse un fragmento irrelevante.
     snippets = retrieve_relevant_news_snippets("Trueno relampago tormenta.", "Presupuesto anual empresa")
     assert snippets == []
 
@@ -175,10 +163,7 @@ def test_retrieve_relevant_news_snippets_ranks_the_relevant_paragraph_first():
 
 
 def test_retrieve_relevant_news_snippets_falls_back_to_line_splitting():
-    # Un unico bloque sin parrafos (lista de titulares, una noticia por
-    # linea) -- debe trocearse por linea, no tratarse como un solo
-    # fragmento gigante donde una noticia irrelevante "contamina" a la
-    # relevante.
+    # Bloque sin parrafos: debe trocearse por linea, no como un fragmento gigante.
     news_text = "Embiid fuera por molestias en la rodilla\nCurry con esguince de tobillo leve"
     snippets = retrieve_relevant_news_snippets(news_text, "¿Que lesion tiene Curry?")
     assert snippets
@@ -262,9 +247,7 @@ def test_explain_question_omits_news_section_when_nothing_relevant(config, monke
         news_text="Trueno relampago tormenta.",
     )
 
-    # El SYSTEM_PROMPT menciona la etiqueta una vez al explicar el
-    # criterio -- lo que no debe pasar es que APARIEZCA COMO SECCION
-    # (con las noticias pegadas debajo) cuando nada es relevante.
+    # El SYSTEM_PROMPT menciona la etiqueta una vez; no debe aparecer como seccion aparte.
     system_message = captured["messages"][0]["content"]
     assert system_message.count(NEWS_SECTION_LABEL) == 1
     assert "Trueno" not in system_message

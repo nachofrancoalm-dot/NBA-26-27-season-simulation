@@ -1,9 +1,7 @@
 """
-Test de la parte pura de src/data_pipeline.py -- build_league_schedule_dataset()
-(filtrado de temporada regular / partidos sin resolver), mockeando
-fetch_league_schedule para no llamar a la API real. El resto de
-data_pipeline.py son wrappers finos sobre nba_api sin lógica propia que
-testear sin red -- esta función es la primera con un filtro real.
+Tests de build_league_schedule_dataset() en src/data_pipeline.py (filtrado de
+temporada regular / partidos sin resolver), mockeando fetch_league_schedule.
+El resto del módulo son wrappers finos sobre nba_api sin lógica propia.
 """
 
 import sys
@@ -45,9 +43,7 @@ def test_build_league_schedule_dataset_drops_preseason_games(config, monkeypatch
 
 
 def test_build_league_schedule_dataset_drops_games_with_unresolved_teams(config, monkeypatch):
-    """Plazas de la fase eliminatoria de la NBA Cup sin resolver todavía
-    -- tricode nulo en vez de un equipo real. Se descartan, no se
-    inventa a quién le toca jugar."""
+    # plazas de la NBA Cup sin resolver (tricode nulo) se descartan, no se inventa el rival
     fake = pd.DataFrame([
         _fake_schedule_row("2026-12-15", "AAA", None),
         _fake_schedule_row("2026-12-16", "AAA", "BBB"),
@@ -82,8 +78,7 @@ def test_build_roster_shot_charts_dataset_uses_latest_real_season_per_player(con
         [
             {"PLAYER_ID": 1, "SEASON_ID": "2023-24", "GP": 60},
             {"PLAYER_ID": 1, "SEASON_ID": "2024-25", "GP": 70},
-            # Temporada de proyección futura sin partidos jugados todavía -- se filtra.
-            {"PLAYER_ID": 1, "SEASON_ID": "2026-27", "GP": 0},
+            {"PLAYER_ID": 1, "SEASON_ID": "2026-27", "GP": 0},  # proyección futura, sin partidos -- se filtra
         ]
     ).to_csv(processed_dir / "roster_career_stats.csv", index=False)
 

@@ -1,9 +1,8 @@
 import { api } from "../api.js";
 import { card, el, emptyState } from "../ui.js";
 
-// Historial en memoria del módulo -- se pierde al recargar la página.
-// explain_question() es de un solo turno (no manda historial al
-// modelo), así que no hace falta persistirlo.
+// Historial en memoria -- se pierde al recargar; explain_question() es de
+// un solo turno, así que no hace falta persistirlo.
 const history = [];
 let rendered = false;
 
@@ -46,9 +45,8 @@ export async function render(container) {
     { once: false }
   );
 
-  // Texto de noticias pegado por el usuario -- vive solo en memoria del
-  // modulo (como `history`), se pierde al recargar. Nunca se manda a
-  // ningun sitio salvo /explainer/ask, y solo si no esta vacio.
+  // Texto de noticias pegado por el usuario -- en memoria como `history`,
+  // solo se manda a /explainer/ask si no está vacío.
   const newsDetails = el("details", { class: "glossary" }, [
     el("summary", {}, "Opcional: pegar noticias recientes (lesiones, fichajes, cambios de entrenador...)"),
   ]);

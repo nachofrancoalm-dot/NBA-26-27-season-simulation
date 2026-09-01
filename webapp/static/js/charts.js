@@ -1,8 +1,6 @@
-// charts.js -- gráficos SVG mínimos, sin dependencias externas. Sigue las
-// especificaciones de la skill dataviz de este proyecto: barras finas con
-// extremo redondeado, líneas de 2px, gridlines hairline recesivas, un solo
-// hue secuencial (azul), tooltip al pasar el ratón, un único eje siempre
-// (nunca doble eje Y).
+// charts.js -- gráficos SVG mínimos, sin dependencias externas. Barras
+// finas redondeadas, líneas de 2px, gridlines hairline, un solo hue
+// (azul), tooltip al pasar el ratón, un único eje siempre.
 
 import { showTooltip, hideTooltip } from "./ui.js";
 

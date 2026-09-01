@@ -1,142 +1,43 @@
 """
 game_win_predictor_injury_signal.py
 
-Seguimiento de game_win_predictor.py (resultado NEGATIVO: GBT con seis
-features no mejora la logística de una sola variable, ver su docstring).
-Ese experimento no tenía ninguna señal de disponibilidad REAL del día del
-partido -- todo era pregame trailing (rating, descanso, playstyle). Este
-experimento añade una: para cada equipo-temporada, se identifican sus 5
-jugadores con más minutos/partido ("jugadores clave") y se cuenta,
-partido a partido, cuántos de ellos NO jugaron -- lesión, descanso,
-DNP-CD, lo que sea, no se distingue el motivo, igual que el resto del
-proyecto no lo distingue (ver injury_model.py).
+Seguimiento de game_win_predictor.py (GBT con seis features trailing no
+mejoraba la logística baseline). Hipótesis: falta una señal de
+disponibilidad REAL del día del partido. Para cada equipo-temporada, se
+toman los 5 jugadores de más MPG ("jugadores clave") y se cuenta,
+partido a partido, cuántos NO jugaron.
 
-QUÉ MIDE ESTO DE VERDAD -- Y QUÉ NO
----------------------------------------
-Esto usa disponibilidad REAL RETROSPECTIVA (sabemos, después del hecho,
-si el jugador jugó ese partido concreto) -- NO un injury report del día
-del partido, que `nba_api` no expone y este proyecto no ingiere (ver la
-discusión de RAG en llm_explainer.py). Por tanto este experimento NO
-simula un sistema utilizable en producción (no se puede saber ANTES del
-partido si un jugador clave va a jugar sin una fuente de datos que este
-proyecto no tiene). Lo que SÍ mide es el TECHO: cuánto ayudaría, en el
-mejor de los casos posible, saber quién juega de verdad. Si ni siquiera
-esta versión "oráculo" mejora el modelo, no compensa construir nada más
-ambicioso (una ingesta de injury reports en vivo).
+Esto mide disponibilidad RETROSPECTIVA (oráculo), no un injury report del
+día del partido (nba_api no lo expone) -- por tanto no es desplegable tal
+cual, pero mide el TECHO: si ni el oráculo ayuda, no compensa ingerir
+injury reports en vivo.
 
-INGESTA NUEVA -- ESTO SÍ PEGA A LA API
-------------------------------------------
-A diferencia de game_win_predictor.py (cero ingesta nueva), este
-experimento necesita `player_game_log` (data_pipeline.fetch_player_game_log)
-de cada jugador clave -- dato que el proyecto nunca había descargado a
-esta escala. Con los 5 jugadores de más MPG por cada uno de los 480
-equipo-temporada del backtest sweep, hacen falta ~2.250 llamadas
-(pares (player_id, season) únicos) -- del orden de 25-45 min la primera
-vez, cacheado después. Por eso este script empieza en modo PILOTO
-(`--seasons`, 3 temporadas por defecto, ~425 llamadas, 5-10 min) antes
-de comprometerse al sweep completo (`--seasons` con las 16 temporadas de
-`config["backtest_sweep"]["seasons"]`).
+Requiere ingesta nueva: `fetch_player_game_log` por (player, season) de
+cada jugador clave (~2.250 llamadas para el sweep completo). Empieza en
+modo piloto (`--seasons`, 3 temporadas por defecto) antes del sweep
+completo (16 temporadas).
 
-DISEÑO
---------
-1. `select_key_players()`: cruza `backtest_sweep_rosters.csv` (roster
-   REAL de cada equipo-temporada) con `backtest_sweep_player_career_stats.csv`
-   (career stats YA cacheadas, cero llamadas nuevas aquí) filtrando a la
-   fila de la temporada exacta, calcula MPG = MIN/GP y toma el top-N por
-   equipo-temporada.
-2. `fetch_key_player_game_logs()`: UNA llamada por (player_id, season)
-   único de los jugadores clave seleccionados -- reutiliza
-   `data_pipeline.fetch_player_game_log` tal cual, mismo caché en disco.
-3. `compute_missing_key_players()`: por cada partido de cada
-   equipo-temporada, cuenta cuántos jugadores clave de ESE equipo no
-   tienen fila en su game log para la fecha exacta del partido.
-4. Se añade `missing_key_players_diff` (local menos visitante) al
-   dataset de partidos de `game_win_predictor.build_matchup_dataset` y
-   se compara GBT con 6 features (sin la señal) vs. GBT con 7 (con
-   ella), LOSO igual que el experimento original.
+Método: cuenta jugadores clave ausentes por partido (`missing_key_players`)
+y añade el diferencial local-visitante como séptima feature al GBT de
+game_win_predictor.py, mismo LOSO.
 
-RESULTADOS
-------------
-Piloto (3 temporadas, 2023-24/2024-25/2025-26, 3.633 partidos, LOSO de
-3 pliegues -- poca potencia estadística, solo para decidir si compensaba
-el sweep completo):
+Resultado del oráculo (sweep completo, 18.843 partidos): Brier sin señal
+0.2173 vs con señal 0.2152, accuracy 64.93% vs 65.42% -- primera mejora
+real de la serie, y bate al baseline logístico (0.2175).
 
-    Brier score  -- GBT sin señal: 0.2373   con señal: 0.2317
-    Log-loss     -- sin: 0.6856   con: 0.6721
-    Accuracy     -- sin: 63.25%   con: 64.13%
+Versión realista y desplegable (`compute_recently_missing_key_players`):
+en vez del oráculo, cuenta ausencias en cualquiera de los 3 partidos
+ANTERIORES (información pregame real). Conserva ~55% de la mejora de
+Brier del oráculo (0.2146 vs 0.2132 vs 0.2163 sin señal) e iguala su
+accuracy (65.78% vs 65.70%) sin depender de datos en vivo -- confirma que
+la tendencia reciente de ausencias añade información que
+net_rating_rolling no captura completamente (reacciona lento a una
+lesión reciente).
 
-Sweep completo (16 temporadas del backtest sweep, 18.843 partidos, mismo
-LOSO que game_win_predictor.py -- 146.323 filas de game logs de
-jugadores clave descargadas, ~1.825 llamadas nuevas a la API tras
-reutilizar el caché del piloto):
-
-    Brier score  -- GBT sin señal: 0.2173   con señal: 0.2152
-    Log-loss     -- sin: 0.6242   con: 0.6192
-    Accuracy     -- sin: 64.93%   con: 65.42%
-
-CONCLUSIÓN: positiva, primera mejora real de toda esta línea de
-experimentos (game_win_predictor.py, tope de MOV, más iteraciones de
-GBT -- todos negativos o neutros). La mejora del sweep completo (~1%
-relativo en Brier) es más MODESTA que la del piloto (~2.4%) -- esperable,
-el piloto tenía poca potencia estadística y regresiona a la media con
-más datos -- pero la dirección se mantiene y es consistente en las tres
-métricas. Más importante: GBT CON esta señal (Brier 0.2152) bate de
-forma clara al baseline logístico de `game_win_predictor.py`
-(net_rating_diff, Brier 0.2175) -- por primera vez en la serie, algo
-supera al baseline con un margen mayor que el ruido fold-a-fold.
-
-Esto confirma la hipótesis que motivó el experimento: la brecha frente a
-las líneas de casas de apuestas (~67-70% de accuracy, ver
-game_win_predictor.py) SÍ viene en parte de disponibilidad real del día
-del partido, no solo de forma reciente/descanso/playstyle -- esas
-features (descanso, B2B, ritmo, triples) no aportaban nada
-(game_win_predictor.py), pero disponibilidad real sí.
-
-LIMITACIÓN DEL ORÁCULO: usa quién jugó DE VERDAD, no un injury report del
-día del partido -- NO desplegable en un sistema de predicción real tal
-cual, porque antes de un partido no se sabe con esta fuente de datos
-quién va a jugar esta noche.
-
-VERSIÓN REALISTA (PREGAME, SIN ORÁCULO) -- SÍ DESPLEGABLE
----------------------------------------------------------------
-Pregunta de seguimiento: ¿cuánto de esa mejora sobrevive si en vez del
-oráculo se usa solo información que SÍ se conoce antes del partido?
-`compute_recently_missing_key_players()`: para cada partido, cuenta
-cuántos jugadores clave faltaron en AL MENOS UNO de los 3 partidos
-ANTERIORES del equipo (nunca el de hoy) -- una tendencia de ausencia
-reciente, no confirmación del día. Usa exactamente los mismos game logs
-ya descargados, cero ingesta nueva. Comparación de tres vías con el
-mismo LOSO (`run_loso_three_way`), sobre el subconjunto de partidos con
-al menos 3 partidos previos por equipo (18.088 de 18.843, se pierden los
-de inicio de temporada -- mismo criterio que el resto del proyecto):
-
-    Brier score -- sin señal:                            0.2163
-    Brier score -- oráculo (disponibilidad de hoy):       0.2132
-    Brier score -- realista (tendencia, últimos 3 partidos): 0.2146
-    Log-loss    -- sin: 0.6219   oráculo: 0.6146   realista: 0.6182
-    Accuracy    -- sin: 65.16%   oráculo: 65.70%   realista: 65.78%
-
-CONCLUSIÓN FINAL: positiva y desplegable. La versión realista conserva
-~55% de la mejora de Brier del oráculo (0.0017 de 0.0031) sin necesitar
-ningún dato en vivo -- y en accuracy incluso iguala/supera ligeramente
-al oráculo (65.78% vs. 65.70%, diferencia dentro del ruido). Es la
-primera señal de disponibilidad de esta línea de experimentos que es a
-la vez real (mejora medible, no ruido) y utilizable (no depende de una
-fuente de datos que el proyecto no tiene). Confirma que la tendencia
-reciente de ausencias de los jugadores clave de un equipo -- no solo su
-Net Rating agregado -- contiene información que `net_rating_rolling` por
-sí solo no captura completamente (un jugador estrella recién lesionado
-arrastra el rolling del equipo hacia abajo, pero LENTO -- tarda varios
-partidos en reflejarse del todo; la tendencia de ausencia lo detecta de
-inmediato).
-
-Sigue sin graduarse a `simulation.py`/`game_win_predictor.py`: ambos
-necesitarían una noción de "equipo real con historial reciente
-verificable" que el simulador no tiene (proyecta un roster HIPOTÉTICO,
-no cruza contra partidos ya jugados de una franquicia real) -- la misma
-limitación de traducción que ya se señaló para `outcome_variance_scale`
-en game_win_predictor.py. Queda documentado como hallazgo validado, no
-como cambio de producción.
+No se ha llevado a producción: simulation.py proyecta un roster
+hipotético, no un equipo real con historial verificable -- misma
+limitación de traducción que outcome_variance_scale en
+game_win_predictor.py.
 
 Uso:
     python scripts/experiments/game_win_predictor_injury_signal.py
@@ -172,14 +73,7 @@ GAME_LOGS_FILENAME = "experiment_injury_signal_key_player_game_logs.csv"
 
 
 def select_key_players(rosters: pd.DataFrame, career_stats: pd.DataFrame, top_n: int = DEFAULT_TOP_N) -> pd.DataFrame:
-    """
-    Une roster REAL (TeamID, season, PLAYER_ID) con la fila de career
-    stats de esa temporada EXACTA (SEASON_ID == season -- sin esto, un
-    jugador con carrera larga tendría múltiples filas y el merge
-    duplicaría), calcula MPG y devuelve el top-N por equipo-temporada.
-    Jugadores con GP=0 esa temporada (lesión total, dos-way sin debutar)
-    se excluyen -- no hay MPG que calcular.
-    """
+    """Une roster con la fila de career stats de la temporada exacta, calcula MPG y devuelve el top-N por equipo-temporada (excluye GP=0)."""
     merged = rosters.merge(career_stats, on="PLAYER_ID")
     merged = merged[merged["SEASON_ID"] == merged["season"]]
     merged = merged[merged["GP"] > 0].copy()
@@ -196,11 +90,7 @@ def select_key_players(rosters: pd.DataFrame, career_stats: pd.DataFrame, top_n:
 
 
 def fetch_key_player_game_logs(key_players: pd.DataFrame, raw_dir: Path, force_refresh: bool = False) -> pd.DataFrame:
-    """
-    Una llamada por (PLAYER_ID, season) único -- reutiliza el caché en
-    disco de fetch_player_game_log, así que re-ejecutar el script no
-    vuelve a pegarle a la API para pares ya descargados.
-    """
+    """Una llamada por (PLAYER_ID, season) único, cacheada por fetch_player_game_log."""
     unique_pairs = key_players[["PLAYER_ID", "season"]].drop_duplicates()
     frames = []
     for _, row in tqdm(list(unique_pairs.iterrows()), desc="Descargando game logs de jugadores clave"):
@@ -221,14 +111,7 @@ def fetch_key_player_game_logs(key_players: pd.DataFrame, raw_dir: Path, force_r
 def compute_missing_key_players(
     team_game_features: pd.DataFrame, key_players: pd.DataFrame, key_player_game_logs: pd.DataFrame
 ) -> pd.Series:
-    """
-    Para cada fila de `team_game_features` (un partido de un
-    equipo-temporada), cuenta cuántos de sus jugadores clave NO tienen
-    fila en `key_player_game_logs` para esa fecha exacta -- disponibilidad
-    real, no un proxy. Equipos-temporada sin jugadores clave descargados
-    (fuera del piloto) devuelven NaN, no 0 -- 0 significaría "nadie
-    faltó", que no es lo mismo que "no se comprobó".
-    """
+    """Por partido, cuenta jugadores clave sin fila en el game log de esa fecha (disponibilidad real). NaN, no 0, si el equipo-temporada no se descargó."""
     logs = key_player_game_logs.copy()
     logs["GAME_DATE"] = pd.to_datetime(logs["GAME_DATE"])
     played = set(zip(logs["Player_ID"], logs["season"], logs["GAME_DATE"]))
@@ -256,20 +139,7 @@ def compute_recently_missing_key_players(
     key_player_game_logs: pd.DataFrame,
     window: int = DEFAULT_RECENT_WINDOW_GAMES,
 ) -> pd.Series:
-    """
-    Versión PREGAME (desplegable, sin oráculo) de compute_missing_key_players:
-    para cada partido, cuenta cuántos jugadores clave del equipo faltaron
-    en AL MENOS UNO de los `window` partidos ANTERIORES del EQUIPO (nunca
-    el partido de hoy) -- una tendencia reciente de ausencia, no
-    disponibilidad confirmada del día. Es información que SÍ se conoce
-    antes de que se juegue el partido.
-
-    NaN si el equipo-temporada no está en `key_players` o si el partido
-    no tiene `window` partidos previos dentro de `team_game_features`
-    (que ya excluye el primer partido de temporada -- ver
-    game_win_predictor.build_team_game_features) -- mismo criterio "sin
-    evidencia, sin inventar" que compute_missing_key_players.
-    """
+    """Versión pregame de compute_missing_key_players: cuenta jugadores clave ausentes en al menos uno de los `window` partidos anteriores (nunca el de hoy). NaN si faltan datos."""
     logs = key_player_game_logs.copy()
     logs["GAME_DATE"] = pd.to_datetime(logs["GAME_DATE"])
     played = set(zip(logs["Player_ID"], logs["season"], logs["GAME_DATE"]))
@@ -325,16 +195,7 @@ def build_matchups_with_injury_signal(
 
 
 def run_loso_three_way(matchups: pd.DataFrame) -> None:
-    """
-    Compara tres configuraciones de GBT con el mismo LOSO: sin señal de
-    disponibilidad, con el ORÁCULO (compute_missing_key_players, no
-    desplegable), y con la versión PREGAME realista
-    (compute_recently_missing_key_players, sí desplegable). Las filas sin
-    `recently_missing_key_players_diff` (partidos de inicio de temporada,
-    ver docstring de compute_recently_missing_key_players) se excluyen de
-    LAS TRES comparaciones -- mismo conjunto de partidos en los tres
-    casos, para que la comparación sea limpia.
-    """
+    """Compara con el mismo LOSO: sin señal, con oráculo, y con la versión pregame realista, sobre el mismo conjunto de partidos en los tres casos."""
     from sklearn.ensemble import HistGradientBoostingClassifier
     from sklearn.metrics import accuracy_score, brier_score_loss, log_loss
 

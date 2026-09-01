@@ -48,17 +48,10 @@ def _validate_config(config: Dict[str, Any]) -> None:
 def resolve_backtest_sweep_cases(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Expande config["backtest_sweep"]["seasons"] a una lista de casos
-    {name, team_id, season}: los 30 equipos NBA (misma tabla estática de
-    franquicias que league_simulation.py / opponent_weighting.py -- el
-    team_id de nba_api es estable a través de mudanzas/cambios de nombre,
-    así que sirve igual para temporadas históricas) para CADA temporada
-    listada. Usado para el backtesting sistemático a gran escala (ver
-    src/backtesting.py:build_backtest_sweep_dataset) -- DISTINTO de
-    `config["historical_comparables"]` (un puñado de casos narrativos
-    elegidos a mano -- "superequipos" conocidos -- que siguen usando el
-    pipeline por defecto, barato). Devuelve [] si `backtest_sweep` no
-    está definido en el config -- es opt-in, no forma parte del pipeline
-    normal (ver la advertencia de coste en data_pipeline.py).
+    {name, team_id, season} para los 30 equipos NBA en cada temporada
+    listada (usado por el backtesting sistemático de src/backtesting.py;
+    distinto de `historical_comparables`, casos narrativos elegidos a
+    mano). Devuelve [] si `backtest_sweep` no está definido -- es opt-in.
     """
     from context.opponent_weighting import ABBREVIATION_TO_TEAM_ID
 

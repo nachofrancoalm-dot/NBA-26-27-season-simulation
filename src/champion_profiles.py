@@ -6,35 +6,24 @@ quién ganó, desde qué seed, a quién eliminó por el camino, cómo estaba
 compuesto su roster (posiciones, experiencia, concentración de minutos en
 las estrellas) y qué trayectoria de seeds ha tenido cada franquicia.
 
-POR QUÉ ES *DESCRIPTIVO* Y NO PREDICTIVO
---------------------------------------------
-Con 15 campeones (2010-11..2024-25) cualquier "perfil de campeón" que se
-extraiga tiene una muestra de 15 -- insuficiente para entrenar nada. La
-hipótesis de "fricción de vestuario" en superequipos, por ejemplo, parecía
-sólida con 4 casos y se disolvió en artefacto de calibración al ampliar
-el backtesting a 450 (ver la sección de Backtesting del README): con
-muestras así de pequeñas cualquier patrón puede ser ruido. Estas
-funciones se usan para CONTEXTUALIZAR y para VALIDAR el simulador (¿mi
-modelo produce campeones desde los mismos seeds que la realidad?), NO
-como features de predicción.
+Con solo 15 campeones (2010-11..2024-25), cualquier "perfil de campeón"
+extraído tiene muestra insuficiente para entrenar nada -- la hipótesis de
+"fricción de vestuario" en superequipos parecía sólida con 4 casos y se
+disolvió en artefacto al ampliar el backtesting a 450 (ver README). Estas
+funciones sirven para CONTEXTUALIZAR y VALIDAR el simulador (¿produce
+campeones desde los mismos seeds que la realidad?), no como features de
+predicción. La validación sí es sólida en un punto: en 15 temporadas
+ningún campeón salió de un seed peor que el 3 (60% fueron seed 1) -- un
+simulador que produce campeones de seed 4+ con frecuencia apreciable
+tiene una miscalibración medible.
 
-La validación sí es estadísticamente sólida en un punto concreto: en 15
-temporadas NINGÚN campeón salió de un seed peor que el 3 (60% fueron seed
-1). Si el simulador produce campeones de seed 4+ con frecuencia
-apreciable, eso es una miscalibración medible -- y de hecho lo fue.
-
-FUENTES DE DATOS (todas ya descargadas por `--backtest-sweep`)
------------------------------------------------------------------
-- backtest_sweep_advanced_game_logs.csv (game_phase='playoffs') -> quién
-  ganó el último partido de cada temporada = campeón, y el recorrido de
-  cada equipo por rondas.
-- backtest_sweep_standings.csv -> PlayoffRank (el seed) y récord.
-- backtest_sweep_rosters.csv -> POSITION, EXP (años de experiencia), AGE.
-- backtest_sweep_player_career_stats.csv -> minutos reales de esa
-  temporada, para medir la concentración de minutos.
-
-Todo se une por TEAM_ID / TeamID (no por nombre): las franquicias cambian
-de nombre y de ciudad, el id de nba_api no.
+Fuentes (todas ya descargadas por `--backtest-sweep`):
+backtest_sweep_advanced_game_logs.csv (game_phase='playoffs', para
+derivar campeón y recorrido), backtest_sweep_standings.csv (PlayoffRank y
+récord), backtest_sweep_rosters.csv (POSITION/EXP/AGE), y
+backtest_sweep_player_career_stats.csv (minutos reales). Todo se une por
+TEAM_ID / TeamID, no por nombre -- las franquicias cambian de nombre y
+ciudad, el id de nba_api no.
 """
 
 from __future__ import annotations
@@ -60,15 +49,9 @@ DEFAULT_STAR_COUNT = 2
 
 
 def derive_champions(playoff_game_logs: pd.DataFrame) -> pd.DataFrame:
-    """
-    Campeón de cada temporada, derivado del ÚLTIMO partido de playoffs de
-    esa temporada (el que cierra las Finales): el equipo que aparece con
-    WL == 'W' en la fecha más tardía.
-
-    `playoff_game_logs`: filas de backtest_sweep_advanced_game_logs.csv
-    con game_phase == 'playoffs'. Devuelve (season, team_id,
-    team_abbreviation, clinch_date).
-    """
+    """Campeón de cada temporada: el equipo con WL == 'W' en la fecha más
+    tardía del ÚLTIMO partido de playoffs de esa temporada. Devuelve
+    (season, team_id, team_abbreviation, clinch_date)."""
     if playoff_game_logs.empty:
         return pd.DataFrame(columns=["season", "team_id", "team_abbreviation", "clinch_date"])
 
@@ -94,15 +77,10 @@ def derive_champions(playoff_game_logs: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_title_paths(champions: pd.DataFrame, standings: pd.DataFrame, playoff_game_logs: pd.DataFrame) -> pd.DataFrame:
-    """
-    Camino al título de cada campeón: desde qué seed salió, con qué
+    """Camino al título de cada campeón: desde qué seed salió, con qué
     récord, cuántos partidos de playoffs jugó y ganó, y a qué seeds
-    eliminó por el camino.
-
-    El "camino de rivales" se reconstruye de los game logs: los rivales
-    distintos a los que se enfrentó en playoffs, en orden cronológico, con
-    el seed que tenía cada uno esa temporada.
-    """
+    eliminó por el camino (reconstruido de los game logs en orden
+    cronológico)."""
     if champions.empty:
         return pd.DataFrame()
 

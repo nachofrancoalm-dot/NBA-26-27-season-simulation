@@ -1,11 +1,6 @@
 """
-Test de la parte pura de scripts/experiments/game_win_predictor.py --
-build_team_game_features() y build_matchup_dataset(). No cubre
-run_loso() (entrena HistGradientBoostingClassifier/LogisticRegression
-real, lento y es el experimento en sí, no lógica que deba cubrir un
-test rápido) -- ver el docstring del módulo: RESULTADO NEGATIVO (el GBT
-con seis features no mejora sobre una logística de una sola variable),
-documentado con el mismo rigor que injury_survival_model.py.
+Tests de build_team_game_features() y build_matchup_dataset() en
+game_win_predictor.py. No cubre run_loso() (entrena el modelo real, lento).
 """
 
 import sys
@@ -32,9 +27,7 @@ def _team_game_row(team_id, game_id, date, matchup, wl, plus_minus, fga=100, ext
 
 
 def test_build_team_game_features_uses_only_prior_games_no_look_ahead():
-    # net_rating por partido (OREB=TOV=FTA=0 -> POSS=FGA): 20.0, 10.0, -50.0.
-    # Si hubiera look-ahead, el rolling del partido 3 incluiria su propio
-    # -50.0 (media != 15.0).
+    # si hubiera look-ahead, el rolling de G3 incluiría su propio -50.0 (media != 15.0)
     rows = [
         _team_game_row(1, "G1", "2020-10-01", "AAA vs. BBB", "W", 20, fga=100),
         _team_game_row(1, "G2", "2020-10-03", "AAA @ CCC", "W", 10, fga=100),
@@ -42,18 +35,13 @@ def test_build_team_game_features_uses_only_prior_games_no_look_ahead():
     ]
     features = gwp.build_team_game_features(pd.DataFrame(rows))
 
-    # El primer partido de temporada se descarta (sin historial previo).
-    assert len(features) == 2
+    assert len(features) == 2  # el primer partido se descarta (sin historial previo)
     game3 = features[features["GAME_ID"] == "G3"].iloc[0]
     assert game3["net_rating_rolling"] == pytest.approx(15.0)  # media de G1 (20.0) y G2 (10.0)
 
 
 def test_build_team_game_features_default_uses_expanding_average_not_fixed_window():
-    # net_rating por partido (FGA=100 -> POSS=100): 20, 10, -50, 40.
-    # Con ventana fija=2, el pregame del partido 4 solo promediaria G2 y
-    # G3 (10 y -50 -> -20.0). Con la media EXPANDIDA (default, sin pasar
-    # rolling_window), el pregame del partido 4 promedia TODO el
-    # historial previo: G1, G2, G3 (20, 10, -50 -> -6.67).
+    # ventana fija=2 promedia solo G2/G3; la expandida (default) promedia todo el historial previo
     rows = [
         _team_game_row(1, "G1", "2020-10-01", "AAA vs. BBB", "W", 20, fga=100),
         _team_game_row(1, "G2", "2020-10-03", "AAA @ CCC", "W", 10, fga=100),

@@ -1,167 +1,39 @@
 """
-Métrica de impacto COMPUESTA: Game Score de caja + estadísticas avanzadas.
+Métrica de impacto COMPUESTA: Game Score de caja + estadísticas avanzadas
+(PIE, NET_RATING, PCT_PLUSMINUS).
 
-POR QUÉ EXISTE
---------------
-El resto del proyecto mide el impacto de un jugador con el Game Score de
-Hollinger (`aging_curve.compute_game_score_per36`), una métrica de CAJA
-puramente ofensiva: solo ve la defensa a través de robos, tapones y
-rebote defensivo. Todo lo demás que hace un buen defensor -- contestar
-tiros sin taponarlos, rotar, no perder su marca, disuadir penetraciones
--- es literalmente invisible para ella. Un equipo con varios
-especialistas defensivos de perfil bajo en la caja (tipo Knicks 2025-26:
-título con 53 victorias, proyectado 12º del Este solo con Game Score,
-porque Anunoby/Bridges/Hart puntuaban como jugadores del montón) queda
-sistemáticamente infravalorado.
-
-QUÉ SE MIDIÓ Y QUÉ SOBREVIVIÓ
-------------------------------
-Sobre 480 casos del backtest sweep (16 temporadas x 30 equipos), con la
-proyección real del pipeline (minutos normalizados a 240, recencia de 3
-temporadas, sin look-ahead) contra el diferencial de puntos real,
-validado leave-one-season-out:
-
-    modelo                     R fuera de muestra
-    Game Score solo                    0.702
-    Game Score + PIE                   0.702      <- no aporta nada
-    Game Score + NET_RATING            0.754      <- integrado
-    Game Score + PIE + NET_RATING      0.753      <- PIE resta
-
-PIE queda fuera del modelo. `corr(PIE de equipo, NET_RATING de equipo) =
-0.64`: en solitario PIE correlaciona porque va montado en la misma señal
-que NET_RATING, pero una vez NET_RATING está en el modelo no añade
-información, y con las tres variables su coeficiente sale negativo
-(-46.8) -- artefacto de colinealidad, no señal real (más cuota de
-producción no predice peor resultado; un coeficiente con el signo al
-revés indica que la variable sobra).
-
-Se conserva el cableado de PIE (`pie_weight`, por defecto 0.0) como
-palanca de experimentación, igual que `simulation.apply_star_bonus` se
-dejó implementada pero desactivada -- misma convención: medido y
-descartado, no sin probar.
-
-Validación cruzada: la regresión de este ajuste da, para el Game Score
-solo, una pendiente de 0.2946 contra el diferencial real.
-`game_score_to_net_rating_scale` está calibrado a 0.29 por una vía
-completamente distinta -- dos caminos independientes al mismo número.
-
-CÓMO SE COMBINAN (y por qué así)
---------------------------------
-Como un **ajuste ADITIVO en unidades de Game Score**, no como un z-score
-compuesto:
+El Game Score (`aging_curve.compute_game_score_per36`) es casi puramente
+ofensivo, así que infravalora a defensores de bajo perfil en caja (los
+Knicks campeones 2025-26 proyectaban 12º del Este usando solo Game
+Score). Este módulo suma NET_RATING y PCT_PLUSMINUS como ajuste ADITIVO
+en unidades de Game Score/36, centrado en la media de liga de esa
+temporada:
 
     impacto/36 = game_score/36
-                 + k_pie * (PIE      - PIE_medio_de_esa_temporada)
-                 + k_net * (NET_RATING - NET_medio_de_esa_temporada)
+                 + k_pie * (PIE - PIE_medio)
+                 + k_net * (NET_RATING - NET_medio)
+                 + k_pct * (PCT_PLUSMINUS - PCT_medio)
 
-Tres propiedades por las que esta forma encaja sin romper lo ya
-calibrado:
+Centrar por temporada preserva la suma cero por construcción (el ajuste
+medio sobre los 30 equipos es ~0, no mueve la línea base de equipo
+promedio) y da ajuste de era gratis. Pesos derivados por regresión sobre
+el backtest sweep (480 casos, leave-one-season-out): NET_RATING sube el R
+fuera de muestra de 0.702 a 0.754; PCT_PLUSMINUS lo sube más (R² 0.512 →
+0.528). PIE no aporta nada una vez NET_RATING está en el modelo (su
+coeficiente sale con signo invertido), así que `pie_weight=0.0` por
+defecto pero se conserva la palanca. Los pesos no se encogen: el R mejora
+monótonamente hasta el peso completo, sin señal de sobreajuste.
 
-1. **Suma cero preservada por construcción.** Las desviaciones se toman
-   respecto a la media de liga de ESA temporada, así que el ajuste medio
-   sobre los 30 equipos es ~0. La línea base de equipo promedio
-   (`backtesting.compute_projected_league_baselines`) no se mueve, y con
-   ella tampoco la restricción de que la media de victorias sea games/2
-   (ver "INFLACIÓN DE ERA" en el docstring de simulation.py).
-2. **Ajuste de era gratis.** Al centrar por temporada, un PIE de 0.12 en
-   2010-11 y uno de 0.12 en 2025-26 se juzgan cada uno contra su propio
-   contexto -- mismo remedio que ya se aplica al Game Score.
-3. **La escala `game_score_to_net_rating_scale` sigue significando lo
-   mismo.** El resultado sigue expresado en puntos de Game Score, así que
-   el resto de la tubería (línea base, conversión a net rating, logística)
-   no se entera del cambio. Su valor numérico sí necesita
-   re-calibrarse cuando cambia el composite, porque este tiene más
-   dispersión que el Game Score solo.
+CAVEAT: NET_RATING y PCT_PLUSMINUS reflejan el equipo real del jugador,
+no su valor aislado. Predicen bien rosters REALES (lo que valida el
+backtest) pero, en un roster HIPOTÉTICO -- el caso de uso central del
+simulador --, heredan sin corregir el contexto de equipo de origen de
+cada jugador. Usar `advanced_impact: {enabled: false}` para comparar
+contra Game Score puro.
 
-Un z-score compuesto exigiría llevar media y desviación de liga por
-temporada de las tres métricas y renormalizar la varianza a mano, con más
-sitios donde equivocarse y sin ninguna de estas tres garantías.
-
-Las métricas avanzadas se promedian con la MISMA ponderación por recencia
-que el Game Score (`compute_recency_weighted_advanced`, media exponencial
-de las últimas N temporadas). No es solo consistencia: promediar 3
-temporadas suele significar promediar varios contextos de equipo, lo que
-diluye parcialmente el caveat de abajo.
-
-CAVEAT IMPORTANTE -- CONTAMINACIÓN POR CONTEXTO DE EQUIPO
-----------------------------------------------------------
-`NET_RATING` y `PIE` NO son métricas puramente individuales. El
-NET_RATING de un jugador mide cómo iba SU EQUIPO con él en cancha, no lo
-que aportaría en otro sitio. Un suplente de un equipo campeón hereda
-NET_RATING de campeón; una estrella de un equipo en reconstrucción carga
-con el de su equipo.
-
-Consecuencia: predice **muy bien rosters REALES** (que es lo que valida
-el backtest sweep), pero transplantarlo a un roster HIPOTÉTICO -- el caso
-de uso central del simulador -- asume justo lo que el resto del proyecto
-demuestra que falla (que juntar piezas buenas produce la suma de sus
-partes). El roster hipotético del config hereda el NET_RATING que cada
-jugador tuvo en OTRO equipo, así que juntar cinco titulares de equipos
-ganadores infla la proyección de una forma que este módulo NO corrige.
-
-**El peso va sin encoger a propósito.** Se probó encogerlo (0.25, 0.4,
-0.5, 0.6, 0.75) y fuera de muestra el R mejora de forma monótona hasta el
-peso completo (0.701 → 0.754): no hay señal empírica de sobreajuste que
-justifique bajarlo. Encogerlo "por si acaso" sería forzar un parámetro
-contra la evidencia; la limitación de contexto de equipo se documenta,
-el parámetro no se manipula para compensarla.
-
-Quien quiera medir el efecto del caveat tiene la palanca: con
-`advanced_impact: {enabled: false}` en el YAML se recupera exactamente el
-Game Score puro y se pueden comparar las dos proyecciones del mismo
-roster hipotético.
-
-TERCERA MÉTRICA INTEGRADA: PCT_PLUSMINUS (defensa por tracking)
------------------------------------------------------------------
-`leaguedashptdefend` (Second Spectrum, `data_pipeline.fetch_league_pt_defend_stats`,
-disponible desde 2013-14): PCT_PLUSMINUS = % de tiro real del rival
-cuando este jugador es el defensor más cercano, menos el % de tiro
-normal de esos mismos rivales -- negativo significa que el rival tira
-peor de lo normal defendido por este jugador. A diferencia de los
-hustle stats (`scripts/experiments/hustle_stats_signal.py`,
-CONTESTED_SHOTS/DEFLECTIONS/etc., descartados por medir actividad y no si
-esa actividad impide anotar de verdad), esta es la señal de impacto
-defensivo más directa que expone `nba_api`.
-
-Debe usarse solo la temporada PREVIA de cada jugador (mismo patrón de
-no-look-ahead que `compute_recency_weighted_advanced` aplica a
-PIE/NET_RATING) -- usar la temporada que se predice infla el R² de forma
-casi tautológica. Validado leave-one-season-out (16 pliegues, 480 casos;
-PCT_PLUSMINUS=NaN para los ~120 casos de temporadas anteriores a
-2013-14, que caen a Game Score+NET_RATING solos, ver más abajo): R² fuera
-de muestra 0.512 → 0.528, MAE 2.65 → 2.61 puntos/partido -- mejora real
-pero modesta.
-
-**Peso derivado con la MISMA técnica que `net_rating_weight`** (ratio de
-coeficientes de una regresión conjunta, no una escala inventada):
-regresión de DiffPointsPG contra el composite existente (GS+NET_RATING,
-ya en unidades de Game Score de equipo) + PCT_PLUSMINUS de equipo da
-coeficientes 0.1588 y -60.40 respectivamente -- ratio -380.2 (cuántos
-puntos de Game Score de EQUIPO vale 1 punto de PCT_PLUSMINUS), pasado a
-por-36-por-jugador: -380.2 * 36/240 = **-57.03**. Signo negativo a
-propósito: un defensor bueno tiene PCT_PLUSMINUS más negativo que la
-media, y el ajuste debe ser positivo para él.
-
-**`game_score_to_net_rating_scale` recalibrado de 0.172 a 0.1617** al
-integrar esta tercera métrica -- el composite cambia (más dispersión),
-así que la escala que lo convierte a puntos de diferencial también
-cambia. Validado LOSO igual que el resto: estable en los 16 pliegues
-(0.159-0.165), escala final sobre los 480 casos completos: 0.1617.
-
-**Tolerancia a métricas parciales** (`compute_league_advanced_baselines`/
-`compute_recency_weighted_advanced`): PIE y NET_RATING siempre coexisten
-(mismo endpoint, misma fila), pero PCT_PLUSMINUS no -- temporadas
-anteriores a 2013-14, o jugadores sin cobertura de tracking, tienen esa
-columna en NaN mientras PIE/NET_RATING sí existen. Una media ponderada
-ingenua (`(col*peso).sum()/peso.sum()`) sobre el grupo entero diluiría el
-denominador con el peso de filas sin dato para esa métrica, sesgando la
-media hacia 0 en silencio. Ambas funciones calculan la media ponderada de
-CADA métrica sobre sus propias filas no nulas: si un jugador/temporada no
-tiene PCT_PLUSMINUS, simplemente no participa en ESA métrica
-(PIE/NET_RATING no se ven afectados), y si ninguna temporada reciente de
-un jugador tiene el dato, `PCT_PLUSMINUS` se omite del dict devuelto (no
-se inventa un 0.0 -- 0.0 significaría "defensor exactamente promedio",
-un valor, no una ausencia de dato).
+Cada métrica se promedia solo sobre sus propias filas no nulas
+(PCT_PLUSMINUS es NaN antes de 2013-14 o sin cobertura de tracking);
+nunca se inventa un 0.0 para una métrica sin dato.
 """
 
 from __future__ import annotations
@@ -173,46 +45,27 @@ import pandas as pd
 
 from season_utils import season_start_year
 
-# Pesos por defecto, en "puntos de Game Score/36 por unidad de desviación
-# de la métrica respecto a la media de su temporada".
-#
-# net_rating_weight = 0.42 sale de la regresión sobre los 480 casos:
-# coeficientes 0.2127 (Game Score de equipo) y 0.5956 (NET_RATING medio
-# del roster) contra el diferencial real, o sea 2.80 puntos de Game Score
-# de EQUIPO por punto de NET_RATING; pasado a por-36 por jugador,
-# 2.80 * 36/240 = 0.42. No está encogido a mano -- ver el caveat del
-# docstring, donde se explica por qué NO se encogió.
-#
-# pie_weight = 0.0 a propósito: medido, no aporta nada fuera de muestra y
-# con NET_RATING presente su coeficiente sale con el signo al revés. El
-# cableado se conserva para poder re-probarlo.
+# Pesos en "puntos de Game Score/36 por unidad de desviación de la
+# métrica respecto a la media de su temporada" (ver docstring del
+# módulo). pct_plusminus_weight es negativo a propósito: un defensor
+# bueno tiene PCT_PLUSMINUS más negativo que la media.
 DEFAULT_ADVANCED_IMPACT_CONFIG: Dict[str, Any] = {
     "enabled": True,
     "pie_weight": 0.0,
     "net_rating_weight": 0.42,
-    # Derivado por la misma técnica que net_rating_weight (ratio de
-    # coeficientes de una regresión conjunta contra DiffPointsPG real,
-    # ver "TERCERA MÉTRICA INTEGRADA" en el docstring del módulo) --
-    # negativo a propósito: un defensor bueno tiene PCT_PLUSMINUS más
-    # negativo que la media, y el ajuste debe ser positivo para él.
     "pct_plusminus_weight": -57.03,
-    # Recencia propia, alineada con aging_curve por defecto.
     "n_seasons_lookback": 3,
     "recency_half_life_seasons": 1.5,
-    # Un jugador con muy pocos minutos tiene NET_RATING/PIE ruidosísimos
-    # (un suplente con 40 minutos en toda la temporada puede salir +30).
-    # Por debajo de este umbral se ignora su fila avanzada y se cae al
-    # Game Score puro para ese jugador.
+    # Por debajo de este umbral de minutos, NET_RATING/PIE son ruidosos
+    # (un suplente con 40 minutos puede salir +30); se cae al Game Score
+    # puro para ese jugador.
     "min_minutes_for_advanced": 500,
 }
 
 ADVANCED_METRICS = ("PIE", "NET_RATING", "PCT_PLUSMINUS")
 
-# Nombre de la columna de minutos TOTALES que este módulo usa como peso y
-# como umbral de muestra. No es la columna MIN cruda del endpoint: con
-# measure_type="Advanced", `leaguedashplayerstats` devuelve MIN por
-# PARTIDO (ver el aviso en data_pipeline.fetch_league_advanced_player_stats),
-# así que `load_advanced_stats` la deriva como MIN * GP.
+# MIN * GP: `leaguedashplayerstats` con measure_type="Advanced" devuelve
+# MIN por PARTIDO, no total (ver data_pipeline.fetch_league_advanced_player_stats).
 TOTAL_MINUTES_COLUMN = "total_minutes"
 
 
@@ -228,24 +81,12 @@ def compute_league_advanced_baselines(
 ) -> Dict[str, Dict[str, float]]:
     """
     Media de liga de cada métrica avanzada POR TEMPORADA, ponderada por
-    minutos. Devuelve {season: {"PIE": x, "NET_RATING": y}}.
+    minutos (el punto de referencia contra el que se centra cada
+    jugador). Devuelve {season: {"PIE": x, "NET_RATING": y}}.
 
-    Es el punto de referencia contra el que se centra cada jugador (ver
-    docstring del módulo, propiedades 1 y 2). Ponderar por minutos y no
-    contar a todo el que pisó la cancha es lo mismo que hace
-    `aging_curve.compute_league_game_score_baseline` -- se busca la media
-    del jugador de ROTACIÓN, no la del último del banquillo.
-
-    `advanced_stats` debe tener el esquema de
-    `league_advanced_player_stats.csv` (season, PLAYER_ID, MIN + las
-    columnas avanzadas), opcionalmente con `PCT_PLUSMINUS` fusionada por
-    `merge_pt_defend_stats` -- NaN para temporadas sin datos de tracking
-    (anteriores a 2013-14). Cada métrica se promedia sobre sus PROPIAS
-    filas no nulas, no sobre el grupo entero: promediar con un
-    denominador que incluye el peso de filas sin dato para esa métrica
-    sesgaría la media hacia 0 en silencio (ver "TERCERA MÉTRICA
-    INTEGRADA" en el docstring del módulo -- PIE/NET_RATING nunca tenían
-    este problema porque vienen del mismo endpoint y siempre coexisten).
+    Cada métrica se promedia sobre sus propias filas no nulas, no sobre
+    el grupo entero, para no sesgar la media hacia 0 con filas que no
+    tienen ese dato (PCT_PLUSMINUS antes de 2013-14).
     """
     if advanced_stats.empty:
         return {}
@@ -278,24 +119,16 @@ def compute_recency_weighted_advanced(
     Media ponderada por recencia de las métricas avanzadas de UN jugador
     sobre sus N temporadas más recientes ANTERIORES a `target_season`.
 
-    REGLA DE NO LOOK-AHEAD: filtra estrictamente a temporadas previas,
-    igual que `backtesting.filter_seasons_before`. Devuelve None si el
-    jugador no tiene ninguna temporada elegible (rookie, o solo
-    temporadas por debajo de `min_minutes`) -- el llamante debe caer al
-    Game Score puro en ese caso, no inventar un valor.
+    NO LOOK-AHEAD: filtra estrictamente a temporadas previas. Devuelve
+    None si el jugador no tiene ninguna temporada elegible (rookie, o
+    solo por debajo de `min_minutes`) -- el llamante cae al Game Score
+    puro en ese caso.
 
     Un jugador traspasado a mitad de temporada aparece con una fila por
-    equipo; se colapsan a una sola ponderando por minutos, que es la
-    lectura correcta de "cómo le fue esa temporada" (`dedupe_traded_seasons`
-    de season_utils no sirve aquí: ese CSV no trae fila 'TOT').
-
-    Cada métrica se promedia sobre las temporadas donde REALMENTE hay
-    dato para ella, no sobre las `n_seasons` completas -- un jugador cuyo
-    historial reciente cae antes de 2013-14 (o sin cobertura de tracking)
-    simplemente no lleva `PCT_PLUSMINUS` en el dict devuelto, en vez de
-    heredar un 0.0 inventado (0.0 significaría "defensor exactamente
-    promedio", no "sin dato"). PIE/NET_RATING no se ven afectados por
-    esto -- siempre coexisten, vienen del mismo endpoint.
+    equipo; se colapsan a una sola ponderando por minutos
+    (`dedupe_traded_seasons` de season_utils no sirve: ese CSV no trae
+    fila 'TOT'). Cada métrica se promedia solo sobre las temporadas donde
+    hay dato para ella, no sobre las `n_seasons` completas.
     """
     if player_advanced.empty:
         return None
@@ -351,7 +184,7 @@ def blend_impact_per36(
     Devuelve `game_score_per36` sin tocar si el ajuste está desactivado,
     si el jugador no tiene métricas avanzadas utilizables, o si falta la
     línea base de su temporada -- degradar al Game Score puro es siempre
-    seguro (es lo que el modelo hacía antes), inventar un ajuste no.
+    seguro.
     """
     if not impact_config.get("enabled", True) or not advanced or not season_baseline:
         return float(game_score_per36)
@@ -379,17 +212,13 @@ def adjusted_game_score_per36(
     (`backtesting.project_historical_player`,
     `aging_curve.build_aging_projection_dataset`,
     `league_simulation.project_team_roster`): encadena
-    `compute_recency_weighted_advanced` + `blend_impact_per36` para un
-    jugador.
+    `compute_recency_weighted_advanced` + `blend_impact_per36`.
 
-    Existe como función compartida a propósito. Este proyecto ya arrastró
-    el mismo bug de normalización de minutos en dos módulos por tenerlo
-    duplicado (ver `simulation.normalize_rotation_minutes`); una métrica
-    de impacto que se calcule distinto en el backtest que en la
-    simulación invalidaría la calibración del backtest en silencio.
-
-    `target_season` es la temporada que se PROYECTA -- las métricas se
-    toman solo de temporadas anteriores (no look-ahead).
+    Debe ser compartida a propósito -- este proyecto ya arrastró el mismo
+    bug de normalización de minutos en dos módulos por tenerlo duplicado
+    (ver `simulation.normalize_rotation_minutes`). `target_season` es la
+    temporada que se PROYECTA; las métricas se toman solo de temporadas
+    anteriores.
     """
     if not impact_config.get("enabled", True) or player_advanced is None or player_advanced.empty:
         return float(game_score_per36)
@@ -421,15 +250,13 @@ def build_advanced_context(
     advanced_stats: pd.DataFrame, config: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
     """
-    Empaqueta todo lo que hace falta para ajustar jugadores: las filas
-    avanzadas ya AGRUPADAS por PLAYER_ID, las líneas base por temporada y
-    la config resuelta. Devuelve None si el ajuste está desactivado o no
-    hay datos -- los llamantes tratan None como "usa Game Score puro".
-
-    El groupby precalculado no es cosmético: el backtest sweep proyecta
-    ~7.000 jugador-caso, y filtrar el DataFrame completo (>9.000 filas)
-    una vez por jugador convertía la pasada en minutos. Agrupar una sola
-    vez lo deja en un lookup de diccionario.
+    Empaqueta todo lo que hace falta para ajustar jugadores: filas
+    avanzadas ya AGRUPADAS por PLAYER_ID, líneas base por temporada y la
+    config resuelta. Devuelve None si el ajuste está desactivado o no hay
+    datos -- los llamantes tratan None como "usa Game Score puro". El
+    groupby se hace una sola vez porque filtrar el DataFrame completo por
+    jugador (el backtest sweep proyecta ~7.000 jugador-caso) convertía la
+    pasada en minutos.
     """
     impact_config = resolve_advanced_impact_config(config)
     if not impact_config.get("enabled", True) or advanced_stats is None or advanced_stats.empty:
@@ -469,15 +296,11 @@ def load_advanced_stats(processed_dir) -> pd.DataFrame:
     """
     Lee `league_advanced_player_stats.csv` (lo genera
     `data_pipeline.build_league_advanced_player_stats_dataset`). Devuelve
-    un DataFrame VACÍO si no existe -- todo el proyecto sigue corriendo
-    sin él, simplemente con Game Score puro. Es un dataset opcional a
-    propósito: quien clone el repo no debería necesitar 19 llamadas más a
-    la API para que la simulación funcione.
-
-    Si `league_pt_defend_stats.csv` también existe (opcional, ver
-    `data_pipeline.build_league_pt_defend_dataset`), le fusiona
-    `PCT_PLUSMINUS` -- ver `merge_pt_defend_stats`. Su ausencia es
-    igual de segura: el proyecto sigue con PIE/NET_RATING solos.
+    un DataFrame VACÍO si no existe -- dataset opcional a propósito, para
+    que clonar el repo no exija 19 llamadas más a la API. Si
+    `league_pt_defend_stats.csv` también existe, le fusiona
+    `PCT_PLUSMINUS` (ver `merge_pt_defend_stats`); su ausencia también es
+    segura.
     """
     path = processed_dir / "league_advanced_player_stats.csv"
     if not path.exists() or path.stat().st_size == 0:
@@ -493,11 +316,8 @@ def load_advanced_stats(processed_dir) -> pd.DataFrame:
 
 
 def prepare_advanced_stats(advanced_stats: pd.DataFrame) -> pd.DataFrame:
-    """
-    Añade `total_minutes` = MIN * GP. Separada de `load_advanced_stats`
-    para que los tests puedan construir un DataFrame en memoria y pasarlo
-    por el mismo camino que el CSV real, sin tocar disco.
-    """
+    """Añade `total_minutes` = MIN * GP, separada de `load_advanced_stats`
+    para que los tests puedan pasar un DataFrame en memoria sin tocar disco."""
     if advanced_stats.empty:
         return advanced_stats
     df = advanced_stats.copy()
@@ -509,14 +329,10 @@ def merge_pt_defend_stats(advanced_stats: pd.DataFrame, pt_defend_stats: pd.Data
     """
     Añade la columna `PCT_PLUSMINUS` (defensa por tracking, ver
     `data_pipeline.fetch_league_pt_defend_stats`) a `advanced_stats`,
-    cruzando por (PLAYER_ID, season). Colapsa posibles filas duplicadas
-    de un jugador traspasado a mitad de temporada ponderando por D_FGA
-    (tiros defendidos de cerca -- este endpoint no trae minutos).
-
-    Deja `PCT_PLUSMINUS` en NaN para jugador/temporada sin datos de
-    tracking (anteriores a 2013-14, o sin cobertura) -- separada a
-    propósito de `prepare_advanced_stats` para poder testear el cruce
-    con DataFrames en memoria, mismo patrón.
+    cruzando por (PLAYER_ID, season). Colapsa filas duplicadas de un
+    jugador traspasado a mitad de temporada ponderando por D_FGA (tiros
+    defendidos de cerca -- este endpoint no trae minutos). Deja
+    `PCT_PLUSMINUS` en NaN para jugador/temporada sin datos de tracking.
     """
     if advanced_stats.empty or pt_defend_stats is None or pt_defend_stats.empty:
         return advanced_stats

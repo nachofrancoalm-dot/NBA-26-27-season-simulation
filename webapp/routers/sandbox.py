@@ -2,11 +2,10 @@
 routers/sandbox.py
 
 Endpoints del roster hipotético editable del splash (ver
-webapp/static/js/views/splash.js): reemplazan el punto de partida fijo
-"los 76ers del config" por cualquier combinación de jugadores reales de
-los 30 equipos, simulada EN VIVO -- ver src/sandbox_simulation.py para
-el motor (reutiliza simulation.run_monte_carlo tal cual, cero
-matemática nueva).
+webapp/static/js/views/splash.js): reemplazan el roster fijo del config
+por cualquier combinación de jugadores reales de los 30 equipos,
+simulada EN VIVO (src/sandbox_simulation.py, reutiliza
+simulation.run_monte_carlo tal cual).
 
 GET /players       -> catálogo completo para el buscador del picker.
 GET /default       -> el roster inicial (los 13 del config -- el punto de
@@ -128,12 +127,9 @@ class RosterStatsRequest(BaseModel):
 @router.post("/roster-stats")
 def post_roster_stats(body: RosterStatsRequest):
     """Estadísticas individuales de cada jugador PARA el roster hipotético
-    que se esté editando -- las de `league_player_projections.csv` (PPG,
-    minutos...) son las REALES de cada jugador en su equipo actual, no las
-    que tendría en un roster inventado. Endpoint aparte de /simulate (no
-    se fusiona en su respuesta) para que la tabla de jugadores se pueda
-    pedir sin tener que correr también los 2.000 escenarios de Monte
-    Carlo -- son dos preguntas distintas."""
+    -- distinto de las reales de `league_player_projections.csv` (equipo
+    actual). Endpoint aparte de /simulate para no forzar los 2.000
+    escenarios de Monte Carlo solo para pedir la tabla."""
     config = load_config()
     try:
         view = compute_roster_player_stats(config, body.player_ids, mode=body.mode)
@@ -151,17 +147,12 @@ class LeagueRequest(BaseModel):
 
 @router.post("/league")
 def post_league(body: LeagueRequest):
-    """Liga completa de 30 equipos CON tu roster hipotético sustituido en
-    el hueco de tu equipo (src/league_sandbox.py) -- decisión de diseño
-    confirmada: los otros 29 equipos se simulan sin tocar, como si
+    """Liga de 30 equipos con tu roster hipotético sustituido en tu hueco
+    (src/league_sandbox.py) -- los otros 29 se simulan sin tocar, como si
     hubieras "tomado prestados" a los jugadores que uses de ahí. Tarda
-    unos segundos (temporada regular + playoffs + premios en vivo, sin el
-    cuello de botella real de recalcular los 577 jugadores desde cero --
-    ver el docstring de league_sandbox.py), así que el frontend debe
-    mostrar un estado de carga, pero no hace falta una cola en
-    background. Devuelve standings/playoffs/awards en la MISMA forma que
-    /api/league/standings, /api/league/playoffs y /api/awards -- para que
-    el frontend reutilice el mismo código de render con un simple `if`."""
+    segundos, el frontend debe mostrar carga. Misma forma de respuesta
+    que /api/league/standings, /playoffs y /api/awards, para reutilizar
+    el mismo código de render."""
     config = load_config()
     try:
         league_result = simulate_hypothetical_league(config, body.player_ids)

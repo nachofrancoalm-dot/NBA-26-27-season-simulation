@@ -5,11 +5,8 @@ import { openTeamModal } from "../team-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
 import { getHypotheticalLeague, clearHypotheticalLeague, hypotheticalBanner } from "../hypothetical-league.js";
 
-/** `day` es un entero sintetico (0-81, "Dia N") cuando no hay calendario
- * real publicado, o directamente la fecha real ("2026-10-20") cuando sí
- * lo hay -- ver league_simulation.py: run_single_league_season_simulation
- * cae al calendario sintético solo si league_schedule_full.csv no
- * existe. JSON preserva el tipo (numero vs string), así que basta mirarlo. */
+/** `day` es un entero sintético (día 0-81) sin calendario real publicado,
+ * o la fecha real como string cuando sí lo hay -- JSON preserva el tipo. */
 function formatScheduleDay(day) {
   return typeof day === "number" ? `Día ${day + 1}` : day;
 }
@@ -21,11 +18,9 @@ export async function render(container) {
   const scenario = getScenario();
   const hypothetical = getHypotheticalLeague();
 
-  // Con un roster hipotético activo, standings/playoffs vienen de
-  // POST /api/sandbox/league (ya en memoria, ver roster-builder.js) en
-  // vez de los endpoints reales -- misma forma exacta de respuesta
-  // (src/league_sandbox.py la construye a propósito así), así que el
-  // resto de esta función no necesita saber cuál de las dos fuentes es.
+  // Con roster hipotético activo, standings/playoffs vienen de
+  // POST /api/sandbox/league (misma forma de respuesta que los endpoints
+  // reales, ver src/league_sandbox.py) en vez de los reales.
   const [standings, playoffs, teams] = await Promise.allSettled([
     hypothetical ? Promise.resolve(hypothetical.result.standings) : api.leagueStandings(scenario),
     hypothetical ? Promise.resolve(hypothetical.result.playoffs) : api.leaguePlayoffs(scenario),
@@ -158,14 +153,9 @@ async function loadTeamDetail(container, abbreviation, myAbbreviation, hypotheti
   const metricsBox = el("div");
   const tableBox = el("div", { style: "margin-top: 16px;" });
 
-  // Con un roster hipotético activo, este explorador debe desviarse de
-  // /api/league/team/{abbreviation} (datos REALES) SOLO cuando el equipo
-  // elegido es el tuyo -- si no, elegir tu propio equipo mostraría su
-  // roster real de siempre, como si la sustitución hipotética nunca
-  // hubiera pasado (Standings/Playoffs/Premios ya están enganchados a
-  // hypothetical-league.js; este explorador necesita el mismo chequeo).
-  // Los otros 29 equipos siguen siendo reales, coherente con el resto de
-  // la vista.
+  // Se desvía de /api/league/team/{abbreviation} SOLO cuando el equipo
+  // elegido es el propio y hay un roster hipotético activo; los otros 29
+  // siguen siendo reales.
   async function loadRoster() {
     let data;
     const isMyHypotheticalTeam = hypothetical && abbreviation === myAbbreviation;
@@ -236,11 +226,9 @@ async function loadTeamDetail(container, abbreviation, myAbbreviation, hypotheti
   await loadRoster();
 }
 
-/** Calendario de UNA temporada regular concreta (día 1-82, no fechas
- * reales -- ver league_simulation.run_single_league_season_simulation) con
- * resultado de cada partido; doble clic en el resultado carga el boxscore
- * ilustrativo de ambos equipos. Cada tirada del botón es una temporada
- * distinta (seed por reloj), igual que el bracket. */
+/** Calendario de UNA temporada regular simulada, con resultado de cada
+ * partido; doble clic carga el boxscore ilustrativo de ambos equipos.
+ * Cada tirada del botón es una temporada distinta (seed por reloj). */
 function scheduleCard(teamAbbrevs) {
   const teamSelect = el("select", {}, [
     el("option", { value: "" }, "Todos los equipos"),
@@ -422,14 +410,10 @@ function bracketMatchBox(match, seedByAbbr, teamIds, gridColumn, gridRow) {
   );
 }
 
-/** Línea "⊐"/"⊏" que conecta dos partidos de una ronda con el partido de
- * la ronda siguiente (misma técnica que un bracket de torneo de verdad:
- * border-top + border-bottom dibujan los dos brazos horizontales, y
- * border-left/right el tramo vertical que los une). `depthClass` fija el
- * alto exacto vía CSS calc() a partir de --leaf-h/--row-gap (ver
- * components.css) para que el conector encaje pixel a pixel entre los
- * centros verticales de los dos partidos que alimenta -- no es una
- * aproximación. */
+/** Línea que conecta dos partidos de una ronda con el de la siguiente
+ * (border-top/bottom + border-left/right). `depthClass` fija el alto vía
+ * CSS calc() sobre --leaf-h/--row-gap (components.css) para encajar pixel
+ * a pixel entre los centros verticales de los partidos que alimenta. */
 function bracketConnector(gridColumn, gridRow, side, depthClass) {
   return el("div", {
     class: `bracket-connector side-${side} ${depthClass}`,
@@ -437,13 +421,10 @@ function bracketConnector(gridColumn, gridRow, side, depthClass) {
   });
 }
 
-/** Rejilla de UNA conferencia: Ronda 1 (4 partidos) -> Semifinales (2) ->
- * Final de conferencia (1, reconstruida en el cliente a partir de los dos
- * ganadores de semis -- el backend solo devuelve el ganador final, no un
- * objeto de partido, ver `_conference_bracket_with_matchups` en
- * league_simulation.py). `side` decide el orden de columnas -- Oeste
- * fluye izquierda->derecha, Este derecha->izquierda (mismas columnas,
- * posiciones en espejo) para que ambas confluyan hacia el centro. */
+/** Rejilla de UNA conferencia: Ronda 1 -> Semis -> Final de conferencia
+ * (reconstruida en el cliente a partir de los dos ganadores de semis; el
+ * backend solo devuelve el ganador final). `side` refleja el orden de
+ * columnas para que Este y Oeste confluyan hacia el centro. */
 function conferenceBracketGrid(conf, side, teamIds) {
   const seedByAbbr = Object.fromEntries(conf.seeds_10.map((abbr, i) => [abbr, i + 1]));
   const confFinal = {

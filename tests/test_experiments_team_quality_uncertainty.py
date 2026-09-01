@@ -1,15 +1,8 @@
 """
-Test de la parte de orquestación de
-scripts/experiments/team_quality_uncertainty.py -- confirma que
-`team_quality_uncertainty_std` realmente llega hasta
-`_run_backtest_cases()` (y de ahí a `run_monte_carlo`) y ensancha la
-banda P10-P90 simulada. No repite el grid completo contra los 480 casos
-reales (eso es el experimento en sí, no lógica que deba cubrir un test
-rápido) -- ver el docstring del módulo.
-
-Usa DataFrames sintéticos con el esquema de
-historical_comparables_*.csv / backtest_sweep_*.csv -- mismo patrón que
-tests/test_backtesting.py, no requiere red.
+Tests de orquestación de team_quality_uncertainty.py: confirma que
+team_quality_uncertainty_std llega hasta _run_backtest_cases()/run_monte_carlo
+y ensancha la banda P10-P90. No repite el grid completo (eso es el
+experimento en sí). DataFrames sintéticos, no requiere red.
 """
 
 import sys
@@ -78,7 +71,7 @@ def test_run_backtest_with_std_widens_p10_p90_band(synthetic_inputs):
     band_with = with_noise.iloc[0]["simulated_wins_p90"] - with_noise.iloc[0]["simulated_wins_p10"]
     assert band_with > band_without
 
-    # La media no debe moverse de forma perceptible (ruido de media cero).
+    # la media no debe moverse de forma perceptible (ruido de media cero)
     assert with_noise.iloc[0]["simulated_wins_mean"] == pytest.approx(
         without_noise.iloc[0]["simulated_wins_mean"], abs=3.0
     )
@@ -88,9 +81,7 @@ def test_sweep_reports_one_row_per_candidate(synthetic_inputs):
     config, cases, inputs = synthetic_inputs
     config["backtest_sweep"] = {"seasons": ["2010-11"]}
 
-    # sweep() vuelve a leer los CSV -- se prueba a través de
-    # run_backtest_with_std directamente (ya probado arriba) más un
-    # chequeo de forma sobre la agregación con compute_calibration_summary.
+    # sweep() vuelve a leer los CSV -- se prueba vía run_backtest_with_std + compute_calibration_summary
     from backtesting import compute_calibration_summary
 
     results = []

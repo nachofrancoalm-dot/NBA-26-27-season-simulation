@@ -5,43 +5,18 @@ Quinto submódulo de la capa de contexto de temporada (ver roadmap en
 README.md): pondera los partidos de cada `historical_comparable` por la
 fuerza de su rival ESE MISMO partido, para que el backtesting no trate
 igual una victoria contra un contender que una contra un equipo en
-reconstrucción.
+reconstrucción. A diferencia de schedule_strength.py, aquí las 4
+temporadas de `historical_comparables` ya se jugaron por completo, así
+que se usa la fuerza CONTEMPORÁNEA real de cada rival (mismo season) vía
+`historical_comparables_standings.csv`.
 
-A diferencia de schedule_strength.py (que necesita un proxy de temporada
-ANTERIOR porque el calendario que pondera aún no se ha jugado), aquí las
-4 temporadas de `historical_comparables` ya se jugaron por completo: se
-puede pedir la fuerza CONTEMPORÁNEA real de cada rival (mismo
-season) vía `historical_comparables_standings.csv`.
-
-DISEÑO
-------
-1. `resolve_opponent_team_id()` -- el game log solo trae el rival como
-   abreviación de 3 letras dentro de la columna MATCHUP (p. ej.
-   "MIA @ TOR"). Se resuelve a `team_id` con una tabla estática de las 30
-   franquicias NBA (hecho de liga, no específico de ningún equipo/jugador
-   simulado) + alias para abreviaciones históricas que cambiaron de
-   nombre dentro del rango de temporadas de este proyecto (Nets "NJN"
-   antes de mudarse a Brooklyn en 2012-13; Hornets/Pelicans "NOH" antes
-   del cambio de nombre en 2013).
-2. `compute_opponent_win_pct()` -- WinPCT del rival esa misma temporada
-   (0-1, sin normalizar).
-3. `compute_opponent_weight()` -- peso continuo proporcional al WinPCT
-   del rival (`win_pct ** steepness`, steepness configurable). Se eligió
-   una ponderación continua en vez de una categórica fija
-   (contender/reconstrucción con un único umbral) porque cualquier umbral
-   sería arbitrario sin evidencia que lo respalde -- un rival con 0.54 de
-   WinPCT no es cualitativamente distinto de uno con 0.56.
-4. `compute_weighted_net_rating()` -- Net Rating medio ponderado por ese
-   peso, para comparar contra el Net Rating sin ponderar de
-   performance_curve.py.
-5. `classify_contender_vs_rebuilding()` -- SÍ ofrece una vista categórica
-   además (contender / equipo medio / en reconstrucción), con umbrales
-   configurables, porque el roadmap la pide explícitamente como resumen
-   legible -- pero es descriptiva, no la base del peso numérico.
+El peso es continuo (`win_pct ** steepness`) en vez de una categoría fija
+contender/reconstrucción, porque cualquier umbral sería arbitrario.
+`classify_contender_vs_rebuilding()` sí ofrece una vista categórica
+como resumen legible, pero es descriptiva, no la base del peso numérico.
 
 Reutiliza `compute_net_rating_estimate()` de performance_curve.py en vez
-de duplicar la fórmula (import directo entre submódulos hermanos, no una
-nueva capa de abstracción compartida).
+de duplicar la fórmula.
 """
 
 from __future__ import annotations
@@ -69,9 +44,7 @@ ABBREVIATION_TO_TEAM_ID: Dict[str, int] = {
     "UTA": 1610612762, "WAS": 1610612764,
 }
 
-# Abreviaciones históricas usadas antes de mudanzas/cambios de nombre de
-# franquicia, dentro del rango de temporadas que puede cubrir este
-# proyecto (2010-11 en adelante).
+# Abreviaciones históricas antes de mudanzas/cambios de nombre de franquicia.
 ABBREVIATION_ALIASES: Dict[str, str] = {
     "NJN": "BKN",  # New Jersey Nets, antes de mudarse a Brooklyn (2012-13)
     "NOH": "NOP",  # New Orleans Hornets, antes de renombrarse Pelicans (2013-14)

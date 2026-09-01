@@ -1,8 +1,4 @@
-"""
-Tests de simulation.py. Usan arrays de numpy sintéticos (game_score_per36,
-minutes_projection, risk_scores, fatigue_scores, league_win_pcts) -- no
-requieren red ni los CSV reales de otros submódulos.
-"""
+"""Tests de simulation.py con arrays de numpy sintéticos, sin red ni CSV reales."""
 
 import sys
 from pathlib import Path
@@ -70,8 +66,7 @@ def test_injury_absences_are_contiguous_within_a_season():
         if not absent.any():
             continue
         indices = np.where(absent)[0]
-        # Un solo tramo contiguo -> el rango completo (max-min+1) debe
-        # coincidir con el nº de partidos perdidos.
+        # Un solo tramo contiguo: el rango completo (max-min+1) coincide con el nº de partidos.
         assert indices.max() - indices.min() + 1 == len(indices)
 
 
@@ -142,10 +137,8 @@ def test_back_to_back_penalizes_high_fatigue_player_more_than_low_fatigue():
     rng = np.random.default_rng(1)
     contributions = compute_player_contributions(game_score, minutes, fatigue, available, is_b2b, rng, cfg)
 
-    # En el partido back-to-back (índice 1), el jugador fatigado debe rendir menos que en su propio partido normal.
-    assert contributions[0, 1, 1] < contributions[0, 0, 1]
-    # Y el jugador sin fatiga no debe verse afectado por el back-to-back.
-    assert contributions[0, 1, 0] == pytest.approx(contributions[0, 0, 0])
+    assert contributions[0, 1, 1] < contributions[0, 0, 1]  # b2b penaliza al jugador fatigado
+    assert contributions[0, 1, 0] == pytest.approx(contributions[0, 0, 0])  # sin fatiga, sin efecto
 
 
 def test_tougher_opponent_reduces_net_rating_estimate():
@@ -200,15 +193,7 @@ def test_sample_team_quality_noise_varies_across_seasons():
 
 
 def test_run_monte_carlo_wins_mean_unaffected_by_team_quality_uncertainty():
-    """
-    LA DISTINCIÓN CLAVE del experimento (ver docstring de
-    sample_team_quality_noise): el ruido de calidad de equipo es de media
-    cero, así que promediado sobre miles de temporadas simuladas NO
-    debe mover wins.mean() de forma perceptible -- solo debe ensanchar la
-    dispersión DENTRO de la distribución de un mismo equipo. Si esto
-    fallara, el "arreglo" estaría inflando las victorias medias en vez de
-    solo la incertidumbre, que es justo lo que NO se quiere.
-    """
+    """Ruido de calidad de equipo es de media cero: no debe mover wins.mean(), solo ensanchar la dispersión."""
     kwargs = dict(
         player_ids=[1, 2], game_score_per36=np.array([15.0, 10.0]), minutes_projection=np.array([32.0, 20.0]),
         risk_scores=np.array([0.1, 0.2]), fatigue_scores=np.array([0.3, 0.2]),
@@ -274,7 +259,7 @@ def test_synergy_matrix_shifts_simulation_results():
 
 
 def test_fixed_schedule_overrides_sampling_and_sets_games_per_season():
-    fixed_opponent_win_pct = np.array([0.3, 0.9, 0.3])  # 3 partidos, calendario "real" fijo
+    fixed_opponent_win_pct = np.array([0.3, 0.9, 0.3])  # calendario fijo de 3 partidos
     fixed_is_back_to_back = np.array([False, True, False])
 
     result = run_monte_carlo(
@@ -294,8 +279,7 @@ def test_fixed_schedule_overrides_sampling_and_sets_games_per_season():
 
 
 def test_apply_star_bonus_boosts_only_the_top_n_players_by_season_value():
-    # 3 jugadores: uno claramente "estrella" (mucho valor de temporada),
-    # dos de banquillo con valor similar y bajo entre sí.
+    # 1 estrella, 2 jugadores de banquillo con valor similar y bajo.
     game_score = np.array([25.0, 10.0, 9.0])
     minutes = np.array([36.0, 20.0, 20.0])
     cfg = {**DEFAULT_MONTE_CARLO_CONFIG, "star_bonus_top_n": 1, "star_bonus_multiplier": 1.2}
@@ -328,18 +312,13 @@ def test_apply_star_bonus_disabled_when_multiplier_is_one():
 
 
 def test_star_bonus_is_disabled_by_default():
-    # DEFAULT_MONTE_CARLO_CONFIG deja la prima de estrella desactivada --
-    # ver "INVESTIGACIÓN" en el docstring de simulation.py: se probó y se
-    # descartó como comportamiento por defecto (no resolvía el caso que la
-    # motivó y empeoraba el backtesting contra los comparables históricos).
+    # Se probó y se descartó: empeoraba el backtesting contra comparables históricos.
     assert DEFAULT_MONTE_CARLO_CONFIG["star_bonus_top_n"] == 0
     assert DEFAULT_MONTE_CARLO_CONFIG["star_bonus_multiplier"] == 1.0
 
 
 def test_star_bonus_lets_a_top_heavy_team_beat_a_balanced_team_with_equal_total_production_when_enabled():
-    # Ambos equipos tienen la MISMA producción total (game_score * minutos
-    # sumado es igual), pero repartida distinto: A tiene una estrella clara,
-    # B reparte la producción de forma pareja entre todos.
+    # Misma producción total repartida distinto: A con una estrella clara, B pareja.
     game_score_a = np.array([30.0, 5.0, 5.0])
     minutes_a = np.array([36.0, 36.0, 36.0])
     game_score_b = np.array([13.333, 13.333, 13.334])
@@ -348,9 +327,7 @@ def test_star_bonus_lets_a_top_heavy_team_beat_a_balanced_team_with_equal_total_
     available = np.ones((1, 1, 3), dtype=bool)
     is_b2b = np.zeros((1, 1), dtype=bool)
     fatigue = np.zeros(3)
-    # La prima está desactivada por defecto (ver test de arriba) -- para
-    # este test se activa explícitamente para probar su efecto cuando SÍ
-    # se usa como palanca de experimentación.
+    # Prima desactivada por defecto; se activa explícitamente para este test.
     cfg_with_bonus = {**DEFAULT_MONTE_CARLO_CONFIG, "game_variance_std": 0.0, "star_bonus_top_n": 2, "star_bonus_multiplier": 1.15}
 
     contributions_a = compute_player_contributions(
@@ -360,16 +337,11 @@ def test_star_bonus_lets_a_top_heavy_team_beat_a_balanced_team_with_equal_total_
         game_score_b, minutes_b, fatigue, available, is_b2b, np.random.default_rng(1), cfg_with_bonus
     )
 
-    # Sin la prima ambos sumarían lo mismo (40 de Game Score total); con
-    # la prima activada explícitamente, el equipo top-heavy (A) supera al
-    # equipo parejo (B).
     assert contributions_a.sum() > contributions_b.sum()
 
 
 def test_compute_league_average_game_score_per36_matches_hollinger_when_no_risk_column():
-    # 2 equipos, cada uno con un total de temporada de 66.7 (10 GS/36 x
-    # 240 minutos/36) -- sin columna risk_score, la tasa calibrada debe
-    # coincidir exactamente con el valor genérico de Hollinger (10.0).
+    # Sin columna risk_score, la tasa calibrada coincide con el valor genérico de Hollinger (10.0).
     df = pd.DataFrame(
         [
             {"team_abbreviation": "AAA", "game_score_per36": 10.0, "minutes_projection": 240.0},
@@ -381,10 +353,7 @@ def test_compute_league_average_game_score_per36_matches_hollinger_when_no_risk_
 
 
 def test_compute_league_average_game_score_per36_discounts_by_availability():
-    # Un jugador con risk_score=0.5 se espera disponible la mitad de los
-    # partidos en promedio (ver sample_injury_absences: media de partidos
-    # perdidos = risk_score * games_per_season) -- su contribución
-    # esperada a la línea base debe descontarse a la mitad.
+    # risk_score=0.5 -> disponible la mitad de los partidos en promedio, contribución descontada a la mitad.
     df = pd.DataFrame(
         [{"team_abbreviation": "AAA", "game_score_per36": 10.0, "minutes_projection": 240.0, "risk_score": 0.5}]
     )
@@ -399,8 +368,7 @@ def test_compute_league_average_game_score_per36_averages_across_teams():
             {"team_abbreviation": "BBB", "game_score_per36": 20.0, "minutes_projection": 240.0, "risk_score": 0.0},
         ]
     )
-    # Equipo AAA: total 66.67; equipo BBB: total 133.33; media = 100 ->
-    # tasa equivalente = 100 / (240/36) = 15.0.
+    # Media de los totales de equipo (66.67 y 133.33) = 100 -> tasa equivalente = 15.0.
     rate = compute_league_average_game_score_per36(df)
     assert rate == pytest.approx(15.0)
 
@@ -450,15 +418,13 @@ def test_build_simulation_dataset_calibrates_baseline_from_league_projections(tm
         lambda df, **kwargs: (calls.append(True), original(df, **kwargs))[1],
     )
 
-    # Sin league_player_projections.csv: no se recalibra -- la función no se llama.
-    build_simulation_dataset(config)
+    build_simulation_dataset(config)  # sin league_player_projections.csv: no se recalibra
     assert calls == []
 
-    # Con league_player_projections.csv: sí se recalibra.
     pd.DataFrame(
         [{"team_abbreviation": "AAA", "game_score_per36": 2.0, "minutes_projection": 240.0}]
     ).to_csv(processed / "league_player_projections.csv", index=False)
-    build_simulation_dataset(config)
+    build_simulation_dataset(config)  # con league_player_projections.csv: sí se recalibra
     assert calls == [True]
 
 
@@ -480,14 +446,11 @@ def test_build_simulation_dataset_respects_explicit_monte_carlo_override(tmp_pat
 
     build_simulation_dataset(config)
 
-    # Un valor fijado a mano en config no se recalibra aunque
-    # league_player_projections.csv exista.
-    assert calls == []
+    assert calls == []  # valor fijado a mano en config no se recalibra aunque el CSV exista
 
 
 def test_normalize_rotation_minutes_scales_rotation_to_240():
-    # Roster de 15 jugadores sumando muchos mas de 240 min/partido.
-    raw = {i: 25.0 for i in range(15)}  # 375 min en bruto
+    raw = {i: 25.0 for i in range(15)}  # 375 min en bruto entre 15 jugadores
 
     out = normalize_rotation_minutes(raw, rotation_size=10)
 
@@ -509,8 +472,7 @@ def test_normalize_rotation_minutes_preserves_relative_share_within_rotation():
 
     out = normalize_rotation_minutes(raw, rotation_size=2)
 
-    # 'a' juega el doble que 'b' antes y despues de normalizar.
-    assert out["a"] / out["b"] == pytest.approx(2.0)
+    assert out["a"] / out["b"] == pytest.approx(2.0)  # 'a' juega el doble que 'b', antes y después
     assert out["a"] + out["b"] == pytest.approx(TOTAL_TEAM_MINUTES_PER_GAME)
 
 
@@ -539,13 +501,7 @@ def test_load_league_mean_synergy_averages_the_thirty_teams(tmp_path):
 
 
 def test_baseline_absorbs_the_league_synergy_offset():
-    """
-    BUG REAL: `compute_game_synergy_adjustment` devuelve un valor SIEMPRE
-    POSITIVO que run_monte_carlo suma al net rating. Si la línea base no lo
-    lleva incorporado, el equipo propio cobra ese bonus contra una
-    referencia que no lo tiene -- rompiendo la suma cero. Medido en el
-    backtest: +5.0 de net rating para el equipo PROMEDIO.
-    """
+    """Regresión: el bonus de sinergia (siempre positivo) sin incorporar a la línea base rompía la suma cero."""
     projections = pd.DataFrame(
         [{"team_abbreviation": "AAA", "game_score_per36": 15.0, "minutes_projection": 240.0}]
     )
@@ -555,8 +511,7 @@ def test_baseline_absorbs_the_league_synergy_offset():
         projections, league_mean_synergy_net_rating=9.6, game_score_to_net_rating_scale=0.21
     )
 
-    # La sinergia sube la línea base en 9.6/0.21 puntos de Game Score de
-    # equipo, que en unidades por-36 son esos mismos divididos por 240/36.
+    # Sinergia sube la línea base en 9.6/0.21 puntos de Game Score de equipo, convertido a unidades por-36.
     assert with_synergy - without == pytest.approx((9.6 / 0.21) / (240.0 / 36.0))
 
 
@@ -609,9 +564,7 @@ def test_simulate_single_season_player_log_zero_risk_player_plays_every_game():
 
 
 def test_simulate_single_season_player_log_events_sum_to_games_missed():
-    """Cada racha de ausencia debe sumar exactamente los partidos perdidos
-    -- si esto falla, _extract_absence_streaks está perdiendo o duplicando
-    partidos en los bordes de una racha."""
+    """Cada racha de ausencia debe sumar exactamente los partidos perdidos."""
     log = simulate_single_season_player_log(
         [1], {1: "Riesgo alto"}, np.array([0.7]), 82, DEFAULT_MONTE_CARLO_CONFIG, random_seed=3
     )
@@ -641,12 +594,7 @@ def test_simulate_single_season_player_log_each_event_gets_an_illustrative_categ
 
 
 def test_compute_expected_games_played_matches_the_binomial_negative_mean():
-    """
-    No es una aproximación: debe coincidir con la media EMPÍRICA de
-    sample_injury_absences para el mismo risk_score, dentro del margen de
-    una simulación de muchas temporadas -- si diverge, la fórmula
-    analítica ya no refleja lo que el modelo realmente sortea.
-    """
+    """Debe coincidir con la media empírica de sample_injury_absences para el mismo risk_score."""
     risk_scores = np.array([0.25])
     rng = np.random.default_rng(0)
     available = sample_injury_absences(risk_scores, 20000, 82, rng, dispersion=2.0)
@@ -662,7 +610,7 @@ def test_compute_expected_games_played_zero_risk_plays_full_season():
 
 
 def test_compute_expected_games_played_clips_risk_score_to_valid_range():
-    # Un risk_score fuera de [0, 1] (dato corrupto) no debe dar partidos negativos o >82.
+    # risk_score fuera de [0, 1] no debe dar partidos negativos o >82.
     result = compute_expected_games_played(np.array([-0.2, 1.5]), 82)
     assert result[0] == pytest.approx(82.0)
     assert result[1] == pytest.approx(0.0)

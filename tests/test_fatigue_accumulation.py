@@ -100,9 +100,7 @@ def test_sustained_streak_broken_by_a_light_season():
     score_no_rest = compute_sustained_streak_score(merged_no_rest)
     score_broken = compute_sustained_streak_score(merged_broken)
 
-    # La temporada más reciente en ambos casos es completa (streak=1 en
-    # broken_streak, porque la racha se corta al llegar a la temporada
-    # floja de 2022-23); no_rest_streak acumula 3 temporadas seguidas.
+    # la racha se corta en la temporada floja de 2022-23
     assert score_no_rest > score_broken
 
 

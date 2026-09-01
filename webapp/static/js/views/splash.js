@@ -1,28 +1,16 @@
 // views/splash.js -- pantalla de entrada de marca, ANTERIOR a la app (no
-// una pestaña más al lado de "Mi equipo"/"Liga NBA" -- se probó así
-// primero y no tenía sentido: una landing page debe ser la puerta de
-// entrada, no un contenido que compite al mismo nivel que las secciones
-// reales). Vive en el overlay fijo `#splash` de index.html, por encima de
-// `.app-shell`; `app.js` la muestra al arrancar y la descarta (con la
-// misma transición de "jugador cruzando pantalla" que ya usa la
-// navegación entre pestañas) en cuanto el usuario entra por cualquier CTA.
+// una pestaña más). Vive en el overlay fijo `#splash` de index.html, sobre
+// `.app-shell`; app.js la descarta al entrar por cualquier CTA.
 //
-// Reutiliza /api/status, /api/team/simulation y /api/league/playoffs --
-// los mismos endpoints que ya consumen Roster/Simulación/Liga, así que
-// no hay lógica de datos nueva, solo composición visual. Se omite
-// /api/awards a propósito (el más lento de la app, ~4s) -- esta pantalla
-// debe sentirse instantánea. La foto del hero (staticHeroImage(), ver
-// player-hero.js) es un archivo local curado a mano
-// (webapp/static/img/embiid.png), no datos del roster -- ya NO hace
-// falta pedir /api/roster aquí solo para eso.
+// Reutiliza /api/status, /api/team/simulation y /api/league/playoffs (los
+// mismos endpoints de Roster/Simulación/Liga, sin lógica nueva). Omite
+// /api/awards a propósito (~4s, el más lento) para sentirse instantánea.
+// El hero usa una imagen local curada (webapp/static/img/embiid.png), no
+// datos del roster.
 //
-// rosterBuilderCard() (roster-builder.js) convierte el punto de partida de
-// "los 76ers fijos del config" en un roster hipotético editable -- arranca
-// igual (mismos 13 player_id), pero cualquier jugador se puede sustituir
-// por cualquier otro de los 30 equipos reales y volver a simular en vivo
-// (src/sandbox_simulation.py). Es su propia tarjeta autocontenida, no un
-// dato más de este módulo -- ver el comentario junto a `kpis` más abajo
-// sobre por qué no comparte tira de resultados con el hero.
+// rosterBuilderCard() (roster-builder.js) es su propia tarjeta
+// autocontenida con roster hipotético editable -- ver el comentario junto
+// a `kpis` más abajo sobre por qué no comparte resultados con el hero.
 
 import { api } from "../api.js";
 import { el, skeleton } from "../ui.js";
@@ -140,20 +128,11 @@ export async function render(container, enter) {
     staticHeroImage("/img/embiid.png", "Joel Embiid"),
   ]);
 
-  // Estos KPIs siguen leyendo el resultado YA CALCULADO
-  // (simulation_results.csv, 10.000 temporadas, lectura de CSV casi
-  // gratis) del roster curado real -- a propósito NO se sustituyen por
-  // una tirada en vivo del sandbox al cargar la pantalla, ni se
-  // comparten con la tira de resultados de rosterBuilderCard() más
-  // abajo. Dos motivos: (1) esta pantalla debe sentirse instantánea, y
-  // una simulación en vivo (aunque reducida a 2.000 temporadas) tiene
-  // latencia real; (2) el sandbox no modela sinergia de alineación (ver
-  // sandbox_simulation.py), así que aunque el roster editado empiece
-  // siendo idéntico al curado, correrlo por el motor en vivo daría un
-  // número ligeramente distinto al oficial -- mezclarlos en la misma
-  // tira sería confuso. rosterBuilderCard tiene su propia tira de
-  // resultados, etiquetada como "roster editado", justo para no
-  // confundir las dos fuentes.
+  // KPIs del resultado YA CALCULADO (simulation_results.csv) del roster
+  // curado real -- a propósito no una tirada en vivo del sandbox, ni
+  // compartidos con la tira de rosterBuilderCard(): el sandbox no modela
+  // sinergia de alineación, así que su número difiere del oficial y
+  // mezclarlos confundiría las dos fuentes.
   const kpis = el("div", { class: "hero-kpis" }, [
     sim
       ? kpi("Victorias medias", fmt1(sim.summary.mean), `P10 ${sim.summary.p10} · P90 ${sim.summary.p90}`, true)

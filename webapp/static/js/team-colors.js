@@ -1,14 +1,8 @@
 // team-colors.js -- colores oficiales de marca de las 30 franquicias,
-// como tabla estática indexada por abreviatura (mismo patrón que
-// ABBREVIATION_TO_TEAM_ID en src/context/opponent_weighting.py: un hecho
-// de liga público, no algo específico del equipo hipotético del config --
-// aplicarlo dinámicamente según status.team.abbreviation mantiene la
-// promesa de "cualquier equipo cambiando el YAML" también en el frontend,
-// en vez de fijar el hero a los colores de un solo equipo a mano.
-//
-// [primary, secondary] en hex. No son valores de marca certificados al
-// pixel -- son los tonos de referencia de uso común (broadcast, apps de
-// stats) para cada franquicia.
+// tabla estática indexada por abreviatura, aplicada dinámicamente según
+// status.team.abbreviation (mantiene "cualquier equipo cambiando el
+// YAML" también en el frontend). [primary, secondary] en hex -- tonos de
+// referencia de uso común, no valores certificados al pixel.
 export const TEAM_COLORS = {
   ATL: ["#E03A3E", "#26282A"],
   BOS: ["#007A33", "#BA9653"],
@@ -43,11 +37,8 @@ export const TEAM_COLORS = {
 };
 
 /** Aplica [primary, secondary] como variables CSS globales
- * (--team-primary / --team-secondary), leídas por hero.css para el banner
- * de Inicio y por la animación del jugador. Se llama una vez al arrancar
- * con la abreviatura de /api/status -- si no está en la tabla (no
- * debería pasar con las 30 franquicias reales), se deja el fallback ya
- * definido en tokens.css (--brand-blue/--brand-red). */
+ * (--team-primary / --team-secondary), leídas por hero.css. Si no está
+ * en la tabla, se deja el fallback de tokens.css. */
 export function applyTeamColors(abbreviation) {
   const colors = TEAM_COLORS[abbreviation];
   if (!colors) return;

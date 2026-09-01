@@ -106,12 +106,10 @@ def fetch_player_playoff_career_stats(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
-    Stats de playoffs por temporada de un jugador (para modelar fatiga
-    acumulada -- src/context/fatigue_accumulation.py). Mismo endpoint que
-    fetch_player_career_stats, distinto data frame de resultado
-    (SeasonTotalsPostSeason, índice 2 en get_data_frames()). Un jugador sin
-    apariciones en playoffs esa temporada simplemente no tiene fila -- eso
-    es correcto, no un error.
+    Stats de playoffs por temporada de un jugador (para fatigue_accumulation.py).
+    Mismo endpoint que fetch_player_career_stats, distinto data frame de
+    resultado (SeasonTotalsPostSeason, índice 2). Sin filas para una
+    temporada sin playoffs -- correcto, no un error.
     """
     from nba_api.stats.endpoints import playercareerstats
 
@@ -148,12 +146,10 @@ def fetch_league_schedule(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
-    Calendario completo de la liga para una temporada (todos los equipos,
-    todos los partidos) -- para modelar dificultad de calendario
-    (src/context/schedule_strength.py). No se filtra por equipo aquí: se
-    cachea el calendario completo y se filtra al equipo del config en la
-    capa de contexto, así el mismo caché sirve si se cambia de equipo en
-    team_config.yaml sin volver a pegarle a la API.
+    Calendario completo de la liga para una temporada (para
+    schedule_strength.py). No se filtra por equipo aquí -- se cachea
+    completo y se filtra en la capa de contexto, así el mismo caché sirve
+    si cambia el equipo del config.
     """
     from nba_api.stats.endpoints import scheduleleaguev2
 
@@ -174,10 +170,8 @@ def fetch_league_standings(
     """
     Standings (récord, WinPCT, DiffPointsPG) de todos los equipos para una
     temporada. Se usa como proxy de "fuerza del rival" para el calendario
-    de LA TEMPORADA SIGUIENTE (ver schedule_strength.py) -- no hay forma
-    de medir la fuerza real de un rival en una temporada que aún no se ha
-    jugado, así que se usa el récord de la temporada anterior como mejor
-    aproximación disponible.
+    de la temporada SIGUIENTE (ver schedule_strength.py), ya que no hay
+    forma de medir la fuerza real de una temporada que aún no se jugó.
     """
     from nba_api.stats.endpoints import leaguestandingsv3
 
@@ -198,10 +192,9 @@ def fetch_team_advanced_game_log(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
-    Game log de un equipo vía TeamGameLogs (plural, distinto endpoint de
-    fetch_team_game_log) -- incluye PLUS_MINUS, que TeamGameLog (singular)
-    no trae. Necesario para estimar Net Rating por partido en
-    src/context/performance_curve.py. season_type="Playoffs" para traer
+    Game log de un equipo vía TeamGameLogs (plural, distinto de
+    fetch_team_game_log) -- incluye PLUS_MINUS, necesario para estimar
+    Net Rating en performance_curve.py. season_type="Playoffs" para
     playoffs en vez de temporada regular.
     """
     from nba_api.stats.endpoints import teamgamelogs
@@ -225,17 +218,13 @@ def fetch_league_advanced_player_stats(
 ) -> pd.DataFrame:
     """
     Estadísticas AVANZADAS de todos los jugadores de la liga en una
-    temporada (`leaguedashplayerstats` con measure_type="Advanced").
-    UNA sola llamada devuelve la liga entera -- es la ingesta más barata
-    del proyecto por dato obtenido (~16 llamadas cubren todo el sweep).
+    temporada (`leaguedashplayerstats` con measure_type="Advanced"). Una
+    sola llamada devuelve la liga entera -- la ingesta más barata del
+    proyecto por dato obtenido.
 
     Trae `NET_RATING` y `PIE`, que src/advanced_impact.py mezcla con el
-    Game Score para formar la métrica de impacto compuesta. El Game Score
-    de Hollinger se calcula desde la caja (PlayerCareerStats) y es
-    puramente ofensivo: no ve la defensa más allá de robos/tapones. Estas
-    dos métricas sí la ven -- ver el docstring de advanced_impact.py para
-    la medición que justifica integrarlas y su caveat de contaminación
-    por contexto de equipo.
+    Game Score (puramente ofensivo) para formar la métrica de impacto
+    compuesta -- ver docstring de advanced_impact.py.
     """
     from nba_api.stats.endpoints import leaguedashplayerstats
 
@@ -247,13 +236,10 @@ def fetch_league_advanced_player_stats(
         )
         return stats.get_data_frames()[0]
 
-    # OJO con la columna MIN de este endpoint: con measure_type="Advanced"
-    # viene en minutos POR PARTIDO, no en totales, y NO cambia aunque se
-    # pase per_mode_detailed="Totals" (comprobado contra la API: mediana
-    # 19.5 con ambos valores). Es al revés que PlayerCareerStats, de donde
-    # sale todo el resto del proyecto. La conversión a totales (MIN * GP)
-    # la hace advanced_impact.load_advanced_stats -- se deja ahí y no aquí
-    # para que el CSV crudo siga siendo un reflejo fiel de la respuesta.
+    # OJO: la columna MIN de este endpoint viene en minutos POR PARTIDO
+    # (no totales) y no cambia con per_mode_detailed="Totals", al revés
+    # que PlayerCareerStats. La conversión a totales (MIN * GP) la hace
+    # advanced_impact.load_advanced_stats, no aquí.
 
     return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
 
@@ -266,22 +252,15 @@ def fetch_league_hustle_stats(
     """
     Hustle stats de todos los jugadores de la liga en una temporada
     (`leaguehustlestatsplayer`): CONTESTED_SHOTS, DEFLECTIONS,
-    CHARGES_DRAWN, SCREEN_ASSISTS, LOOSE_BALLS_RECOVERED, BOX_OUTS.
-    Misma ingesta barata que fetch_league_advanced_player_stats -- UNA
-    llamada por temporada, liga entera.
+    CHARGES_DRAWN, SCREEN_ASSISTS, LOOSE_BALLS_RECOVERED, BOX_OUTS. Una
+    llamada por temporada, liga entera. Cubre la señal de "defensa/juego
+    en equipo sin balón" que ni Game Score ni NET_RATING/PIE capturan
+    (ver scripts/experiments/hustle_stats_signal.py para el análisis
+    predictivo -- esta función solo ingiere el dato).
 
-    Cubre la señal de "defensa/juego en equipo sin balón" que ni Game
-    Score (puramente ofensivo, ver aging_curve.py) ni NET_RATING/PIE
-    (ver advanced_impact.py) capturan -- ver
-    scripts/experiments/hustle_stats_signal.py para el análisis de si esa
-    señal termina siendo predictiva; esta función solo ingiere el dato,
-    no evalúa su utilidad.
-
-    LIMITACIÓN DE DISPONIBILIDAD real (no un bug): la NBA solo trackea
-    hustle stats desde la temporada 2015-16 (SportVU/Second Spectrum).
-    Temporadas anteriores devuelven un DataFrame VACÍO (no una excepción)
-    -- `build_league_hustle_stats_dataset` lo detecta y salta esa
-    temporada sin abortar el resto.
+    Disponible solo desde 2015-16 (SportVU/Second Spectrum): temporadas
+    anteriores devuelven un DataFrame vacío, no una excepción --
+    `build_league_hustle_stats_dataset` lo detecta y salta esa temporada.
     """
     from nba_api.stats.endpoints import leaguehustlestatsplayer
 
@@ -301,26 +280,18 @@ def fetch_league_pt_defend_stats(
 ) -> pd.DataFrame:
     """
     Defensa por tracking (`leaguedashptdefend`, Second Spectrum):
-    D_FG_PCT (% de tiro REAL del rival cuando este jugador es el
+    D_FG_PCT (% de tiro real del rival cuando este jugador es el
     defensor más cercano), NORMAL_FG_PCT (% de tiro normal de esos
-    mismos rivales) y PCT_PLUSMINUS = D_FG_PCT - NORMAL_FG_PCT --
-    negativo significa que el rival tira PEOR de lo normal defendido por
-    este jugador, la señal de impacto defensivo más directa que expone
-    nba_api (más que los hustle stats de fetch_league_hustle_stats, que
-    miden actividad/esfuerzo, no si ese esfuerzo de verdad impide anotar
-    -- ese análisis salió negativo en scripts/experiments/hustle_stats_signal.py;
-    ver scripts/experiments/pt_defend_signal.py para el equivalente con
-    esta métrica).
+    mismos rivales) y PCT_PLUSMINUS = D_FG_PCT - NORMAL_FG_PCT (negativo
+    = el rival tira peor de lo normal). Es la señal de impacto defensivo
+    más directa que expone nba_api -- ver
+    scripts/experiments/pt_defend_signal.py para el análisis predictivo.
 
-    UNA llamada por temporada, liga entera -- misma ingesta barata que
-    fetch_league_advanced_player_stats/fetch_league_hustle_stats.
-    `CLOSE_DEF_PERSON_ID` es el player_id del defensor (no `PLAYER_ID`,
-    nombre de columna distinto de cualquier otro endpoint de este
-    proyecto -- OJO al combinar).
+    Una llamada por temporada, liga entera. OJO: `CLOSE_DEF_PERSON_ID` es
+    el player_id del defensor, no `PLAYER_ID` como en otros endpoints.
 
-    LIMITACIÓN DE DISPONIBILIDAD real (no un bug): disponible desde
-    2013-14 (Second Spectrum) -- temporadas anteriores devuelven un
-    DataFrame VACÍO, no una excepción, mismo patrón que hustle stats.
+    Disponible solo desde 2013-14 (Second Spectrum): temporadas
+    anteriores devuelven un DataFrame vacío, no una excepción.
     """
     from nba_api.stats.endpoints import leaguedashptdefend
 
@@ -341,19 +312,14 @@ def fetch_player_common_info(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
-    Posición REAL de un jugador (CommonPlayerInfo, columna `POSITION` --
-    p. ej. "Guard", "Forward-Center") vía player_id, independiente de a
-    qué equipo esté asignado. Necesario para el roster HIPOTÉTICO propio:
-    a diferencia de un roster real, `CommonTeamRoster` (fetch_team_roster)
-    no sirve aquí porque devolvería el roster REAL de esa franquicia, no
-    los jugadores inventados del config -- hace falta un endpoint por
-    JUGADOR, igual que fetch_player_career_stats.
+    Posición real de un jugador (CommonPlayerInfo, columna `POSITION`,
+    p. ej. "Guard") vía player_id. Necesario para el roster HIPOTÉTICO
+    propio: `CommonTeamRoster` (fetch_team_roster) devolvería el roster
+    real de la franquicia, no los jugadores inventados del config.
 
-    OJO: el formato de POSITION difiere entre este endpoint (palabras
-    completas: "Guard", "Forward") y CommonTeamRoster (abreviado: "G",
-    "F") -- ambos comparten la PRIMERA LETRA, que es lo único que usa
-    `champion_profiles.POSITION_GROUPS` para agrupar, así que no hace
-    falta normalizar.
+    OJO: el formato de POSITION difiere de CommonTeamRoster ("Guard" vs.
+    "G") pero comparten la primera letra, que es lo único que usa
+    `champion_profiles.POSITION_GROUPS` -- no hace falta normalizar.
     """
     from nba_api.stats.endpoints import commonplayerinfo
 
@@ -374,11 +340,10 @@ def fetch_player_shot_chart(
 ) -> pd.DataFrame:
     """
     Ubicación real de cada tiro de un jugador en una temporada concreta
-    (ShotChartDetail: LOC_X/LOC_Y en décimas de pie desde el aro,
-    SHOT_MADE_FLAG, SHOT_TYPE, ACTION_TYPE) -- para el mapa de tiros del
-    popup de detalle de jugador (webapp/static/js/court.js). `team_id=0`
-    en la llamada trae los tiros del jugador con cualquier equipo esa
-    temporada (evita tener que resolver de qué equipo era en ese momento).
+    (ShotChartDetail: LOC_X/LOC_Y, SHOT_MADE_FLAG, SHOT_TYPE, ACTION_TYPE)
+    para el mapa de tiros del popup de detalle de jugador
+    (webapp/static/js/court.js). `team_id=0` trae los tiros del jugador
+    con cualquier equipo esa temporada.
     """
     from nba_api.stats.endpoints import shotchartdetail
 
@@ -448,10 +413,9 @@ def fetch_team_roster(
 ) -> pd.DataFrame:
     """
     Roster real de un equipo en una temporada concreta -- necesario para
-    el backtesting (src/backtesting.py): a diferencia del roster
-    hipotético en team_config.yaml, aquí se necesita saber quién jugó
-    REALMENTE en cada `historical_comparable` para poder correr el mismo
-    pipeline de proyección/riesgo retrospectivamente.
+    el backtesting (src/backtesting.py), para correr el mismo pipeline de
+    proyección/riesgo sobre quién jugó realmente en cada
+    `historical_comparable`.
     """
     from nba_api.stats.endpoints import commonteamroster
 
@@ -468,15 +432,10 @@ def build_league_rosters_dataset(config: Dict[str, Any], force_refresh: bool = F
     """
     Roster real de las 30 franquicias NBA para config["team"]["season"] --
     necesario para simular rivales reales (src/league_simulation.py), no
-    un WinPCT genérico. Usa la tabla estática de 30 team_id ya definida en
-    context.opponent_weighting (mismo hecho de liga, sin duplicar).
-    Guarda data/processed/league_rosters.csv.
+    un WinPCT genérico. Guarda data/processed/league_rosters.csv.
 
-    ADVERTENCIA DE COSTE: 30 llamadas a CommonTeamRoster. Deliberadamente
-    NO forma parte de run_full_pipeline (que corre cada vez que se ejecuta
-    data_pipeline.py sin --refresh) -- se llama aparte, una vez, porque el
-    siguiente paso (build_league_player_stats_dataset) es mucho más caro
-    todavía (~450 jugadores x 2 llamadas).
+    ADVERTENCIA DE COSTE: 30 llamadas a CommonTeamRoster. No forma parte
+    de run_full_pipeline -- se llama aparte, una vez.
     """
     from context.opponent_weighting import ABBREVIATION_TO_TEAM_ID
 
@@ -504,15 +463,12 @@ def build_league_player_stats_dataset(
     """
     Career stats (temporada regular Y playoffs) de cada jugador en el
     roster real de las 30 franquicias -- para proyectar rivales reales
-    con el mismo pipeline (aging_curve/injury_model/fatigue_accumulation)
-    que el roster propio. Reutiliza fetch_player_career_stats /
-    fetch_player_playoff_career_stats, ningún endpoint nuevo. Guarda
+    con el mismo pipeline que el roster propio. Guarda
     data/processed/league_player_career_stats.csv y
     data/processed/league_player_playoff_career_stats.csv.
 
-    ADVERTENCIA DE COSTE: ~450 jugadores x 2 llamadas cada uno -- la
-    ingesta más cara del proyecto (probablemente 20-30+ min la primera
-    vez). Cacheado después, como todo lo demás.
+    ADVERTENCIA DE COSTE: ~450 jugadores x 2 llamadas -- la ingesta más
+    cara del proyecto (20-30+ min la primera vez). Cacheado después.
     """
     paths = get_paths(config)
     rosters_path = paths["processed"] / "league_rosters.csv"
@@ -557,23 +513,16 @@ def build_league_player_countries_dataset(config: Dict[str, Any], force_refresh:
     Nacionalidad (`COUNTRY` de CommonPlayerInfo) de cada jugador único de
     los 30 equipos reales de la liga. Guarda
     data/processed/league_player_countries.csv (player_id, country).
-
-    NO se puede sacar de `league_rosters.csv` (CommonTeamRoster no trae
-    nacionalidad, solo POSITION) -- hace falta un endpoint POR JUGADOR
-    (mismo `fetch_player_common_info` que usa build_roster_positions_dataset
-    para el roster propio, y de paso trae POSITION también, aunque aquí no
-    hace falta -- ya está en league_rosters.csv).
+    `league_rosters.csv` no la trae (CommonTeamRoster solo da POSITION),
+    hace falta un endpoint por jugador.
 
     Necesaria para el chequeo de cuota de nacionalidad del All-Star
-    (mínimo real de la NBA: 16 jugadores de EE.UU. / 8 internacionales
-    sobre el total de 24 seleccionados) -- ver
-    awards_projection.check_all_star_nationality_quota. Sin este CSV el
-    chequeo simplemente no se puede hacer sobre los 30 equipos (se
-    degrada, no falla -- ver dashboard/data_loader.py).
+    (16 EE.UU. / 8 internacionales de 24) -- ver
+    awards_projection.check_all_star_nationality_quota; sin este CSV el
+    chequeo se degrada, no falla.
 
-    ADVERTENCIA DE COSTE: ~450-500 llamadas, una por jugador único de la
-    liga -- del mismo orden que build_league_player_stats_dataset. Opt-in
-    vía --league, no forma parte de run_full_pipeline.
+    ADVERTENCIA DE COSTE: ~450-500 llamadas. Opt-in vía --league, no
+    forma parte de run_full_pipeline.
     """
     paths = get_paths(config)
     rosters_path = paths["processed"] / "league_rosters.csv"
@@ -601,11 +550,8 @@ def _download_rosters_for_cases(
     cases: List[Dict[str, Any]], raw_dir: Path, force_refresh: bool, desc: str
 ) -> pd.DataFrame:
     """Núcleo compartido por build_historical_comparables_rosters_dataset y
-    build_backtest_sweep_rosters_dataset -- ver docstrings de cada uno.
-    Un caso que falle tras agotar reintentos (stats.nba.com devuelve
-    ocasionalmente una respuesta rara para algún equipo/temporada
-    concreto) se SALTA con un aviso en vez de abortar toda la ingesta --
-    ver el mismo patrón en backtesting._run_backtest_cases()."""
+    build_backtest_sweep_rosters_dataset. Un caso que falle tras agotar
+    reintentos se SALTA con un aviso en vez de abortar toda la ingesta."""
     frames: List[pd.DataFrame] = []
     for case in tqdm(cases, desc=desc):
         try:
@@ -641,10 +587,8 @@ def build_backtest_sweep_rosters_dataset(config: Dict[str, Any], force_refresh: 
     """
     Igual que build_historical_comparables_rosters_dataset pero para
     `resolve_backtest_sweep_cases(config)` -- los 30 equipos NBA × todas
-    las temporadas en config["backtest_sweep"]["seasons"] (por defecto
-    450 casos). ADVERTENCIA DE COSTE: ver docstring de
-    build_backtest_sweep_dataset en backtesting.py y la sección
-    --backtest-sweep en el CLI de este módulo. Guarda
+    las temporadas en config["backtest_sweep"]["seasons"] (450 casos por
+    defecto). Ver ADVERTENCIA DE COSTE en backtesting.py. Guarda
     data/processed/backtest_sweep_rosters.csv.
     """
     from config_loader import resolve_backtest_sweep_cases
@@ -664,24 +608,14 @@ def _download_player_stats_for_cases(rosters: pd.DataFrame, raw_dir: Path, force
     """
     Núcleo compartido por build_historical_comparables_player_stats_dataset
     y build_backtest_sweep_player_stats_dataset. Dedupe por PLAYER_ID
-    ÚNICAMENTE (no por PLAYER_ID+caso) -- un jugador que aparece en varios
-    casos (misma franquicia varias temporadas, o distintas) tiene la MISMA
-    carrera completa (PlayerCareerStats devuelve todas sus temporadas
-    pase lo que pase), así que se descarga/concatena UNA sola vez. Esto
-    importa especialmente para el sweep de 450 casos: duplicar filas por
-    caso no solo desperdicia espacio, rompería `_most_recent_n_seasons`
-    en aging_curve.py (que ordena por año y toma las N más recientes --
-    con copias duplicadas de la MISMA temporada por aparecer en varios
-    casos, tomaría copias de la temporada más reciente en vez de las N
-    temporadas distintas más recientes, colapsando el baseline
-    ponderado por recencia a una sola temporada).
+    ÚNICAMENTE (no por PLAYER_ID+caso): un jugador que aparece en varios
+    casos tiene la misma carrera completa, así que se descarga UNA sola
+    vez. IMPORTANTE: duplicar filas por caso rompería
+    `_most_recent_n_seasons` en aging_curve.py, que colapsaría el
+    baseline ponderado por recencia a una sola temporada.
 
-    Un jugador cuya descarga falle tras agotar reintentos (stats.nba.com
-    devuelve ocasionalmente una respuesta rara, p. ej. sin 'resultSet',
-    para algún player_id concreto) se SALTA con un aviso en vez de
-    abortar toda la ingesta -- con 450 casos y miles de jugadores, un
-    fallo puntual de la API es mucho más probable que con el puñado de
-    jugadores de los 4 comparables narrativos.
+    Un jugador cuya descarga falle tras agotar reintentos se SALTA con un
+    aviso en vez de abortar toda la ingesta.
     """
     regular_frames: List[pd.DataFrame] = []
     playoff_frames: List[pd.DataFrame] = []
@@ -718,11 +652,8 @@ def build_historical_comparables_player_stats_dataset(
     """
     Career stats (temporada regular Y playoffs) de cada jugador del
     roster real de cada `historical_comparable` -- para el backtesting.
-    Reutiliza fetch_player_career_stats / fetch_player_playoff_career_stats
-    (mismas funciones que usa el roster hipotético del config, ningún
-    endpoint nuevo aquí). Guarda
-    data/processed/historical_comparables_player_career_stats.csv y
-    data/processed/historical_comparables_player_playoff_career_stats.csv.
+    Guarda data/processed/historical_comparables_player_career_stats.csv
+    y data/processed/historical_comparables_player_playoff_career_stats.csv.
     """
     paths = get_paths(config)
     rosters_path = paths["processed"] / "historical_comparables_rosters.csv"
@@ -751,10 +682,7 @@ def build_backtest_sweep_player_stats_dataset(
     """
     Igual que build_historical_comparables_player_stats_dataset pero
     leyendo data/processed/backtest_sweep_rosters.csv (450 casos por
-    defecto -- ver build_backtest_sweep_rosters_dataset). Es la parte más
-    cara de la ingesta del sweep: cada jugador ÚNICO que apareció en
-    cualquiera de los 450 rosters se descarga una vez (ver
-    _download_player_stats_for_cases). Guarda
+    defecto). Es la parte más cara de la ingesta del sweep. Guarda
     data/processed/backtest_sweep_player_career_stats.csv y
     data/processed/backtest_sweep_player_playoff_career_stats.csv.
     """
@@ -811,16 +739,14 @@ def build_roster_dataset(config: Dict[str, Any], force_refresh: bool = False) ->
 def build_roster_positions_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
     """
     Posición y nacionalidad reales de cada jugador del roster hipotético
-    del config (ver fetch_player_common_info -- misma llamada, dos
-    columnas: `POSITION` y `COUNTRY`, no hace falta pedirlas por
-    separado). Guarda data/processed/roster_positions.csv (player_id,
+    del config (misma llamada de fetch_player_common_info trae ambas
+    columnas). Guarda data/processed/roster_positions.csv (player_id,
     position, country).
 
     `position` es necesaria para los quintetos All-NBA / All-Defensive
     (2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot, ver
-    awards_projection.py) -- sin posición real no hay forma de respetar
-    esos cupos, y `role_expected` de team_config.yaml es deliberadamente
-    descriptivo, no una entrada de cálculo (ver lineup_synergy.py).
+    awards_projection.py); `role_expected` de team_config.yaml es
+    deliberadamente descriptivo, no una entrada de cálculo.
 
     `country` es necesaria para el chequeo de cuota de nacionalidad del
     All-Star (mínimo 16 jugadores de EE.UU. / 8 internacionales, regla
@@ -887,17 +813,13 @@ def _previous_season(season: str) -> str:
 def resolve_advanced_stats_seasons(config: Dict[str, Any]) -> List[str]:
     """
     Temporadas para las que hace falta bajar estadísticas avanzadas: la
-    UNIÓN de las del `backtest_sweep` (para calibrar y validar) y las N
-    anteriores a `config["team"]["season"]` (para proyectar el roster
-    hipotético). Se resuelve aquí en vez de en cada llamante para que
-    ambos caminos usen exactamente el mismo CSV -- el mismo motivo por el
-    que existe `normalize_rotation_minutes` compartida.
+    unión de las del `backtest_sweep` y las N anteriores a
+    `config["team"]["season"]` (para proyectar el roster hipotético).
 
-    OJO: hace falta también el lookback ANTERIOR a la temporada más
-    antigua del sweep. Proyectar 2010-11 usa las 3 temporadas previas
-    (2007-08 a 2009-10); sin ellas, los 30 casos de la primera temporada
-    del sweep se quedan sin métricas avanzadas y caen a Game Score puro,
-    lo que mezclaría dos modelos distintos dentro del mismo backtest.
+    OJO: hace falta también el lookback anterior a la temporada más
+    antigua del sweep -- sin él, los primeros casos del sweep se quedan
+    sin métricas avanzadas y caen a Game Score puro, mezclando dos
+    modelos distintos dentro del mismo backtest.
     """
     lookback = config.get("aging_curve", {}).get("n_seasons_lookback", 3)
     sweep = [str(s) for s in config.get("backtest_sweep", {}).get("seasons", [])]
@@ -922,11 +844,8 @@ def build_league_advanced_player_stats_dataset(
     temporadas que el proyecto necesita -- ver
     `resolve_advanced_stats_seasons`. Guarda
     data/processed/league_advanced_player_stats.csv con una columna
-    `season` añadida (el endpoint no la devuelve).
-
-    Barato: una llamada por temporada (~19), frente a las ~900 de
-    `--league`. Aun así es opt-in y no forma parte de `run_full_pipeline`
-    por coherencia con el resto de la ingesta de liga.
+    `season` añadida (el endpoint no la devuelve). Barato (~19 llamadas),
+    pero opt-in, no forma parte de `run_full_pipeline`.
     """
     paths = get_paths(config)
     frames = []
@@ -949,13 +868,9 @@ def build_league_advanced_player_stats_dataset(
 def build_league_hustle_stats_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
     """
     Hustle stats de jugador (ver fetch_league_hustle_stats) para las
-    mismas temporadas que resolve_advanced_stats_seasons -- reutiliza esa
-    resolución para no mantener dos listas de temporadas por separado.
-    Guarda data/processed/league_hustle_player_stats.csv.
-
-    Temporadas anteriores a 2015-16 devuelven un DataFrame VACÍO (la NBA
-    no trackeaba esto todavía) -- se saltan sin abortar el resto, mismo
-    patrón que un caso roto en _run_backtest_cases.
+    mismas temporadas que resolve_advanced_stats_seasons. Guarda
+    data/processed/league_hustle_player_stats.csv. Temporadas anteriores
+    a 2015-16 devuelven un DataFrame vacío y se saltan sin abortar el resto.
     """
     paths = get_paths(config)
     frames = []
@@ -987,11 +902,8 @@ def build_league_pt_defend_dataset(config: Dict[str, Any], force_refresh: bool =
     Defensa por tracking (ver fetch_league_pt_defend_stats) para las
     mismas temporadas que resolve_advanced_stats_seasons. Guarda
     data/processed/league_pt_defend_stats.csv con `CLOSE_DEF_PERSON_ID`
-    renombrado a `PLAYER_ID` (consistencia con el resto de datasets del
-    proyecto).
-
-    Temporadas anteriores a 2013-14 devuelven un DataFrame vacío (Second
-    Spectrum no trackeaba todavía) -- se saltan sin abortar el resto.
+    renombrado a `PLAYER_ID`. Temporadas anteriores a 2013-14 devuelven
+    un DataFrame vacío y se saltan sin abortar el resto.
     """
     paths = get_paths(config)
     frames = []
@@ -1024,17 +936,13 @@ def fetch_league_2man_lineup_stats(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
-    Net rating REAL de cada pareja de jugadores que compartió cancha esa
+    Net rating real de cada pareja de jugadores que compartió cancha esa
     temporada (`leaguedashlineups`, group_quantity=2, measure_type
     Advanced) -- alimenta scripts/experiments/lineup_synergy_signal.py,
-    que contrasta los dos efectos de src/lineup_synergy.py (usage_clash,
-    playmaking_spacing_synergy) contra datos reales de pareja: sus pesos
-    nunca se calibraron empíricamente, así que esto es lo que permite
-    comprobar si de verdad predicen algo. UNA llamada por temporada, liga
-    entera -- mismo patrón barato que fetch_league_hustle_stats/
-    fetch_league_pt_defend_stats. `GROUP_ID` viene como
-    "-player_id_a-player_id_b-" (guiones incluidos); el experimento se
-    encarga de parsearlo, no este fetcher.
+    que contrasta los efectos de src/lineup_synergy.py (nunca calibrados
+    empíricamente) contra datos reales de pareja. Una llamada por
+    temporada, liga entera. `GROUP_ID` viene como
+    "-player_id_a-player_id_b-"; el experimento lo parsea, no este fetcher.
     """
     from nba_api.stats.endpoints import leaguedashlineups
 
@@ -1052,9 +960,7 @@ def fetch_league_2man_lineup_stats(
 def build_league_2man_lineup_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
     """
     Net rating de parejas de jugadores para las temporadas del
-    `backtest_sweep` (config["backtest_sweep"]["seasons"], 16 temporadas
-    2010-11..2025-26 -- ya el rango que usa el resto de la validación
-    empírica de este proyecto, no hace falta uno nuevo). Guarda
+    `backtest_sweep` (config["backtest_sweep"]["seasons"]). Guarda
     data/processed/league_2man_lineups.csv.
     """
     paths = get_paths(config)
@@ -1077,16 +983,12 @@ def build_league_2man_lineup_dataset(config: Dict[str, Any], force_refresh: bool
     return combined
 
 
-# Cuatro categorías de seguimiento (`leaguedashptstats`) usadas para
-# probar candidatos NUEVOS de sinergia de pareja en
+# Cuatro categorías de tracking (`leaguedashptstats`) para probar
+# candidatos nuevos de sinergia de pareja en
 # scripts/experiments/lineup_synergy_signal.py, más allá de
-# usage_clash/playmaking_spacing_synergy (ninguno de los dos tiene apoyo
-# empírico): volumen de tiro creado por uno mismo
-# (PullUpShot) vs. recibido/catch-and-shoot (CatchShoot) -- pareja
-# "tirador con balón + tirador sin balón"; penetraciones (Drives) de un
-# manejador vs. presencia interior de un grande -- proxy de pick-and-roll
-# (nba_api no expone frecuencia de bloqueo-y-continuación real); y
-# volumen de poste (PostTouch) -- pareja "anotador de poste + creador".
+# usage_clash/playmaking_spacing_synergy (sin apoyo empírico): tiro con
+# balón vs. catch-and-shoot, penetraciones vs. presencia interior
+# (proxy de pick-and-roll), y volumen de poste.
 LINEUP_SYNERGY_TRACKING_MEASURE_TYPES = ["CatchShoot", "PullUpShot", "Drives", "PostTouch"]
 
 
@@ -1098,12 +1000,8 @@ def fetch_league_tracking_stats(
 ) -> pd.DataFrame:
     """
     Una categoría de `leaguedashptstats` (tracking SportVU/Second
-    Spectrum) para TODOS los jugadores de una temporada -- UNA llamada,
-    mismo patrón barato que fetch_league_hustle_stats/
-    fetch_league_pt_defend_stats. `pt_measure_type` debe ser uno de
-    LINEUP_SYNERGY_TRACKING_MEASURE_TYPES (u otro valor válido de
-    `nba_api.stats.library.parameters.PtMeasureType`, pero ese es el uso
-    real de este proyecto).
+    Spectrum) para todos los jugadores de una temporada -- una llamada.
+    `pt_measure_type` debe ser uno de LINEUP_SYNERGY_TRACKING_MEASURE_TYPES.
     """
     from nba_api.stats.endpoints import leaguedashptstats
 
@@ -1122,12 +1020,9 @@ def build_league_tracking_stats_dataset(config: Dict[str, Any], force_refresh: b
     """
     Las 4 categorías de LINEUP_SYNERGY_TRACKING_MEASURE_TYPES para las
     temporadas del `backtest_sweep`, unidas en un solo CSV ancho (una
-    fila por PLAYER_ID+season, una columna por estadística de cada
-    categoría -- todas comparten PLAYER_ID/season como clave, así que un
-    merge sucesivo es más simple que concatenar). Guarda
+    fila por PLAYER_ID+season, merge sucesivo por esa clave). Guarda
     data/processed/league_tracking_stats.csv. Temporadas o categorías sin
-    datos (tracking no disponible antes de cierto año) se saltan sin
-    abortar el resto, mismo criterio que build_league_pt_defend_dataset.
+    datos se saltan sin abortar el resto.
     """
     paths = get_paths(config)
     seasons = config.get("backtest_sweep", {}).get("seasons", [])
@@ -1178,21 +1073,15 @@ def build_team_schedule_dataset(config: Dict[str, Any], force_refresh: bool = Fa
 
 def build_league_schedule_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
     """
-    Calendario REAL de la liga completa (los 30 equipos), para
+    Calendario real de la liga completa (los 30 equipos), para
     league_simulation.py -- hermana de build_team_schedule_dataset (que
-    filtra a UN equipo), reutiliza fetch_league_schedule tal cual, sin
-    llamada nueva a la API. Guarda data/processed/league_schedule_full.csv
+    filtra a UN equipo). Guarda data/processed/league_schedule_full.csv
     con gameDate/homeTeam_teamTricode/awayTeam_teamTricode.
 
-    Dos filtros, ninguno inventa datos:
-    - `gameLabel == "Preseason"` -- no es temporada regular.
-    - Filas con tricode nulo -- plazas de la fase eliminatoria de la NBA
-      Cup todavía sin resolver (los dos equipos se deciden más adelante
-      en la temporada real); se descartan en vez de inventarse. Esto
-      hace que, mientras la Cup no se resuelva del todo, cada equipo
-      tenga menos partidos que `config["simulation"]["games_per_season"]`
-      -- limitación temporal real, documentada en
-      league_simulation.py, no oculta.
+    Filtra partidos de preseason y filas con tricode nulo (plazas de la
+    NBA Cup sin resolver, se descartan en vez de inventarse) -- por eso,
+    mientras la Cup no se resuelva, cada equipo puede tener menos
+    partidos que `config["simulation"]["games_per_season"]`.
     """
     paths = get_paths(config)
     league_schedule = fetch_league_schedule(config["team"]["season"], paths["raw"], force_refresh)
@@ -1230,10 +1119,8 @@ def build_prior_season_standings_dataset(
 
 def _download_standings_for_cases(cases: List[Dict[str, Any]], raw_dir: Path, force_refresh: bool, desc: str) -> pd.DataFrame:
     """Núcleo compartido -- una llamada por TEMPORADA distinta entre los
-    casos (no por caso: varios equipos/casos comparten temporada, y los
-    standings son de toda la liga de una vez, no hace falta repetir). Una
-    temporada que falle tras agotar reintentos se salta con un aviso en
-    vez de abortar toda la ingesta."""
+    casos (los standings son de toda la liga de una vez). Una temporada
+    que falle tras agotar reintentos se salta con un aviso."""
     frames: List[pd.DataFrame] = []
     seasons_seen = set()
     for case in tqdm(cases, desc=desc):
@@ -1278,8 +1165,8 @@ def build_backtest_sweep_standings_dataset(config: Dict[str, Any], force_refresh
     Igual que build_historical_comparables_standings_dataset pero para
     `resolve_backtest_sweep_cases(config)` -- solo 1 llamada por cada
     temporada DISTINTA en config["backtest_sweep"]["seasons"] (15 por
-    defecto, no 450: los standings son de toda la liga a la vez). Guarda
-    data/processed/backtest_sweep_standings.csv.
+    defecto, no 450, ya que los standings son de toda la liga a la vez).
+    Guarda data/processed/backtest_sweep_standings.csv.
     """
     from config_loader import resolve_backtest_sweep_cases
 
@@ -1321,9 +1208,8 @@ def build_historical_comparables_dataset(
 
 def _download_advanced_game_logs_for_cases(cases: List[Dict[str, Any]], raw_dir: Path, force_refresh: bool, desc: str) -> pd.DataFrame:
     """Núcleo compartido -- ver docstrings de build_historical_comparables_advanced_dataset
-    / build_backtest_sweep_advanced_game_logs_dataset. Un caso que falle
-    tras agotar reintentos se salta con un aviso en vez de abortar toda
-    la ingesta."""
+    / build_backtest_sweep_advanced_game_logs_dataset. Un caso roto se
+    salta con un aviso en vez de abortar toda la ingesta."""
     frames: List[pd.DataFrame] = []
     for case in tqdm(cases, desc=desc):
         try:
@@ -1373,9 +1259,8 @@ def build_historical_comparables_advanced_dataset(
 def build_backtest_sweep_advanced_game_logs_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
     """
     Igual que build_historical_comparables_advanced_dataset pero para
-    `resolve_backtest_sweep_cases(config)` (450 casos por defecto: 2
-    llamadas cada uno -- regular + playoffs -- la parte más cara de la
-    ingesta del sweep junto con los career stats de jugadores). Guarda
+    `resolve_backtest_sweep_cases(config)` (450 casos por defecto, 2
+    llamadas cada uno -- parte cara de la ingesta del sweep). Guarda
     data/processed/backtest_sweep_advanced_game_logs.csv.
     """
     from config_loader import resolve_backtest_sweep_cases
@@ -1432,9 +1317,7 @@ def run_backtest_sweep_ingestion(config_path: Optional[str] = None, force_refres
     src/backtesting.py:build_backtest_sweep_dataset): los 30 equipos NBA
     para cada temporada en config["backtest_sweep"]["seasons"] (450 casos
     por defecto). ADVERTENCIA DE COSTE: del orden de miles de llamadas a
-    la API (~450 casos x ~4 llamadas de equipo, más ~2 llamadas por
-    jugador ÚNICO que haya pisado cualquiera de esos rosters) --
-    probablemente 1.5-3 horas la primera vez. Opt-in a propósito (flag
+    la API, probablemente 1.5-3 horas la primera vez. Opt-in (flag
     --backtest-sweep), no forma parte de run_full_pipeline.
     """
     config = load_config(config_path) if config_path else load_config()
@@ -1485,19 +1368,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Además del pipeline normal, descarga rosters + career stats + nacionalidad "
              "de las 30 franquicias + calendario real de la temporada (necesario para "
-             "league_simulation.py y para el chequeo de cuota del All-Star). ADVERTENCIA: "
-             "~1350 llamadas a la API, la ingesta más cara del proyecto (30-45+ min la "
-             "primera vez). Opt-in a propósito, no forma parte del pipeline normal.",
+             "league_simulation.py y el chequeo de cuota del All-Star). ADVERTENCIA: "
+             "~1350 llamadas a la API (30-45+ min la primera vez). Opt-in.",
     )
     parser.add_argument(
         "--backtest-sweep",
         action="store_true",
         help="Además del pipeline normal, descarga los 30 equipos NBA para cada "
              "temporada en config['backtest_sweep']['seasons'] (450 casos por "
-             "defecto: 15 temporadas). ADVERTENCIA: la ingesta MÁS CARA del "
-             "proyecto -- del orden de miles de llamadas a la API, 1.5-3 horas la "
-             "primera vez. Opt-in a propósito, no forma parte del pipeline normal "
-             "ni de --league.",
+             "defecto). ADVERTENCIA: la ingesta más cara del proyecto -- del orden "
+             "de miles de llamadas, 1.5-3 horas la primera vez. Opt-in.",
     )
     args = parser.parse_args()
 

@@ -1,29 +1,15 @@
 """
 routers/players.py
 
-GET /api/player/{player_id} -- popup de detalle de jugador (doble clic
-en el nombre, ver webapp/static/js/player-modal.js). Combina tres
-fuentes YA existentes en data/processed/ y data/raw/, sin ingesta
-nueva:
-
-- Trayectoria por temporada: roster_career_stats.csv (roster propio) o
-  league_player_career_stats.csv (liga) -- son el output crudo de
-  PlayerCareerStats, una fila por temporada, ya generados por
-  data_pipeline.py.
-- Bio (altura, peso, edad, país, universidad, draft): se lee
-  DIRECTAMENTE data/raw/player_common_info/{player_id}.csv si existe
-  -- el cache que fetch_player_common_info() ya escribe para
-  posición/nacionalidad, pero con TODAS sus columnas (nunca solo
-  position/country). Esta capa NUNCA llama a fetch_player_common_info
-  ni a ningún endpoint de nba_api -- si el archivo no está cacheado
-  todavía, la bio simplemente se omite (bio: null), no se dispara una
-  llamada de red desde un request HTTP (ver docstring de
-  data_pipeline.py sobre el rate-limiting agresivo de stats.nba.com).
-- "Cualidades": compute_style_profile() de src/lineup_synergy.py sobre
-  la fila de aging_curve_projection.csv o league_player_projections.csv
-  del jugador -- mismos 4 ejes (usage/playmaking/spacing/interior) que
-  ya usa el motor de sinergia, con umbrales de PRESENTACIÓN (no
-  afectan a ninguna simulación) para convertirlos en etiquetas cortas.
+GET /api/player/{player_id} -- popup de detalle de jugador. Combina tres
+fuentes ya existentes en data/processed/ y data/raw/, sin ingesta nueva:
+trayectoria por temporada (roster_career_stats.csv / league_player_career_stats.csv,
+output crudo de PlayerCareerStats), bio (leída directo de
+data/raw/player_common_info/{player_id}.csv si está cacheado -- nunca
+dispara una llamada de red desde un request HTTP), y "cualidades"
+(compute_style_profile() de src/lineup_synergy.py, mismos 4 ejes que el
+motor de sinergia, con umbrales de presentación que no afectan a
+ninguna simulación).
 """
 
 from __future__ import annotations
@@ -49,10 +35,9 @@ router = APIRouter()
 
 SEASON_COLUMNS = ["SEASON_ID", "TEAM_ABBREVIATION", "GP", "MIN", "PTS", "REB", "AST", "STL", "BLK", "FG_PCT", "FG3_PCT", "FT_PCT"]
 
-# Umbrales de PRESENTACIÓN para etiquetar el perfil de estilo en el popup
-# -- puramente descriptivos, no se usan en ningún cálculo de simulación
-# (a diferencia de DEFAULT_USAGE_THRESHOLD, que sí es un parámetro real
-# del modelo de sinergia y se reutiliza aquí tal cual).
+# Umbrales de PRESENTACIÓN para etiquetar el estilo -- descriptivos, no
+# usados en simulación (a diferencia de DEFAULT_USAGE_THRESHOLD, que sí
+# es del modelo de sinergia).
 PLAYMAKING_LABEL_THRESHOLD = 6.0
 SPACING_LABEL_THRESHOLD = 6.0
 INTERIOR_LABEL_THRESHOLD = 8.0
@@ -106,18 +91,12 @@ def _read_bio(paths, player_id: int) -> Optional[dict[str, Any]]:
 
 def _find_projection_row(paths, player_id: int) -> Optional[pd.Series]:
     """Fila de aging_curve_projection.csv (roster propio) o
-    league_player_projections.csv (liga) de este jugador -- reutilizada
-    tanto por _find_qualities como por _projected_season_row, un solo
-    punto de búsqueda para no divergir entre las dos.
-
-    league_player_projections.csv ya trae `risk_score` (se calcula al
-    construir la liga completa). aging_curve_projection.csv NO -- es el
-    output crudo de aging_curve.py, previo al merge con injury_risk.csv
-    que hace dashboard/data_loader.load_roster_overview -- así que para
-    el roster propio se replica ese mismo merge aquí, por player_id.
-    Sin esto, `_projected_season_row` no tiene manera de saber que un
-    jugador con riesgo de lesión alto no va a jugar los 82 partidos.
-    """
+    league_player_projections.csv (liga) -- punto único de búsqueda para
+    _find_qualities y _projected_season_row. aging_curve_projection.csv
+    no trae `risk_score` (a diferencia del CSV de liga), así que aquí se
+    replica el merge con injury_risk.csv que hace
+    load_roster_overview -- sin esto no hay forma de saber que un
+    jugador de alto riesgo no jugará los 82 partidos."""
     aging_path = paths["processed"] / "aging_curve_projection.csv"
     if aging_path.exists():
         df = pd.read_csv(aging_path)
@@ -171,16 +150,10 @@ PROJECTED_TOTAL_COLUMNS = [
 
 
 def _projected_season_row(row: Optional[pd.Series], config) -> Optional[dict[str, Any]]:
-    """Temporada proyectada (la que simula team_config.yaml, p.ej.
-    "2026-27") como una fila más de la trayectoria -- para comparar de
-    un vistazo si la proyección cuadra con la progresión de temporadas
-    reales anteriores. Mismas columnas que SEASON_COLUMNS, marcada con
-    `is_projection` (el frontend la resalta y no la trata como dato
-    histórico real). Devuelve None si a la fila le falta alguna columna
-    de totales proyectados (p.ej. una fila sintética de test que solo
-    trae los *_per36 para las cualidades) -- degradar sin fallar es
-    mejor que un 500 por una tabla incompleta.
-    """
+    """Temporada proyectada como una fila más de la trayectoria, marcada
+    con `is_projection`. None si falta alguna columna de totales
+    proyectados (p.ej. fila sintética de test) -- degradar sin fallar es
+    mejor que un 500."""
     if row is None or any(col not in row.index for col in PROJECTED_TOTAL_COLUMNS):
         return None
     games_per_season = config["simulation"]["games_per_season"]
@@ -188,22 +161,10 @@ def _projected_season_row(row: Optional[pd.Series], config) -> Optional[dict[str
     if team_abbreviation is None or pd.isna(team_abbreviation):
         team_abbreviation = config["team"].get("abbreviation")
 
-    # GP refleja el riesgo de lesión real del jugador -- sin esto, todos
-    # los jugadores mostrarían los games_per_season completos (82), como
-    # si nadie se fuera a lesionar nunca. Misma fórmula EXACTA que ya usa
-    # select_roster_view() para la columna
-    # "GP" del resto de tablas (ver simulation.compute_expected_games_played):
-    # la media de la binomial negativa que sortea sample_injury_absences,
-    # no una aproximación aparte.
-    #
-    # PTS/REB/AST/STL/BLK/MIN de aging_curve_projection.csv son totales a
-    # PLENA SALUD (minutes_projection * games_per_season, sin descontar
-    # ausencias -- mismo criterio que usa hoy la tabla de roster en modo
-    # "Totales"). Aquí SÍ se escalan por el mismo factor de disponibilidad
-    # que GP: sin hacerlo, el modo "Por partido" del popup saldría
-    # inflado -- misma producción total repartida entre menos partidos
-    # jugados da un promedio irreal más alto de lo que el propio modelo
-    # de riesgo predice.
+    # GP usa la misma fórmula que select_roster_view() (compute_expected_games_played).
+    # PTS/REB/AST/etc de aging_curve_projection.csv son totales a PLENA
+    # SALUD -- se escalan aquí por el mismo factor de disponibilidad que
+    # GP, si no el modo "Por partido" del popup saldría inflado.
     risk_score = row.get("risk_score")
     if pd.notna(risk_score):
         games = round(float(compute_expected_games_played(np.array([risk_score]), games_per_season)[0]))
@@ -264,13 +225,10 @@ def get_player(player_id: int):
 
 @router.get("/player/{player_id}/shot-chart")
 def get_player_shot_chart(player_id: int):
-    """Tiros reales (LOC_X/LOC_Y) de la temporada real más reciente del
-    jugador -- SOLO lee data/processed/roster_shot_charts.csv (generado
-    por data_pipeline.build_roster_shot_charts_dataset, ejecutado como
-    parte de la ingesta), nunca dispara una llamada a nba_api desde este
-    request (mismo principio que el resto de este router). Si el CSV no
-    existe o el jugador no tiene tiros cacheados, devuelve una lista
-    vacía -- el frontend lo trata como "sin datos", no como error."""
+    """Tiros reales (LOC_X/LOC_Y) de la temporada más reciente -- solo lee
+    roster_shot_charts.csv, nunca dispara una llamada a nba_api. Lista
+    vacía si no hay CSV o tiros cacheados; el frontend lo trata como
+    "sin datos"."""
     config = load_config()
     paths = get_paths(config)
     path = paths["processed"] / "roster_shot_charts.csv"

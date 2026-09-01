@@ -6,45 +6,24 @@ Modelo de sinergia de alineación: ajusta el Game Score de equipo que usa
 que comparten cancha, en vez de sumar sus contribuciones como si fueran
 independientes.
 
-LIMITACIÓN DE DATOS IMPORTANTE
--------------------------------
-Este roster nunca ha compartido cancha -- es un roster hipotético para
-2026-27. `nba_api` sí tiene un endpoint de estadísticas de alineaciones
-reales (`leaguedashlineups`), pero no sirve de nada aquí: no existen
-minutos jugados juntos de estos jugadores concretos que consultar. Por
-eso este módulo NO intenta medir sinergia empírica -- la DERIVA de los
-perfiles estadísticos proyectados por `aging_curve.py` (uso, creación de
-juego, espaciado, presencia interior), no de partidos reales jugados
-juntos.
+Este roster nunca ha compartido cancha -- es hipotético para 2026-27, así
+que no hay minutos jugados juntos que consultar en `leaguedashlineups`.
+Por eso la sinergia se DERIVA de los perfiles estadísticos proyectados
+por `aging_curve.py` (uso, creación de juego, espaciado, presencia
+interior), no de partidos reales. Por la misma razón tampoco usa
+`role_expected` de team_config.yaml: ese campo es descriptivo para
+lectura humana, no una entrada de cálculo.
 
-TAMPOCO usa `role_expected` de team_config.yaml a propósito: ese campo es
-descriptivo (para que un humano lea el YAML), no una entrada de cálculo
--- de hecho `resolve_player_ids.py --fill-config` lo borra al reescribir
-el archivo. Los "roles" que usa este módulo salen de las cuatro métricas
-estadísticas de abajo, derivadas de datos reales de nba_api, no de una
-etiqueta de texto escrita a mano.
-
-FUNDAMENTO PARA LOS DOS EFECTOS MODELADOS
---------------------------------------------
-1. `usage_clash` -- penalización cuando DOS jugadores de alto "usage"
-   comparten cancha. Bien documentado en analítica pública: la eficiencia
-   de un jugador cae según sube su propio usage (hay una curva
-   volumen/eficiencia por jugador), y concentrar el uso en pocas estrellas
-   beneficia a los jugadores de rol -- lo contrario, varias estrellas de
-   alto uso a la vez, genera fricción ("solo hay un balón"). Ver
-   "Discovering the Efficiency Frontier" (hooponomics) y la literatura de
-   usage rate vs. TS%/eficiencia general.
-2. `playmaking_spacing_synergy` -- bonus cuando un jugador de alta
-   creación de juego (asistencias) comparte cancha con uno de alto
-   espaciado (volumen de triples): el manejador abre líneas de
-   penetración que el tirador aprovecha, y el tirador abre el campo para
-   el manejador -- sabiduría de básquet ampliamente aceptada (efecto
-   "gravedad" de los tiradores), no una sola fuente citable puntual.
-
-Ambos efectos se ponderan por cuánto podrían compartir cancha
-(`pair_weight = min(minutes_i, minutes_j) / 48`) -- una aproximación,
-porque no hay datos de rotación/alternancia real para saber si dos
-jugadores concretos están en cancha a la vez o se turnan.
+Dos efectos modelados, ambos con respaldo en analítica pública de
+básquet: `usage_clash` penaliza a dos jugadores de alto "usage"
+compartiendo cancha (la eficiencia cae según sube el uso propio, y
+concentrar el uso en pocas estrellas beneficia al resto -- "solo hay un
+balón"; ver "Discovering the Efficiency Frontier", hooponomics).
+`playmaking_spacing_synergy` da un bonus cuando un creador de juego
+comparte cancha con un tirador de volumen (efecto "gravedad" del
+tirador). Ambos se ponderan por cuánto podrían compartir cancha
+(`pair_weight = min(minutes_i, minutes_j) / 48`), una aproximación ya
+que no hay datos de rotación real.
 """
 
 from __future__ import annotations

@@ -211,8 +211,7 @@ def test_compute_latest_real_season_stats_uses_the_most_recent_season_per_game()
 
 
 def test_compute_latest_real_season_stats_handles_missing_shooting_columns():
-    """FG_PCT/FG3_PCT no siempre están (p.ej. career_stats_df sintético de
-    otros tests) -- no debe romper, solo devolver NaN para esas dos."""
+    # FG_PCT/FG3_PCT no siempre están -- no debe romper, solo devolver NaN
     career = pd.DataFrame([_career_row(1, "2024-25", 70, 2000, 1200, name="Player")])
 
     result = compute_latest_real_season_stats(career)
@@ -260,9 +259,7 @@ def test_compute_coy_candidates_drops_teams_without_prior_data():
 
 
 def test_all_star_selections_has_no_minimum_games_or_minutes_threshold():
-    """El All-Star se vota a mitad de temporada -- ni el filtro de mpg de
-    MVP/DPOY ni el umbral de 65 partidos de los quintetos de fin de
-    temporada deben aplicarse aquí."""
+    # se vota a mitad de temporada -- no aplican el filtro de mpg ni el umbral de 65 partidos
     df = pd.DataFrame([
         _player_row(1, "Low Minutes High Value", game_score_per36=30.0, mpg=10.0, risk_score=0.9),
     ])
@@ -281,7 +278,7 @@ def test_all_star_selections_splits_by_conference_when_available():
 
 
 def test_all_star_selections_falls_back_to_flat_ranking_without_conference():
-    """Scope 'own': un solo equipo, sin conferencia -- top_n plano."""
+    # scope 'own': un solo equipo, sin conferencia -- top_n plano
     df = pd.DataFrame([
         _player_row(1, "A", game_score_per36=20.0),
         _player_row(2, "B", game_score_per36=15.0),
@@ -292,8 +289,7 @@ def test_all_star_selections_falls_back_to_flat_ranking_without_conference():
 
 
 def _all_nba_pool(n_per_position=3, risk_score=0.0):
-    """Roster sintético con suficientes G/F/C para llenar los 3 quintetos
-    All-NBA (2G+2F+1C cada uno -- necesita >=6 G, >=6 F, >=3 C)."""
+    # roster sintético con suficientes G/F/C para llenar los 3 quintetos All-NBA (2G+2F+1C cada uno)
     rows = []
     pid = 1
     for position, count in [("Guard", max(n_per_position, 6)), ("Forward", max(n_per_position, 6)), ("Center", max(n_per_position, 3))]:
@@ -315,7 +311,6 @@ def test_all_nba_teams_ranks_best_players_into_the_first_team():
     result = compute_all_nba_teams(_all_nba_pool(), GAMES_PER_SEASON)
     first_team_guards = result[(result["team"] == ALL_NBA_TEAM_NAMES[0]) & (result["position_slot"] == "G")]
     second_team_guards = result[(result["team"] == ALL_NBA_TEAM_NAMES[1]) & (result["position_slot"] == "G")]
-    # G0/G1 tienen más season_value que G2/G3 (game_score_per36 decreciente por índice).
     assert set(first_team_guards["player_name"]) == {"G0", "G1"}
     assert set(second_team_guards["player_name"]) == {"G2", "G3"}
 
@@ -327,7 +322,7 @@ def test_all_nba_teams_never_repeats_a_player_across_teams():
 
 def test_all_nba_teams_excludes_players_below_the_games_threshold():
     df = _all_nba_pool(risk_score=0.0)
-    # Un solo jugador con riesgo alto -- 82 * (1 - 0.5) = 41 < 65, inelegible.
+    # 82 * (1 - 0.5) = 41 < 65, inelegible
     df.loc[df["player_name"] == "G0", "risk_score"] = 0.5
     result = compute_all_nba_teams(df, GAMES_PER_SEASON)
     assert "G0" not in result["player_name"].tolist()
@@ -335,7 +330,7 @@ def test_all_nba_teams_excludes_players_below_the_games_threshold():
 
 def test_all_nba_teams_respects_a_custom_games_threshold():
     df = _all_nba_pool()
-    df["risk_score"] = 0.3  # 82*(1-0.3) = 57.4 -- inelegible con 65, elegible con 50.
+    df["risk_score"] = 0.3  # 82*(1-0.3) = 57.4 -- inelegible con 65, elegible con 50
     assert compute_all_nba_teams(df, GAMES_PER_SEASON, min_games_played=65).empty
     assert not compute_all_nba_teams(df, GAMES_PER_SEASON, min_games_played=50).empty
 
@@ -348,8 +343,7 @@ def test_all_nba_teams_excludes_players_without_known_position():
 
 
 def test_all_nba_teams_leaves_a_slot_empty_when_no_eligible_candidate():
-    """Roster sin ningún pívot real -- el cupo de C debe quedar vacío en
-    vez de rellenarse con un jugador de otra posición."""
+    # sin ningún pívot real, el cupo de C debe quedar vacío en vez de rellenarse con otra posición
     df = _all_nba_pool()
     df = df[df["position"] != "Center"]
     result = compute_all_nba_teams(df, GAMES_PER_SEASON)
@@ -367,8 +361,7 @@ def test_all_nba_teams_include_offensive_comparison_stats_and_team_record():
 
 def test_all_defensive_teams_ranks_by_defensive_value_not_offensive_value():
     df = pd.DataFrame([
-        # G0: mejor Game Score ofensivo, peor defensa -- no debería entrar.
-        _player_row(1, "G0", position="Guard", game_score_per36=30.0, stl_per36=0.1, blk_per36=0.1),
+        _player_row(1, "G0", position="Guard", game_score_per36=30.0, stl_per36=0.1, blk_per36=0.1),  # mejor ofensa, peor defensa
         _player_row(2, "G1", position="Guard", game_score_per36=5.0, stl_per36=4.0, blk_per36=3.0),
         _player_row(3, "G2", position="Guard", game_score_per36=5.0, stl_per36=3.5, blk_per36=2.5),
         _player_row(4, "F0", position="Forward", stl_per36=0.1, blk_per36=0.1),
@@ -377,8 +370,7 @@ def test_all_defensive_teams_ranks_by_defensive_value_not_offensive_value():
     ])
     result = compute_all_defensive_teams(df, GAMES_PER_SEASON)
     first_team_guards = result[(result["team"] == ALL_DEFENSIVE_TEAM_NAMES[0]) & (result["position_slot"] == "G")]
-    # G1 y G2 defienden mucho mejor que G0 -- deben ganarle el cupo (solo 2 de 3 caben).
-    assert set(first_team_guards["player_name"]) == {"G1", "G2"}
+    assert set(first_team_guards["player_name"]) == {"G1", "G2"}  # defienden mejor, ganan el cupo
 
 
 def test_all_defensive_teams_has_two_teams_not_three():
@@ -425,9 +417,7 @@ def test_all_star_selections_labels_starters_within_each_conference_independentl
     ])
     result = compute_all_star_selections(df, GAMES_PER_SEASON, n_per_conference=1, n_starters_per_conference=1)
 
-    # East Best es "peor" en valor absoluto que West Best, pero al ser el
-    # ÚNICO de su conferencia, también debe salir "Titular" -- el split
-    # es POR conferencia, no global.
+    # East Best es peor en valor absoluto, pero al ser único de su conferencia también sale Titular
     row = result[result["player_name"] == "East Best"].iloc[0]
     assert row["selection_type"] == "Titular"
 
@@ -515,7 +505,7 @@ def test_commissioner_additions_noop_when_quota_already_met():
 
 
 def test_commissioner_additions_fill_the_international_shortfall():
-    # 24 seleccionados, todos de EE.UU. -- 0 internacionales, por debajo del mínimo 8.
+    # 24 seleccionados, todos de EE.UU. -- 0 internacionales, por debajo del mínimo 8
     selections = pd.DataFrame([_player_row(i, f"Sel{i}", country="USA") for i in range(24)])
     quota = check_all_star_nationality_quota(selections)  # mínimos por defecto: 16 US / 8 intl
     pool = _pool_with_countries(n_us=0, n_international=10)
@@ -542,7 +532,7 @@ def test_commissioner_additions_pick_the_highest_value_eligible_player_first():
 def test_commissioner_additions_never_repick_an_already_selected_player():
     selections = pd.DataFrame([_player_row(i, f"Sel{i}", country="USA") for i in range(24)])
     quota = check_all_star_nationality_quota(selections)
-    # El pool incluye a los 24 ya seleccionados -- no deben poder "añadirse" de nuevo.
+    # el pool incluye a los 24 ya seleccionados -- no deben poder añadirse de nuevo
     pool = pd.concat([selections, _pool_with_countries(n_us=0, n_international=10)], ignore_index=True)
 
     result = add_commissioner_picks_for_nationality_quota(pool, selections, quota)
@@ -593,10 +583,7 @@ def test_mvp_candidates_include_offensive_comparison_stats_and_team_record():
 
 
 def test_dpoy_candidates_include_full_comparison_stats():
-    """El ranking (dpoy_score) sigue siendo puramente defensivo, pero las
-    columnas devueltas incluyen también PPG/APG/tiro, para que la vista
-    previa al pasar el ratón en webapp/ muestre el mismo set de stats
-    que el resto de premios."""
+    # dpoy_score sigue siendo puramente defensivo, pero las columnas devueltas incluyen PPG/APG/tiro
     df = pd.DataFrame([_player_row_with_stats(1, "Defender", pf_projected=200.0)])
     result = compute_dpoy_candidates(df, GAMES_PER_SEASON, team_record={1: "50-32"}, top_n=5)
 
@@ -622,9 +609,7 @@ def test_roy_candidates_include_offensive_comparison_stats():
 
 
 def test_comparison_stats_are_optional_and_do_not_break_without_them():
-    """Los candidatos que no traigan PPG/RPG/etc en player_df (esquema
-    antiguo o CSV incompleto) no deben fallar -- solo se omiten esas
-    columnas, degradando en vez de romper."""
+    # candidatos sin PPG/RPG/etc en player_df no deben fallar -- solo se omiten esas columnas
     df = pd.DataFrame([_player_row(1, "Star", game_score_per36=22.0, mpg=36.0)])
     result = compute_mvp_candidates(df, GAMES_PER_SEASON, top_n=5)
 

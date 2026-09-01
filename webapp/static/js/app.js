@@ -36,9 +36,8 @@ function renderHeader(status) {
   document.getElementById("page-subtitle").textContent = `${status.team.season} — Simulador Monte Carlo`;
 }
 
-/** selector: botones del grupo. panelPrefix: prefijo COMPLETO del id de
- * panel de ESTE grupo (p.ej. "subtab-team-") -- así un grupo nunca toca
- * los paneles `hidden` del otro grupo. */
+/** selector: botones del grupo. panelPrefix: prefijo completo del id de
+ * panel de este grupo -- así un grupo nunca toca los paneles del otro. */
 function setupTabs(selector, panelPrefix, dataAttr, onSelect) {
   const buttons = document.querySelectorAll(selector);
   buttons.forEach((button) => {
@@ -64,9 +63,8 @@ function renderActiveSubTab(group) {
   return views[key].render(container);
 }
 
-/** Solo las TRES secciones reales de la app -- el splash (ver
- * views/splash.js) ya no es una de ellas, vive en su propio overlay
- * (#splash) por encima de .app-shell, no en #top-tabs. */
+/** Solo las tres secciones reales de la app -- el splash vive en su
+ * propio overlay (#splash), no en #top-tabs. */
 function renderTopTab(key) {
   if (key === "mi-equipo") return renderActiveSubTab("mi-equipo");
   if (key === "liga-nba") return renderActiveSubTab("liga-nba");
@@ -76,14 +74,11 @@ function renderTopTab(key) {
 
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** Overlay de transición al cambiar de pestaña de primer nivel (Mi
- * equipo / Liga NBA / Explicador) Y al entrar desde el splash -- el
- * jugador animado cruza la pantalla mientras la pestaña de destino se
- * renderiza detrás. Con `prefers-reduced-motion` se salta del todo
- * (cambio instantáneo), tal como exige la propia skill de UI/UX de este
- * proyecto. La duración mínima visible (600ms) y la carga real de datos
- * corren en paralelo -- el overlay espera al que tarde más de los dos,
- * nunca a la suma. */
+/** Overlay de transición al cambiar de pestaña de primer nivel y al
+ * entrar desde el splash -- el jugador animado cruza la pantalla
+ * mientras la pestaña de destino se renderiza detrás. Con
+ * `prefers-reduced-motion` se salta del todo. Duración mínima (600ms) y
+ * carga real de datos corren en paralelo, el overlay espera al más lento. */
 let navTransitionGeneration = 0;
 
 async function withNavTransition(key, doSwitch) {
@@ -92,11 +87,9 @@ async function withNavTransition(key, doSwitch) {
     return renderTopTab(key);
   }
 
-  // Contador de generación: un clic rápido durante una transición en
-  // curso no debe dejar que el `setTimeout` de limpieza de la
-  // transición VIEJA borre el contenido que la transición NUEVA acaba
-  // de insertar -- cada invocación solo limpia si sigue siendo la más
-  // reciente cuando le toca su turno.
+  // Contador de generación: un clic rápido no debe dejar que el
+  // setTimeout de limpieza de una transición VIEJA borre lo que la nueva
+  // acaba de insertar -- cada invocación solo limpia si sigue vigente.
   const generation = ++navTransitionGeneration;
 
   const overlay = document.getElementById("nav-transition");
@@ -117,18 +110,15 @@ async function withNavTransition(key, doSwitch) {
 }
 
 /** Navegación programática -- usada por los accesos rápidos del splash
- * y por el "volver a Inicio" del logo, para saltar directo a una
- * sub-pestaña concreta con la misma transición que un clic real en la
- * barra de pestañas. */
+ * y el "volver a Inicio", para saltar a una sub-pestaña con la misma
+ * transición que un clic real. */
 function navigateTo(topKey, subKey) {
   const topButton = document.querySelector(`#top-tabs [data-tab="${topKey}"]`);
   if (!topButton) return;
 
-  // El estado de la sub-pestaña (y su botón activo) se fija ANTES de
-  // arrancar la transición -- withNavTransition llama a renderTopTab
-  // de forma síncrona hasta su primer await, y renderActiveSubTab lee
-  // state.activeSubTab en ese mismo instante síncrono. Si esta
-  // asignación fuera después, renderTopTab leería el valor VIEJO.
+  // El estado de sub-pestaña se fija ANTES de la transición --
+  // withNavTransition llama a renderTopTab de forma síncrona hasta su
+  // primer await, así que si esto fuera después leería el valor viejo.
   if (subKey) {
     const subSelector = topKey === "mi-equipo" ? "#sub-tabs-team" : "#sub-tabs-league";
     const subPrefix = topKey === "mi-equipo" ? "subtab-team-" : "subtab-league-";
@@ -149,10 +139,8 @@ function hideSplash() {
   document.getElementById("splash").classList.add("dismissed");
 }
 
-/** Entrar a la app desde el splash: lo mismo que navigateTo, más
- * descartar el overlay de splash. Es el `enter` que recibe
- * views/splash.js -- el splash en sí no sabe nada de cómo está montado
- * el shell de pestañas, solo pide "llévame a X". */
+/** Entrar a la app desde el splash: navigateTo + descartar el overlay.
+ * Es el `enter` que recibe views/splash.js. */
 function enterApp(topKey, subKey) {
   hideSplash();
   navigateTo(topKey, subKey);
@@ -183,10 +171,8 @@ async function bootstrap() {
     renderActiveSubTab("liga-nba");
   });
 
-  // El shell de pestañas (por defecto Mi equipo > Roster) se renderiza en
-  // paralelo al splash, no después de descartarlo -- así entrar se siente
-  // instantáneo (los datos ya están ahí cuando termina la transición) en
-  // vez de esperar a que el usuario haga clic para empezar a pedirlos.
+  // El shell de pestañas se renderiza en paralelo al splash, no después
+  // de descartarlo -- así entrar se siente instantáneo.
   const teamRender = renderActiveSubTab("mi-equipo");
 
   const rosterResult = await api.roster("per_game").catch(() => null);

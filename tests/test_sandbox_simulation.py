@@ -25,19 +25,11 @@ def _make_pool_row(player_id, name, team, game_score_per36, mpg, risk=0.2, fatig
         "position": "G",
         "game_score_per36": game_score_per36,
         "minutes_per_game_last_season": mpg,
-        # minutes_projection (el minutaje REAL en SU equipo, ya normalizado
-        # por league_simulation.py): solo hace falta para que
-        # compute_league_average_game_score_per36 pueda leerlo al recalibrar
-        # la línea base de liga -- distinto de minutes_per_game_last_season,
-        # que es lo que simulate_custom_roster usa como input "en bruto" a
-        # normalize_rotation_minutes para el roster hipotético.
+        # minutes_projection: minutaje real ya normalizado, distinto del input "en bruto" usado por normalize_rotation_minutes.
         "minutes_projection": mpg,
         "risk_score": risk,
         "fatigue_score": fatigue,
-        # Tasa por-36 (independiente del equipo) + PPG "real" en SU equipo
-        # (mpg real, no la rotación de 240 del roster hipotético) -- para
-        # el test que comprueba que compute_roster_player_stats recalcula
-        # en vez de copiar este PPG tal cual.
+        # PPG real precargado, para verificar que compute_roster_player_stats lo recalcula en vez de copiarlo.
         "PTS_per36_projected": pts_per36,
         "PPG": pts_per36 * mpg / 36.0,
     }
@@ -107,10 +99,7 @@ def test_simulate_custom_roster_rejects_unknown_player_id(sandbox_config):
 
 
 def test_simulate_custom_roster_normalizes_minutes_to_240(sandbox_config, monkeypatch):
-    """La rotación elegida debe sumar TOTAL_TEAM_MINUTES_PER_GAME (240),
-    igual que league_simulation.project_team_roster para los 30 equipos
-    reales -- se comprueba interceptando la llamada a run_monte_carlo en
-    vez de inferirlo del resultado simulado (ruidoso)."""
+    """La rotación debe sumar TOTAL_TEAM_MINUTES_PER_GAME (240); se intercepta run_monte_carlo en vez de inferirlo del resultado (ruidoso)."""
     captured = {}
 
     def fake_run_monte_carlo(player_ids, game_score_per36, minutes_projection, *args, **kwargs):
@@ -147,9 +136,7 @@ def test_compute_roster_player_stats_returns_one_row_per_player_sorted_by_game_s
     view = compute_roster_player_stats(sandbox_config, [1, 2, 3, 4, 5])
 
     assert len(view) == 5
-    # El fixture ya da game_score_per36 decreciente para pid 1..5 (20, 18,
-    # 12, 11, 9) -- confirma que el orden de salida es por game_score, no
-    # simplemente el orden de entrada (que aquí coincide a propósito).
+    # Fixture ya viene con game_score_per36 decreciente para pid 1..5, coincide con orden de entrada a propósito.
     assert list(view["player_id"]) == [1, 2, 3, 4, 5]
     assert list(view["game_score_per36"]) == sorted(view["game_score_per36"], reverse=True)
 
@@ -174,11 +161,7 @@ def test_compute_roster_player_stats_rejects_invalid_mode(sandbox_config):
 
 
 def test_compute_roster_player_stats_recalculates_ppg_for_new_minutes_not_real_team_ppg(sandbox_config):
-    """Player 1 (Star A) tenía 34 mpg REALES en su equipo real (PPG real
-    precargado en el pool de prueba) -- en un roster de solo 5 jugadores
-    normalizado a 240, sus minutos nuevos son distintos (240 * 34/rotación),
-    así que su PPG recalculado NO debe coincidir con el PPG "real" del pool,
-    que es exactamente lo que este endpoint tenía que arreglar."""
+    """El PPG recalculado para el roster de 5 (minutos normalizados a 240) no debe coincidir con el PPG real del pool."""
     pool = load_player_pool(sandbox_config).set_index("player_id")
     real_team_ppg = pool.loc[1, "PPG"]
 
@@ -192,20 +175,12 @@ def test_compute_roster_player_stats_gp_matches_expected_games_played_formula(sa
     view = compute_roster_player_stats(sandbox_config, [1, 2, 3, 4, 5])
     row = view[view["player_id"] == 1].iloc[0]
 
-    # Star A tiene risk=0.2 en el fixture -> GP esperado = 82 * (1 - 0.2)
+    # risk=0.2 en el fixture -> GP esperado = 82 * (1 - 0.2)
     assert row["GP"] == pytest.approx(82 * 0.8, abs=1.0)
 
 
 def test_simulate_custom_roster_baseline_excludes_league_synergy(sandbox_config, monkeypatch):
-    """Regresión: el mismo roster sin editar daba 26 victorias en
-    /sandbox/simulate y 42 en /sandbox/league. Causa: run_monte_carlo
-    recibe synergy_matrix=None aquí (limitación documentada -- el sandbox
-    no modela sinergia), pero la línea base de "equipo promedio" SÍ
-    llevaba incorporada la sinergia media de los 30 equipos reales
-    (~+10.65 de net rating) -- comparando tu equipo (sin sinergia) contra
-    un rival que sí la tenía, cada partido. Mismo patrón que la línea base
-    rompiendo la suma cero, ya arreglado una vez en simulation.py -- aquí
-    se comprueba que no vuelva."""
+    """Regresión: la línea base de equipo promedio llevaba sinergia de liga incorporada mientras el sandbox no modela sinergia, inflando el rival cada partido."""
     captured = {}
 
     def fake_compute_league_average_game_score_per36(player_projections, league_mean_synergy_net_rating=0.0, **kwargs):

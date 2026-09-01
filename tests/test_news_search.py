@@ -1,7 +1,4 @@
-"""
-Tests de src/news_search.py (fase 2 del RAG de llm_explainer.py). Nunca
-llamamos a la API real de Tavily -- se mockea requests.post.
-"""
+"""Tests de src/news_search.py; nunca llamamos a la API real de Tavily, se mockea requests.post."""
 
 import sys
 from pathlib import Path
@@ -44,9 +41,7 @@ def test_search_recent_news_formats_results_as_paragraphs(monkeypatch):
     # Titulo y contenido en lineas separadas dentro del mismo parrafo.
     assert "Embiid se pierde el partido\nMolestias en la rodilla." in result
     assert "Los 76ers fichan a un ala-pivot\nAcuerdo de un año." in result
-    # Los DOS parrafos (uno por resultado) van separados por linea en
-    # blanco -- mismo formato que espera _split_into_snippets() de
-    # llm_explainer.py para trocear por parrafo.
+    # Parrafos separados por linea en blanco, formato esperado por _split_into_snippets().
     assert "\n\n" in result
     assert captured["json"]["query"] == "lesiones Philadelphia 76ers"
     assert captured["json"]["api_key"] == "test-key"
@@ -111,8 +106,7 @@ def test_clean_content_collapses_whitespace():
 
 
 def test_search_recent_news_cleans_real_world_noisy_result(monkeypatch):
-    # Ejemplo real de tabla de roster mal extraida por Tavily, con
-    # banners publicitarios repetidos.
+    # Ejemplo real de tabla de roster mal extraida por Tavily.
     noisy_content = (
         "|  |  |  |  |\n"
         " ---  --- |\n"

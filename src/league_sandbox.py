@@ -3,41 +3,27 @@ league_sandbox.py
 
 Simula la LIGA COMPLETA de 30 equipos con tu roster hipotético
 (sandbox_simulation.py) sustituido en el hueco de tu equipo -- para que
-Liga y Playoffs / Premios individuales reflejen el escenario que acabas
-de montar, no solo el resultado agregado de tu equipo (eso ya lo hacía
-sandbox_simulation.simulate_custom_roster).
+Liga y Playoffs / Premios individuales reflejen el escenario montado, no
+solo el resultado agregado de tu equipo.
 
-DECISIÓN DE DISEÑO: los jugadores que "tomas prestados" de otros equipos
-reales para tu roster hipotético NO se quitan de sus equipos reales --
-esos 29 equipos se simulan exactamente igual que en la liga real. Es la
-forma más simple de responder "¿cómo le iría a ESTE roster contra la
-liga tal como está hoy?", y es el mismo criterio que ya usa
-`league_simulation.project_own_team_for_league` (sustituye tu equipo,
-deja los otros 29 intactos).
+Los jugadores "tomados prestados" de otros equipos reales NO se quitan de
+sus equipos reales -- esos 29 se simulan igual que en la liga real (mismo
+criterio que `league_simulation.project_own_team_for_league`).
 
-POR QUÉ ESTO ES VIABLE EN VIVO (y `league_simulation.load_and_project_all_teams`
-no lo es): esa función re-deriva la proyección de los 577 jugadores de
-la liga desde sus stats de carrera CADA VEZ que se llama -- medido,
-~18 segundos, antes de simular un solo partido. Este módulo en cambio
-lee `league_player_projections.csv` (ya generado por
-`data_pipeline.py --league` + `league_simulation.py`, exactamente lo que
-ya usa `sandbox_simulation.load_player_pool`) para los 29 equipos que NO
-cambian -- medido, ~0s. La simulación de temporada regular (1.000
-temporadas) mide ~1.5s y los playoffs (1.000 temporadas) ~2s sobre esos
-mismos datos. Total: unos pocos segundos, no minutos -- vale la pena
-como acción síncrona con un estado de carga, no hace falta un job en
+Esto es viable en vivo porque lee `league_player_projections.csv` ya
+generado (~0s) para los 29 equipos sin tocar, en vez de re-derivar la
+proyección de los 577 jugadores desde stats de carrera como hace
+`league_simulation.load_and_project_all_teams` (~18s medidos). Regular
+season (1.000 temporadas) + playoffs (1.000) suman unos pocos segundos
+más, así que funciona como acción síncrona sin necesitar un job en
 background.
 
 Reutiliza `league_simulation.simulate_league_regular_season`,
-`build_round_robin_schedule` y `simulate_playoffs_once` tal cual (cero
-motor nuevo) y `sandbox_simulation.build_roster` para el roster
-hipotético. Las filas de jugador de los 29 equipos sin tocar se copian
-literalmente de `league_player_projections.csv` (todas sus columnas,
-incluidas country/posición/edad que `awards_projection.py` necesita);
-las de tu equipo se derivan de su fila REAL (mismo player_id, conserva
-country/posición/edad/game_score_per36/risk_score -- ninguno depende del
-equipo) con solo los campos que SÍ dependen de los minutos recalculados
-para la rotación nueva.
+`build_round_robin_schedule` y `simulate_playoffs_once` tal cual, y
+`sandbox_simulation.build_roster` para el roster hipotético. Las filas de
+los 29 equipos sin tocar se copian literalmente de
+`league_player_projections.csv`; las de tu equipo se derivan de su fila
+REAL, recalculando solo los campos que dependen de los minutos nuevos.
 """
 
 from __future__ import annotations
@@ -61,10 +47,8 @@ from simulation import DEFAULT_MONTE_CARLO_CONFIG
 DEFAULT_LEAGUE_LIVE_N_SEASONS = 1000
 DEFAULT_LEAGUE_LIVE_N_PLAYOFF_SEASONS = 1000
 
-# player_id_per36_projected -> total_projected: mismas columnas que
-# league_simulation.build_league_simulation_dataset recalcula desde
-# per-36. FG%/3P% quedan fuera a propósito (ratios, no dependen de
-# minutos).
+# Columna per-36 -> total, mismas que league_simulation.build_league_simulation_dataset
+# recalcula. FG%/3P% quedan fuera a propósito (ratios, no dependen de minutos).
 PER36_TO_TOTAL = {
     "PTS_per36_projected": "PTS_projected",
     "AST_per36_projected": "AST_projected",
@@ -107,11 +91,10 @@ def _compact_projection(game_score_per36, minutes_projection, risk_scores, fatig
 def _hypothetical_player_rows(
     config: Dict[str, Any], player_ids: List[int], my_team_id: int, my_abbrev: str, my_conference: str
 ) -> List[Dict[str, Any]]:
-    """Filas de jugador para TU equipo hipotético, con el mismo esquema
-    de columnas que `league_player_projections.csv` -- parten de la fila
-    REAL de cada jugador (conserva country/posición/edad/FG%/3P%/
-    game_score_per36/risk_score, ninguno depende del equipo) y solo
-    recalculan lo que sí depende de los minutos nuevos de la rotación."""
+    """Filas de jugador para TU equipo hipotético, mismo esquema de
+    columnas que `league_player_projections.csv` -- parten de la fila
+    REAL de cada jugador y solo recalculan lo que depende de los minutos
+    nuevos de la rotación."""
     games_per_season = config["simulation"]["games_per_season"]
     roster, minutes_projection = build_roster(config, player_ids)
 
@@ -141,9 +124,8 @@ def _hypothetical_player_rows(
 
 
 def _load_other_teams(config: Dict[str, Any], exclude_team_id: int) -> Tuple[pd.DataFrame, Dict[int, Dict[str, Any]]]:
-    """Los 29 equipos SIN tocar, leídos directo de `league_player_projections.csv`
-    (rápido -- ver el docstring del módulo). Devuelve (pool_df_sin_tu_equipo,
-    {team_id: proyección compacta})."""
+    """Los 29 equipos SIN tocar, leídos directo de `league_player_projections.csv`.
+    Devuelve (pool_df_sin_tu_equipo, {team_id: proyección compacta})."""
     pool = load_player_pool(config)
     pool = pool[pool["team_id"] != exclude_team_id].copy()
 
@@ -164,10 +146,10 @@ def simulate_hypothetical_league(
 ) -> Dict[str, Any]:
     """Orquestador principal: temporada regular + playoffs de los 30
     equipos con tu roster hipotético sustituido en el hueco de tu equipo.
-    Devuelve un dict con las mismas piezas que ya sirve la API real
+    Devuelve un dict con las mismas piezas que la API real
     (`regular_season_df`, `playoff_df`, `player_projections_df`) para que
-    el router pueda reutilizar `compute_conference_standings` y los
-    `awards_projection.compute_*` tal cual, sin duplicar esa lógica."""
+    el router reutilice `compute_conference_standings` y
+    `awards_projection.compute_*` sin duplicar lógica."""
     my_team_id = config["team"]["team_id"]
     my_abbrev = config["team"]["abbreviation"]
     my_conference = TEAM_CONFERENCE[my_abbrev]
@@ -256,9 +238,7 @@ def compute_hypothetical_awards(config: Dict[str, Any], league_result: Dict[str,
     """Mismos premios que `dashboard.data_loader.compute_awards_summary`
     (scope "league"), pero sobre `league_result` en memoria en vez de
     leer los CSV reales de disco -- llama a las mismas funciones puras de
-    `awards_projection.py` (documentadas como "no leen CSV, reusadas
-    tanto sobre el roster propio como sobre los 30 equipos"), así que no
-    hay lógica de premios duplicada aquí, solo el ensamblado de inputs."""
+    `awards_projection.py`, sin duplicar lógica de premios."""
     paths = get_paths(config)
     games_per_season = config["simulation"]["games_per_season"]
     player_df = league_result["player_projections_df"]
@@ -279,10 +259,8 @@ def compute_hypothetical_awards(config: Dict[str, Any], league_result: Dict[str,
     career_path = paths["processed"] / "league_player_career_stats.csv"
     career = pd.read_csv(career_path) if career_path.exists() else pd.DataFrame()
 
-    # COY (proxy) -- compara victorias simuladas contra las REALES de la
-    # temporada anterior. prior_season_standings.csv no depende del
-    # roster hipotético, así que se lee tal cual (mismo bloque que
-    # dashboard.data_loader.compute_awards_summary).
+    # COY (proxy): compara victorias simuladas contra las REALES del año
+    # anterior; prior_season_standings.csv no depende del roster hipotético.
     coy = None
     prior_path = paths["processed"] / "prior_season_standings.csv"
     if prior_path.exists():

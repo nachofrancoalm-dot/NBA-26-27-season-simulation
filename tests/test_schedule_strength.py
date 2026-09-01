@@ -1,8 +1,4 @@
-"""
-Tests de schedule_strength.py. Usan DataFrames sintéticos con el mismo
-esquema que team_schedule.csv (de ScheduleLeagueV2) y
-prior_season_standings.csv (de LeagueStandingsV3) -- no requieren red.
-"""
+"""Tests de schedule_strength.py con DataFrames sintéticos, sin red."""
 
 import sys
 from pathlib import Path

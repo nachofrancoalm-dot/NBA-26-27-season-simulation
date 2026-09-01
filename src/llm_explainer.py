@@ -36,10 +36,8 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 MODEL_ID = "llama-3.3-70b-versatile"
 
-# Etiqueta obligatoria de la seccion de noticias pegadas por el usuario --
-# nunca se mezcla sin marcar con las secciones de datos validados del
-# pipeline (ver build_news_section). Se referencia tambien desde el
-# system prompt para reforzar el criterio en la propia respuesta del modelo.
+# Etiqueta de la seccion de noticias pegadas por el usuario -- nunca se
+# mezcla sin marcar con las secciones de datos validados del pipeline.
 NEWS_SECTION_LABEL = (
     "## Noticias recientes (pegadas por el usuario, NO verificadas por el "
     "pipeline ni por el modelo -- pueden estar desactualizadas, incompletas "
@@ -95,9 +93,7 @@ def build_context_snapshot(config: Dict[str, Any]) -> str:
             ppg = row.get("PTS_projected", 0) / games_per_season
             rpg = row.get("REB_projected", 0) / games_per_season
             apg = row.get("AST_projected", 0) / games_per_season
-            # minutes_projection NO es una columna de aging_curve_projection.csv
-            # (esa vive en team_config.yaml, mergeada aparte por el dashboard) --
-            # se deriva de projected_total_minutes, que sí está en este CSV.
+            # minutes_projection no es columna de este CSV; se deriva de projected_total_minutes.
             mpg = row.get("projected_total_minutes", 0) / games_per_season
             lines.append(
                 f"- {row['player_name']}: {ppg:.1f} PPG, {rpg:.1f} RPG, {apg:.1f} APG, "
@@ -160,11 +156,7 @@ def build_context_snapshot(config: Dict[str, Any]) -> str:
 
     league_projections = _read_csv_if_exists(processed / "league_player_projections.csv")
     if league_projections is not None and "risk_score" in league_projections.columns:
-        # Riesgo de lesion AGREGADO por equipo de los 30 equipos reales de
-        # la liga -- distinto de la seccion "Riesgo de lesion por jugador"
-        # de arriba, que es solo del roster HIPOTETICO propio. Sin esta
-        # seccion el LLM no podia responder "que equipo tiene mas riesgo
-        # de lesion" porque solo veia el propio equipo en el contexto.
+        # Agregado de los 30 equipos reales, distinto del roster hipotetico de arriba.
         by_team = (
             league_projections.groupby("team_abbreviation")["risk_score"]
             .mean()
@@ -221,14 +213,8 @@ def _split_into_snippets(news_text: str) -> List[str]:
 def retrieve_relevant_news_snippets(news_text: str, question: str, top_k: int = 3) -> List[str]:
     """
     RAG minimo: TF-IDF + similitud coseno entre `question` y cada
-    fragmento de `news_text`, sin embeddings ni dependencias nuevas
-    (scikit-learn ya es dependencia principal del proyecto). Con el
-    volumen de texto que un usuario pega a mano (unos pocos articulos,
-    no un corpus masivo) es suficiente -- ver discusion de diseno.
-
-    Solo devuelve fragmentos con similitud > 0 (algo de solapamiento
-    lexico con la pregunta) -- si el texto pegado no tiene relacion con
-    lo que se pregunta, no se inyecta nada en el contexto.
+    fragmento de `news_text` (sin embeddings ni dependencias nuevas).
+    Solo devuelve fragmentos con similitud > 0.
     """
     if not news_text.strip() or not question.strip():
         return []
@@ -276,17 +262,10 @@ def explain_question(
 ) -> str:
     """
     Responde `question` usando Groq, grounded en context_snapshot (si no
-    se pasa, se construye uno con build_context_snapshot(config)). Lanza
-    RuntimeError si no hay API key disponible -- la capa de dashboard lo
-    captura para mostrar un aviso amigable en vez de un traceback.
-
-    `news_text` es opcional: texto pegado por el usuario (noticias,
-    injury reports, rumores de traspaso) que el pipeline no puede ver
-    porque no viene de ningun CSV calculado. Si se pasa, se recuperan
-    (RAG por TF-IDF) los fragmentos relevantes a `question` y se anaden
-    al contexto en una seccion claramente etiquetada como no verificada
-    -- ver build_news_section y NEWS_SECTION_LABEL. Nunca se mezcla con
-    context_snapshot sin esa etiqueta.
+    se pasa, se construye con build_context_snapshot(config)). Lanza
+    RuntimeError si no hay API key. `news_text` es opcional -- si se
+    pasa, se anaden al contexto los fragmentos relevantes recuperados
+    por RAG, en una seccion etiquetada como no verificada.
     """
     import groq
 

@@ -3,49 +3,26 @@ performance_curve.py
 
 Cuarto submódulo de la capa de contexto de temporada (ver roadmap en
 README.md): calcula Net Rating estimado en ventanas móviles sobre los
-`historical_comparables` (Heat 2010-11, Warriors 2016-17, Nets 2020-21,
-Suns 2022-23), para detectar arranques lentos de integración y picos de
-forma en playoffs -- la narrativa central de "efecto superequipo" que
-este proyecto busca validar por backtesting.
+`historical_comparables`, para detectar arranques lentos de integración
+y picos de forma en playoffs -- la narrativa central de "efecto
+superequipo" que este proyecto busca validar por backtesting. Opera por
+CASO (comparable histórico), no por jugador ni por partido del equipo
+simulado.
 
-Como injury_model.py y fatigue_accumulation.py, opera por CASO
-(comparable histórico), no por jugador ni por partido del equipo
-simulado -- es un tercer nivel de granularidad distinto.
-
-LIMITACIÓN DE DATOS / APROXIMACIÓN IMPORTANTE
--------------------------------------------------
-`nba_api` no expone Net Rating oficial (que promedia el ritmo de ambos
-equipos de un partido) a nivel de partido individual sin llamadas
-adicionales por partido. En su lugar, este módulo ESTIMA Net Rating por
-partido como:
+`nba_api` no expone Net Rating oficial a nivel de partido individual sin
+llamadas adicionales, así que este módulo lo ESTIMA:
 
     net_rating_estimate = PLUS_MINUS / posesiones_estimadas * 100
-
-donde `PLUS_MINUS` es el diferencial de puntos del partido (de
-`TeamGameLogs`, no de `TeamGameLog` -- ver `data_pipeline.py`) y
-`posesiones_estimadas` usa la fórmula estándar de analítica de básquet:
-
     POSS ≈ FGA - OREB + TOV + 0.44 * FTA
 
-Esto es una aproximación ampliamente usada (p. ej. Basketball-Reference),
-pero NO es el Off/Def Rating oficial de NBA.com (que promedia las
-posesiones estimadas de ambos equipos del partido). Para el propósito de
-este módulo -- comparar la FORMA RELATIVA de un mismo equipo a lo largo
-de su propia temporada -- es suficiente y evita llamadas adicionales por
-partido para obtener el boxscore del rival.
+Es una aproximación ampliamente usada (p. ej. Basketball-Reference) pero
+no el Off/Def Rating oficial de NBA.com; suficiente para comparar la
+forma relativa de un mismo equipo a lo largo de su propia temporada sin
+llamadas extra por el boxscore del rival.
 
-DISEÑO
-------
-1. `compute_net_rating_estimate()` -- añade la estimación por partido.
-2. `compute_rolling_net_rating()` -- media móvil configurable (10
-   partidos por defecto) ordenada cronológicamente, temporada regular +
-   playoffs en una sola secuencia continua por caso.
-3. `summarize_season_narrative()` -- por caso histórico: Net Rating de
-   arranque (primeros N partidos, configurable) vs. resto de temporada
-   regular, Net Rating de playoffs, `playoff_boost` (playoffs menos
-   temporada regular completa), y `trend_slope` (pendiente de una
-   regresión lineal simple del rolling Net Rating durante la temporada
-   regular -- positiva = el equipo mejora según avanza la temporada).
+`trend_slope` es la pendiente de una regresión lineal simple del rolling
+Net Rating durante la temporada regular (positiva = el equipo mejora
+según avanza la temporada).
 """
 
 from __future__ import annotations

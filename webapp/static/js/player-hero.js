@@ -1,18 +1,7 @@
 // player-hero.js -- gráfico de marca del splash y de la transición entre
-// pestañas: la foto REAL de un jugador del roster (cdn.nba.com, mismo
-// hotlink en vivo que ya usa playerPhoto() en el popup de jugador -- se
-// referencia por URL, nunca se descarga ni se guarda en el repo, igual
-// que los escudos de equipo) más un balón animado. Sustituye a un primer
-// intento de silueta ilustrada a mano (formas SVG genéricas para
-// cabeza/torso/piernas) que quedaba con un brazo apenas visible y una
-// pose poco convincente -- una foto real resuelve "un jugador de los
-// 76ers" de forma mucho más creíble que reintentar la anatomía a mano, y
-// evita además el riesgo de derechos de imagen de usar una foto de stock
-// sin licencia sacada de una búsqueda de Google.
-//
-// `player_id` viene de datos reales del roster (el primer jugador de
-// /api/roster, ya ordenado por relevancia -- ver home.js), así que la
-// foto cambia sola si el roster del config cambia, sin nada hardcodeado
+// pestañas: la foto REAL de un jugador del roster (cdn.nba.com, hotlink
+// en vivo, nunca guardada en el repo) más un balón animado. `player_id`
+// viene de datos reales del roster (/api/roster), sin nada hardcodeado
 // aquí sobre qué equipo o jugador es.
 
 import { playerPhoto } from "./ui.js";
@@ -40,8 +29,7 @@ function basketballGraphic() {
 }
 
 /** Arcos de "velocidad" detrás de la foto -- sugieren movimiento sin
- * intentar dibujar un cuerpo en marcha; mucho más fácil de acertar que
- * una pose anatómica y sigue leyéndose como "dinámico". */
+ * intentar dibujar un cuerpo en marcha. */
 function motionArcs() {
   return svgEl("svg", { class: "hero-motion", viewBox: "0 0 220 220", "aria-hidden": "true" }, [
     svgEl("path", { class: "motion-arc a1", d: "M 6,70 Q 70,45 132,70" }),
@@ -72,20 +60,11 @@ export function playerHeroCard(playerId, playerName, { extraClass = "", size = 1
   return stage;
 }
 
-/** Hero de la pantalla de entrada (splash): recorte de cuerpo entero
- * curado a mano (`webapp/static/img/`), no la foto circular del roster
- * que usa playerHeroCard() -- este archivo SÍ vive en el repo (a
- * diferencia de escudos/headshots, que se hotlinkean en vivo y nunca se
- * guardan, ver el resto de este proyecto). Es una foto real de un
- * jugador real, así que antes de commitear un reemplazo hay que
- * verificar los derechos de imagen -- mismo criterio que ya llevó a
- * descartar una foto de stock sin licencia para el hero original.
- *
- * Sin balón animado a propósito: la foto ya muestra al jugador con un
- * balón real en la mano -- añadir uno de dibujo al lado se vería
- * duplicado en vez de complementario (a diferencia de playerHeroCard,
- * que usa un headshot circular sin balón visible). Se mantiene el bob
- * suave y la sombra para que no se sienta estática. */
+/** Hero del splash: recorte de cuerpo entero curado a mano
+ * (`webapp/static/img/`) -- a diferencia de escudos/headshots, este
+ * archivo SÍ vive en el repo; verificar derechos de imagen antes de
+ * reemplazarlo. Sin balón animado a propósito: la foto ya muestra uno
+ * en la mano del jugador. */
 export function staticHeroImage(src, alt, extraClass = "") {
   const stage = document.createElement("div");
   stage.className = `hero-stage hero-stage-photo ${extraClass}`.trim();

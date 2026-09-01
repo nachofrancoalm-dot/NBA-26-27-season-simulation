@@ -8,9 +8,7 @@ import { courtLineup } from "../court.js";
 import { leaderboardChart, teamLeaderboardChart } from "../leaderboard.js";
 
 /** Doble clic en jugador Y en equipo para cualquier tabla de premios --
- * dataTable() ya soporta varias columnas con doble clic a la vez (ver
- * ui.js). Se omite la entrada de una columna que no exista en esa tabla
- * en particular (p.ej. COY no tiene player_name) sin que falle nada. */
+ * dataTable() soporta varias columnas con doble clic a la vez. */
 function awardsInteractions(teamIds) {
   return {
     hiddenColumns: ["player_id"],
@@ -27,34 +25,24 @@ function awardsInteractions(teamIds) {
   };
 }
 
-/** El backend NO redondea PPG/RPG/APG/etc en /api/awards (a diferencia
- * de dataTable(), que sí redondea a 2 decimales para mostrar) -- sin
- * esto, la vista previa mostraría "31.19570399944936" en vez de "31.2". */
+/** El backend no redondea PPG/RPG/APG/etc en /api/awards (a diferencia
+ * de dataTable()) -- sin esto se vería "31.19570399944936" en vez de "31.2". */
 function fmt1(value) {
   return typeof value === "number" ? value.toFixed(1) : value;
 }
 
 /** "anterior → actual" ya formateado, con "—" para el lado que falte --
- * usado solo por MIP (ver `fullStats` con `prevPrefix`). Nunca oculta
- * el stat entero solo porque falte un lado: mejor un "—" visible que un
- * hueco silencioso. */
+ * usado solo por MIP (ver `fullStats` con `prevPrefix`). */
 function comparisonValue(prev, current) {
   return `${prev != null ? fmt1(prev) : "—"} → ${current != null ? fmt1(current) : "—"}`;
 }
 
-/** Set de stats UNIFICADO para todos los premios individuales y
- * quintetos: PPG, RPG, APG, SPG, BPG, FG%, 3P%, récord de equipo y el
- * "valor" que de verdad ordena ESE premio en concreto
- * (mvp_score/dpoy_score/season_value/defensive_value -- distinto nombre
- * e incluso distinta fórmula según el premio, por eso `valueKey`/
- * `valueLabel` se pasan aparte en vez de asumir uno fijo).
- *
- * Sin `prevPrefix` (MVP/DPOY/ROY/6.º Hombre/quintetos): cada stat sale
- * de player_df, la temporada PROYECTADA -- nunca mezclada con datos
- * reales. Con `prevPrefix` ("prev_", solo MIP): cada stat se muestra
- * como comparación "real anterior → proyectada" (ver comparisonValue) --
- * MIP es el único premio pensado para mostrar de dónde viene el
- * jugador, no solo hacia dónde va.
+/** Set de stats unificado para todos los premios y quintetos: PPG, RPG,
+ * APG, SPG, BPG, FG%, 3P%, récord de equipo y el "valor" que ordena ESE
+ * premio (distinto nombre/fórmula según el premio, por eso `valueKey`/
+ * `valueLabel` se pasan aparte). Sin `prevPrefix`: stats de la temporada
+ * proyectada. Con `prevPrefix` ("prev_", solo MIP): comparación "real
+ * anterior → proyectada" (ver comparisonValue).
  */
 function fullStats(record, { valueKey, valueLabel, prevPrefix } = {}) {
   const stat = (label, key) => {
@@ -77,15 +65,10 @@ function fullStats(record, { valueKey, valueLabel, prevPrefix } = {}) {
   ].filter(Boolean);
 }
 
-/** Config de leaderboardChart() por premio -- qué columna manda el
- * largo de la barra (ver los `sort_values(...)` de
- * src/awards_projection.py, la misma columna que ya ordenaba la tabla),
- * qué stats mostrar en la vista previa, y el pie de foto (`captionFn`).
- * Función de `season` (temporada proyectada activa) porque MIP necesita
- * construir un pie DISTINTO por fila (cada jugador tiene su propia
- * `prev_season` real) -- por eso esto es una función, no un objeto
- * estático, y se llama dentro de `render()` en vez de vivir a nivel de
- * módulo. */
+/** Config de leaderboardChart() por premio -- columna que manda el largo
+ * de la barra, stats de la vista previa, y pie de foto (`captionFn`).
+ * Función de `season` porque MIP necesita un pie distinto por fila
+ * (cada jugador tiene su propia `prev_season` real). */
 function buildLeaderboardConfig(season) {
   const projectedCaption = () => `Temporada proyectada ${season}`;
   return {
@@ -97,11 +80,8 @@ function buildLeaderboardConfig(season) {
       statsFn: (r) => fullStats(r, { valueKey: "season_value", valueLabel: "Valor temporada" }),
       captionFn: projectedCaption,
     },
-    // MIP compara la temporada PROYECTADA contra la ÚLTIMA REAL ya
-    // jugada (prev_*, ver awards_projection.compute_latest_real_season_stats)
-    // -- DISTINTO del ranking en sí (`improvement`, ya visible como el
-    // valor de la barra), que usa la PENÚLTIMA real para medir cuánto
-    // mejoró un jugador de un año real a otro (ver compute_mip_candidates).
+    // MIP compara la proyectada contra la ÚLTIMA real jugada (prev_*) --
+    // distinto del ranking en sí (`improvement`), que usa la penúltima real.
     mip: {
       valueKey: "improvement",
       valueFormat: (v) => (typeof v === "number" ? `+${v.toFixed(1)}` : "—"),
@@ -116,10 +96,8 @@ function buildLeaderboardConfig(season) {
   };
 }
 
-/** COY es un premio de EQUIPO (este proyecto no modela entrenadores en
- * absoluto, ver awards_projection.compute_coy_candidates) -- barra por
- * win_improvement (victorias proyectadas menos las REALES del año
- * anterior), vista previa con las 3 columnas que ya tenía la tabla. */
+/** COY es un premio de EQUIPO (este proyecto no modela entrenadores) --
+ * barra por win_improvement (victorias proyectadas menos reales del año anterior). */
 function coyConfig() {
   return {
     valueKey: "win_improvement",
@@ -132,10 +110,8 @@ function coyConfig() {
   };
 }
 
-/** Ranking visual (foto + barra, ver leaderboard.js) para los premios
- * individuales con una columna de "valor" clara -- más minimalista y
- * legible que una tabla plana. `chartFn`: leaderboardChart (jugadores)
- * o teamLeaderboardChart (COY, equipos). */
+/** Ranking visual (foto + barra) para premios con columna de "valor"
+ * clara. `chartFn`: leaderboardChart (jugadores) o teamLeaderboardChart (COY). */
 function awardBlock(emoji, title, records, teamIds, config, chartFn = leaderboardChart) {
   const body =
     records && records.length
@@ -147,11 +123,8 @@ function awardBlock(emoji, title, records, teamIds, config, chartFn = leaderboar
 }
 
 export async function render(container) {
-  // Este endpoint es el más lento de la app con diferencia (~4s,
-  // compute_awards_summary corre pandas sin caché) -- de todas las vistas
-  // es donde más importa un esqueleto con movimiento en vez de texto
-  // estático, para que quede claro que sigue cargando y no que se quedó
-  // colgado.
+  // Endpoint más lento de la app (~4s, compute_awards_summary sin caché)
+  // -- el esqueleto con movimiento deja claro que sigue cargando.
   container.replaceChildren(skeleton(["title", "short"]), skeleton(["", "", "", ""]));
 
   const status = await api.status();
@@ -165,10 +138,8 @@ export async function render(container) {
 
   let data;
   try {
-    // Con un roster hipotético activo, los premios vienen del mismo
-    // POST /api/sandbox/league que ya calculó standings/playoffs (ver
-    // league.js) -- misma forma exacta que /api/awards, así que el resto
-    // de esta función no necesita ramificar por fuente.
+    // Con roster hipotético activo, los premios vienen del mismo
+    // POST /api/sandbox/league (misma forma que /api/awards).
     data = hypothetical ? hypothetical.result.awards : await api.awards(getScenario());
   } catch (err) {
     container.replaceChildren(bar, card([el("h2", {}, "Premios individuales"), emptyState(err.message)]));

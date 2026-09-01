@@ -69,9 +69,7 @@ def test_resolve_backtest_sweep_cases_expands_all_30_teams_per_season():
 
 
 def test_resolve_backtest_sweep_cases_uses_the_same_team_id_across_seasons():
-    # El team_id de nba_api es estable a través de mudanzas/cambios de
-    # nombre de franquicia -- el mismo team_id debe usarse en cada
-    # temporada, no reinterpretarse por abreviación histórica.
+    # team_id es estable a través de mudanzas/renombres de franquicia
     config = {"backtest_sweep": {"seasons": ["2010-11", "2024-25"]}}
 
     cases = resolve_backtest_sweep_cases(config)
@@ -88,15 +86,9 @@ def test_default_config_defines_a_multi_season_backtest_sweep():
 
 
 def test_backtest_sweep_includes_the_most_recent_completed_season():
-    """
-    El sweep debe llegar hasta la temporada COMPLETA más reciente, que es
-    la que usan las proyecciones como base. Se quedó una temporada corto
-    (hasta 2024-25 cuando ya existía 2025-26) y eso dejaba fuera al
-    campeón más reciente del análisis y de la calibración.
-    """
+    # regression: el sweep se quedaba una temporada corto y dejaba fuera al campeón más reciente
     config = load_config()
     seasons = config["backtest_sweep"]["seasons"]
     target_year = int(str(config["team"]["season"])[:4])
 
-    # La última del sweep debe ser la inmediatamente anterior a la simulada.
     assert int(str(seasons[-1])[:4]) == target_year - 1

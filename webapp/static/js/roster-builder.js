@@ -1,23 +1,14 @@
 // roster-builder.js -- roster hipotético editable del splash (ver
-// views/splash.js). Arranca IGUAL que el roster real curado del config
-// (mismos 13 player_id de "Mi equipo") -- no un roster vacío -- y deja
-// añadir, quitar y sustituir jugadores por cualquier otro de los 30
-// equipos reales (src/sandbox_simulation.py), entre un mínimo y un
-// máximo (MIN/MAX_ROSTER_SIZE, servidos por /api/sandbox/players).
+// views/splash.js). Arranca igual que el roster real del config y deja
+// añadir/quitar/sustituir jugadores de los 30 equipos reales
+// (src/sandbox_simulation.py), entre MIN/MAX_ROSTER_SIZE.
 //
-// La única acción de simulación es "Simular la liga completa con este
-// roster" (src/league_sandbox.py): sustituye tu roster en los 30 equipos
-// reales, simula la liga entera, y deja ese resultado activo
-// (hypothetical-league.js) para que Liga y Playoffs / Premios
-// individuales lo muestren en vez de los datos reales, hasta que se
-// vuelva a pulsar "Volver a los datos reales" en el banner de esas
-// pestañas. Antes había TAMBIÉN un botón "Simular este roster" que solo
-// corría el Monte Carlo de tu equipo contra un rival proxy genérico
-// (sandbox_simulation.py, sin el resto de la liga) -- quitado porque,
-// sin comparar contra los otros 29 equipos reales, ese número aportaba
-// poco frente al de la liga completa. La tabla de estadísticas
-// individuales por jugador (antes solo se cargaba tras ESE botón) ahora
-// se carga tras simular la liga -- ver runLeagueSimulation.
+// Única acción de simulación: "Simular la liga completa con este roster"
+// (src/league_sandbox.py) -- sustituye tu roster en los 30 equipos, simula
+// la liga entera y deja el resultado activo (hypothetical-league.js) para
+// que Liga y Playoffs / Premios lo muestren hasta volver a los datos
+// reales. La tabla de estadísticas individuales se carga tras simular la
+// liga (ver runLeagueSimulation).
 
 import { api } from "./api.js";
 import { el, teamBadge, emptyState, dataTable, pillToggle } from "./ui.js";
@@ -50,8 +41,7 @@ function rosterSlot(player, onChangeClick, onRemoveClick) {
 }
 
 /** Modal de selección: busca por nombre/equipo sobre el pool ya cargado
- * (577 jugadores, filtrado en el cliente -- no hace falta pedirlo por
- * cada tecla) y llama a `onPick(player)` al elegir uno. */
+ * (filtrado en el cliente) y llama a `onPick(player)` al elegir uno. */
 function openPickerModal(pool, excludeIds, onPick) {
   const dialog = document.getElementById("roster-picker-modal");
   const search = el("input", {
@@ -111,9 +101,8 @@ function openPickerModal(pool, excludeIds, onPick) {
   search.focus();
 }
 
-/** `enter(topKey, subKey)` -- inyectado por splash.js (viene de app.js) --
- * usado para saltar a Liga y Playoffs automáticamente en cuanto termina
- * de simular la liga completa con este roster. */
+/** `enter(topKey, subKey)` inyectado por splash.js -- salta a Liga y
+ * Playoffs en cuanto termina de simular la liga con este roster. */
 export function rosterBuilderCard(enter) {
   const card = el("div", { class: "card roster-builder" });
   const slotsBox = el("div", { class: "roster-slots" });
@@ -127,7 +116,7 @@ export function rosterBuilderCard(enter) {
   let minSize = 5;
   let maxSize = 15;
   let statsMode = "per_game";
-  let lastSimulatedRoster = null; // snapshot del roster de la última simulación -- el toggle de la tabla de jugadores reusa esta lista en vez de re-simular las 2.000 temporadas por un cambio de Totales/Por partido
+  let lastSimulatedRoster = null; // snapshot de la última simulación -- el toggle Totales/Por-partido lo reusa sin re-simular
 
   function findPlayer(playerId) {
     return pool.find((p) => p.player_id === playerId);
@@ -206,13 +195,10 @@ export function rosterBuilderCard(enter) {
       setHypotheticalLeague(roster, data);
       leagueStatusText.textContent = "";
       lastSimulatedRoster = [...roster];
-      // No se espera a que termine de pintar la tabla antes de saltar de
-      // pestaña -- queda lista para cuando el usuario vuelva a Inicio,
-      // pero no debe retrasar la transición a Liga y Playoffs.
+      // No bloquea el salto de pestaña -- la tabla queda lista para cuando
+      // el usuario vuelva a Inicio.
       loadRosterStats(statsMode);
-      // Salta directo a Liga y Playoffs -- ahí ya se ve el banner de
-      // "roster hipotético activo" con estos resultados en vez de los
-      // reales (ver league.js/awards.js).
+      // Salta directo a Liga y Playoffs (banner de "roster hipotético activo").
       enter("liga-nba", "liga");
     } catch (err) {
       leagueStatusText.textContent = `Error al simular la liga: ${err.message}`;

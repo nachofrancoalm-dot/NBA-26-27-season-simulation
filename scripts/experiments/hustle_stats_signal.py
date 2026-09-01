@@ -3,38 +3,18 @@ hustle_stats_signal.py
 
 EXPERIMENTO, no forma parte del pipeline de producción. Investiga si los
 hustle stats (CONTESTED_SHOTS, DEFLECTIONS, CHARGES_DRAWN,
-SCREEN_ASSISTS, LOOSE_BALLS_RECOVERED, BOX_OUTS -- ver
-data_pipeline.fetch_league_hustle_stats) aportan señal predictiva que ni
-Game Score (puramente ofensivo) ni NET_RATING/PIE (ver
-advanced_impact.py) capturan.
+SCREEN_ASSISTS, LOOSE_BALLS_RECOVERED, BOX_OUTS) aportan señal predictiva
+que ni Game Score ni NET_RATING/PIE capturan.
 
-MOTIVACIÓN: el análisis de calibración (ver CLAUDE.md) muestra que la
-dispersión comprimida de victorias entre equipos es exactamente lo que
-predice la teoría de regresión lineal dado el nivel de correlación
-actual (r=0.716, R²=0.513) entre Game Score+NET_RATING y el diferencial
-de puntos real -- no es un problema de calibración, así que no se
-arregla recalibrando más; hace falta una métrica que prediga mejor. Los
-hustle stats son la métrica de "defensa sin balón" más rica que expone
-nba_api y que este proyecto no había probado todavía.
+Motivación: la correlación actual entre Game Score+NET_RATING y el
+diferencial real (r=0.716, R²=0.513) ya explica la dispersión comprimida
+de victorias -- no es un problema de calibración, hace falta una métrica
+mejor. Solo 11 de las 16 temporadas del sweep tienen hustle stats
+(trackeados desde 2015-16), 330 de 480 casos.
 
-LIMITACIÓN DE DATOS: la NBA solo trackea esto desde 2015-16 -- de las 16
-temporadas del backtest sweep, solo 11 tienen hustle stats (330 casos de
-480, no los 480 completos).
-
-DISEÑO
-------
-1. Agrega hustle stats de `league_hustle_player_stats.csv` a nivel de
-   EQUIPO por caso (suma ponderada por minutos de los jugadores del
-   roster de ese caso, mismo criterio que Game Score/NET_RATING).
-2. Reutiliza `x_game_score_vs_baseline` (la métrica compuesta YA
-   calibrada, de bayesian_calibration.py) como línea base -- la pregunta
-   es si añadir hustle mejora el R² MÁS ALLÁ de lo que ya aporta esa
-   métrica, no si hustle solo predice bien.
-3. Regresión múltiple (mínimos cuadrados, statsmodels) DiffPointsPG ~
-   x_game_score_vs_baseline + hustle_score, comparado contra el modelo
-   solo con x_game_score_vs_baseline -- ver si el R² sube de forma
-   significativa (test F) y si el coeficiente de hustle es
-   estadísticamente distinto de cero.
+Método: agrega hustle stats a nivel de equipo (ponderado por minutos) y
+compara, vía OLS, DiffPointsPG ~ x_game_score_vs_baseline + hustle_score
+contra el modelo sin hustle (test F, significancia del coeficiente).
 
 Uso:
     python scripts/experiments/hustle_stats_signal.py
@@ -59,13 +39,7 @@ HUSTLE_COLUMNS = [
 
 
 def build_team_hustle_features(config: dict) -> pd.DataFrame:
-    """
-    Una fila por caso (equipo-temporada) con las columnas de
-    HUSTLE_COLUMNS agregadas a nivel de equipo (suma ponderada por
-    minutos/partido de cada jugador del roster de ese caso -- el hustle
-    stat de un suplente de garbage time no debe pesar igual que el de un
-    titular).
-    """
+    """Una fila por caso (equipo-temporada) con HUSTLE_COLUMNS agregadas a nivel de equipo, ponderadas por minutos/partido de cada jugador."""
     paths = get_paths(config)
     rosters = pd.read_csv(paths["processed"] / "backtest_sweep_rosters.csv")
     hustle = pd.read_csv(paths["processed"] / "league_hustle_player_stats.csv")

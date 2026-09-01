@@ -91,9 +91,7 @@ def test_get_actual_season_row_returns_none_when_missing():
 
 
 def test_project_historical_player_with_no_prior_history_returns_zeroed_baseline():
-    # Slice vacío de un DataFrame CON columnas (como pasaría con un
-    # player_id real que no tiene filas previas), no un DataFrame sin
-    # columnas -- _career_seasons([]) por sí solo no tiene columnas.
+    # slice vacío de un DataFrame CON columnas -- _career_seasons([]) solo no las tiene
     empty_regular = _career_seasons([{"season": "2010-11", "age": 20}]).iloc[0:0]
     result = project_historical_player(
         empty_regular, pd.DataFrame(), "2010-11", actual_age=19, actual_minutes_per_game=15.0, games_in_season=82
@@ -104,34 +102,22 @@ def test_project_historical_player_with_no_prior_history_returns_zeroed_baseline
 
 
 def test_project_historical_player_only_uses_prior_seasons():
-    # Un jugador con una temporada previa floja y la temporada del caso
-    # (que NO debe leerse) muy fuerte -- si hubiera look-ahead, el
-    # game_score sería mucho más alto.
+    # temporada del caso muy fuerte -- si hubiera look-ahead, el game_score sería absurdamente alto
     seasons = _career_seasons(
         [
-            {"season": "2009-10", "age": 25, "pts": 800, "min": 2000},  # única temporada previa real
-            {"season": "2010-11", "age": 26, "pts": 3000, "min": 3000},  # temporada del caso, no debe usarse
+            {"season": "2009-10", "age": 25, "pts": 800, "min": 2000},
+            {"season": "2010-11", "age": 26, "pts": 3000, "min": 3000},  # no debe usarse
         ]
     )
     result = project_historical_player(
         seasons, pd.DataFrame(), "2010-11", actual_age=26, actual_minutes_per_game=36.0, games_in_season=82
     )
-    # PTS_per36 de la temporada 2010-11 sería 3000/3000*36=36; si hubiera
-    # look-ahead el game_score_per36 sería absurdamente alto.
     assert result["game_score_per36"] < 30
 
 
 def test_project_backtest_team_reads_aging_curve_config_instead_of_ignoring_it():
-    """
-    BUG REAL (mismo patrón que en league_simulation.py, ver su docstring):
-    project_backtest_team()/project_historical_player() nunca pasaban
-    n_seasons/half_life_seasons a project_player_season(), así que
-    ignoraban config["aging_curve"] por completo. Un jugador con una
-    temporada previa floja y otra más reciente (aún anterior al caso, no
-    look-ahead) mucho más fuerte debe proyectar más alto con
-    n_seasons_lookback=1 que con n_seasons_lookback=2 -- si el config no
-    se leyera, ambos saldrían idénticos.
-    """
+    # regression: project_backtest_team() no pasaba n_seasons/half_life a project_player_season()
+    # y por tanto ignoraba config["aging_curve"] -- n_seasons_lookback=1 debe proyectar distinto que =2
     case = {"name": "Test Team 2026-27", "team_id": 1610612748, "season": "2026-27"}
     rosters = pd.DataFrame([{"PLAYER_ID": 1, "PLAYER": "Breakout Player", "AGE": 27,
                              "comparable_name": case["name"], "season": case["season"]}])
@@ -234,16 +220,12 @@ def test_run_backtest_case_end_to_end_with_synthetic_data():
     result = run_backtest_case(case, rosters, player_stats, pd.DataFrame(), standings, game_log, config)
 
     assert result["games_in_season"] == 10
-    assert result["actual_wins"] == 6  # i%3!=0 para i en 0..9 -> 6 victorias (i=1,2,4,5,7,8)
+    assert result["actual_wins"] == 6
     assert 0.0 <= result["actual_percentile"] <= 100.0
 
 
 def test_run_backtest_case_era_baseline_lowers_wins_for_an_inflated_era():
-    """
-    Con una línea base de liga más alta (época de más anotación), el MISMO
-    equipo debe proyectar MENOS victorias -- es lo que corrige el sesgo de
-    inflación de era (ver "BUG REAL: INFLACIÓN DE ERA" en simulation.py).
-    """
+    # con una línea base de liga más alta, el mismo equipo debe proyectar menos victorias (corrige inflación de era)
     case = {"name": "Test Team 2010-11", "team_id": 1610612748, "season": "2010-11"}
     rosters = pd.DataFrame(
         [{"PLAYER_ID": 1, "PLAYER": "Star Player", "AGE": 26, "comparable_name": case["name"], "season": "2010-11"}]
@@ -276,7 +258,7 @@ def test_run_backtest_case_era_baseline_lowers_wins_for_an_inflated_era():
 
 
 def test_run_backtest_cases_passes_the_per_season_baseline(monkeypatch):
-    """Cada caso debe recibir la línea base de SU temporada, no una global."""
+    # cada caso debe recibir la línea base de su propia temporada, no una global
     import backtesting as backtesting_module
 
     seen = {}
@@ -290,7 +272,7 @@ def test_run_backtest_cases_passes_the_per_season_baseline(monkeypatch):
     cases = [
         {"name": "A 2010-11", "team_id": 1, "season": "2010-11"},
         {"name": "B 2024-25", "team_id": 2, "season": "2024-25"},
-        {"name": "C 1999-00", "team_id": 3, "season": "1999-00"},  # sin baseline -> None
+        {"name": "C 1999-00", "team_id": 3, "season": "1999-00"},  # sin baseline
     ]
     _run_backtest_cases(
         cases, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {},
@@ -340,8 +322,6 @@ def test_compute_calibration_summary_on_empty_dataframe_returns_nan_metrics():
 
 
 def test_compute_calibration_summary_well_calibrated_case():
-    # 3 casos: resultado real dentro del rango P10-P90 y cerca de la media
-    # -- un modelo bien calibrado.
     df = pd.DataFrame(
         [
             _backtest_row(actual_wins=50, mean=50, p10=40, p90=60, percentile=50.0),
@@ -359,9 +339,7 @@ def test_compute_calibration_summary_well_calibrated_case():
 
 
 def test_compute_calibration_summary_detects_systematic_overestimation():
-    # El modelo predice sistemáticamente MÁS victorias de las reales
-    # (mismo patrón que "fricción de superequipo" en los comparables
-    # actuales) -- actual_wins muy por debajo de simulated_wins_p10.
+    # actual_wins muy por debajo de simulated_wins_p10 -- el modelo sobreestima sistemáticamente
     df = pd.DataFrame(
         [
             _backtest_row(actual_wins=45, mean=70, p10=64, p90=77, percentile=0.05),
@@ -372,14 +350,12 @@ def test_compute_calibration_summary_detects_systematic_overestimation():
     summary = compute_calibration_summary(df)
 
     assert summary["pct_within_p10_p90"] == 0.0
-    assert summary["mean_error_wins"] < 0  # actual - predicho es negativo -> sobreestima
+    assert summary["mean_error_wins"] < 0
     assert summary["mean_percentile"] < 10
 
 
 def test_compute_calibration_summary_correlation_reflects_predictive_power():
-    # Predicciones que ordenan a los equipos correctamente (más victorias
-    # reales -> más victorias predichas) aunque el nivel absoluto esté
-    # desplazado -- correlación alta.
+    # predicciones que ordenan a los equipos correctamente, aunque el nivel absoluto esté desplazado
     df = pd.DataFrame(
         [
             _backtest_row(actual_wins=20, mean=30, p10=20, p90=40, percentile=50.0),
@@ -398,8 +374,7 @@ def test_load_league_baselines_returns_empty_when_file_missing(tmp_path):
 
 
 def test_load_league_baselines_prefers_the_projected_team_column(tmp_path):
-    # La columna correcta es la de EQUIPOS proyectados (cumple suma cero),
-    # no la de jugadores de la liga (deja un sesgo residual).
+    # la columna de equipos proyectados cumple suma cero; la de jugadores deja sesgo residual
     pd.DataFrame(
         [
             {"season": "2010-11", "league_game_score_per36": 10.7, "projected_team_baseline_per36": 11.0},
@@ -437,7 +412,7 @@ def test_load_league_baselines_skips_seasons_without_a_value(tmp_path):
 
 
 def _fake_projection(n_players=10, game_score_per36=14.0, risk=0.2, synergy_value=None):
-    """Proyección sintética con el esquema que devuelve project_backtest_team."""
+    """Proyección sintética con el esquema de project_backtest_team."""
     synergy = None
     if synergy_value is not None:
         synergy = np.full((n_players, n_players), synergy_value)
@@ -454,29 +429,20 @@ def _fake_projection(n_players=10, game_score_per36=14.0, risk=0.2, synergy_valu
 
 
 def test_expected_team_game_score_is_below_full_health_value():
-    """
-    BUG REAL (ver docstring de expected_team_game_score_equivalent): la
-    línea base usaba el Game Score a PLENA SALUD, pero los equipos simulan
-    con ausencias por lesión. Comparar contra una referencia sana infla el
-    net rating de TODA la liga y rompe la suma cero.
-    """
+    # regression: la línea base usaba Game Score a plena salud, pero los equipos simulan con
+    # ausencias por lesión -- comparar contra una referencia sana inflaba el net rating de la liga
     config = {"simulation": {"random_seed": 42}}
     projection = _fake_projection(risk=0.25, synergy_value=None)
 
     expected = expected_team_game_score_equivalent(projection, config, games_in_season=82)
 
     assert expected < projection["team_game_score"]
-    # ~25% de ausencias -> en el entorno del 75% del valor a plena salud.
     assert 0.6 < expected / projection["team_game_score"] < 0.9
 
 
 def test_expected_team_game_score_absorbs_the_synergy_offset():
-    """
-    El segundo término no centrado: compute_game_synergy_adjustment
-    devuelve un valor SIEMPRE POSITIVO que la simulación suma al net
-    rating de todos los equipos. Si la línea base no lo absorbe, la liga
-    entera se desplaza hacia arriba.
-    """
+    # compute_game_synergy_adjustment devuelve un valor siempre positivo -- si la línea base
+    # no lo absorbe, la liga entera se desplaza hacia arriba
     config = {"simulation": {"random_seed": 42}}
     without = expected_team_game_score_equivalent(
         _fake_projection(synergy_value=None), config, games_in_season=82
@@ -489,8 +455,7 @@ def test_expected_team_game_score_absorbs_the_synergy_offset():
 
 
 def test_expected_team_game_score_is_deterministic_for_a_given_seed():
-    """La línea base no puede bailar entre corridas: se compara con ella
-    cada caso del sweep, y un baseline aleatorio movería los 480 a la vez."""
+    # la línea base no puede bailar entre corridas -- un baseline aleatorio movería los 480 casos a la vez
     config = {"simulation": {"random_seed": 7}}
     projection = _fake_projection(synergy_value=0.05)
     first = expected_team_game_score_equivalent(projection, config, 82)

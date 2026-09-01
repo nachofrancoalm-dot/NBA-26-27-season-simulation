@@ -2,54 +2,26 @@
 lineup_synergy_signal.py
 
 EXPERIMENTO, no forma parte del pipeline de producción. src/lineup_synergy.py
-modela solo dos efectos (usage_clash, playmaking_spacing_synergy), con
-pesos (0.05 y 0.02, DEFAULT_USAGE_CLASH_WEIGHT /
-DEFAULT_PLAYMAKING_SPACING_WEIGHT) puestos a mano y nunca validados
-contra datos reales -- este script comprueba si esos dos efectos,
-calculados con las tasas por-36 REALES de cada jugador, predicen algo
-real sobre el NET_RATING real de la pareja cuando sí compartió cancha
-(`leaguedashlineups`, ver
-data_pipeline.fetch_league_2man_lineup_stats/build_league_2man_lineup_dataset).
+modela solo dos efectos (usage_clash, playmaking_spacing_synergy) con
+pesos (0.05 y 0.02) puestos a mano y nunca validados. Comprueba si esos
+dos efectos, calculados con tasas por-36 reales, predicen algo sobre el
+NET_RATING real de una pareja cuando sí compartió cancha
+(`leaguedashlineups`). Motivado por un caso concreto: Embiid+Maxey
+(hipotético) da net_pair_score=-1.49 porque usage_clash (peso 0.05)
+domina sobre su synergy alta (peso 0.02) -- ¿ese ratio 2.5x tiene apoyo
+empírico?
 
-Caso concreto que motivó esto: Embiid + Maxey (roster hipotético,
-nunca han jugado juntos) dan net_pair_score = -1.49 porque ambos superan
-el umbral de "alto uso" (usage_clash=83.4, término dominante con peso
-0.05) pese a que su synergy creador+tirador también es alta (70.5, peso
-solo 0.02) -- ¿ese ratio de pesos 2.5x tiene apoyo empírico o es una
-suposición?
+A diferencia de pt_defend_signal.py, aquí perfil y resultado son de la
+MISMA temporada (no hay tautología: el perfil por-36 no incorpora
+NET_RATING de pareja) porque la pregunta es sobre la forma del modelo
+(signo y magnitud relativa), no una predicción hacia el futuro.
 
-NO LOOK-AHEAD: a diferencia de pt_defend_signal.py (que predice el
-resultado de una temporada con datos de la ANTERIOR), aquí la pregunta es
-distinta -- "¿el perfil estadístico de una pareja durante una temporada
-correlaciona con lo bien que le fue a esa pareja compartiendo cancha esa
-MISMA temporada?" -- es una validación de la FORMA del modelo (¿el signo
-y la magnitud relativa de los dos efectos son razonables?), no una
-predicción hacia el futuro, así que usar la misma temporada para el
-perfil y el resultado es la comparación correcta aquí (no hay
-tautología: el perfil por-36 de cada jugador no incorpora NET_RATING de
-pareja en absoluto, son columnas de caja completamente distintas).
-
-SEGUNDA FASE (tras el resultado negativo de los dos efectos originales):
-candidatos NUEVOS de sinergia, con datos de tracking (`leaguedashptstats` vía
-data_pipeline.fetch_league_tracking_stats/build_league_tracking_stats_dataset,
-ver LINEUP_SYNERGY_TRACKING_MEASURE_TYPES) en vez de solo estadísticas de
-caja:
-  - `post_creator_synergy` -- anotador de poste (POST_TOUCH_FGA) +
-    creador (AST_per36), misma forma funcional que playmaking_spacing
-    pero con volumen de poste en vez de espaciado exterior.
-  - `onball_offball_shooter_synergy` -- tirador que se crea su propio
-    tiro (PULL_UP_FGA) + tirador que recibe y tira (CATCH_SHOOT_FGA).
-  - `drive_interior_synergy` -- proxy de pick-and-roll: penetraciones de
-    un manejador (DRIVES) + presencia interior de un grande (BLK+DREB
-    por-36, la misma métrica "interior" que ya usa lineup_synergy.py).
-    LIMITACIÓN: nba_api no expone frecuencia real de bloqueo-y-continuación
-    (eso es Second Spectrum con matchups, no público) -- esto es un proxy,
-    no la cosa en sí.
-`build_tracking_style_features()` no cubre "atacante + buen defensor" --
-es un tipo de sinergia distinto (complementariedad ofensiva/defensiva,
-no "los dos tienen el rasgo X") y necesitaría su propia definición;
-queda fuera de esta primera pasada, documentado como candidato futuro,
-no implementado.
+Segunda fase (tras el resultado negativo de los dos efectos originales):
+tres candidatos nuevos con datos de tracking (`leaguedashptstats`) en vez
+de solo estadísticas de caja -- post_creator_synergy (poste + creador),
+onball_offball_shooter_synergy (pull-up + catch-and-shoot), y
+drive_interior_synergy (proxy de pick-and-roll: drives + BLK+DREB, ya que
+nba_api no expone frecuencia real de bloqueo-y-continuación).
 
 Uso:
     python scripts/experiments/lineup_synergy_signal.py
@@ -75,23 +47,13 @@ from lineup_synergy import (  # noqa: E402
 )
 from season_utils import dedupe_traded_seasons  # noqa: E402
 
-# Mínimo de minutos jugados JUNTOS en la temporada para que el NET_RATING
-# de la pareja se considere una muestra fiable -- por debajo de esto el
-# ruido de pocas posesiones domina. ~4 partidos de 48 minutos si jugaran
-# siempre juntos; el percentil 25 real de leaguedashlineups (2-man,
-# temporada reciente) ya está en ~250, así que 300 recorta poco.
+# Mínimo de minutos juntos para que el NET_RATING de la pareja sea fiable
+# (percentil 25 real de leaguedashlineups 2-man ya está en ~250).
 MIN_SHARED_MINUTES = 300.0
 
 
 def build_player_style_profiles(config: dict) -> dict:
-    """{(player_id, season): perfil de estilo} a partir de
-    backtest_sweep_player_career_stats.csv (ya cacheado, totales REALES
-    de FGA/FTA/TOV/AST/FG3A/MIN por jugador-temporada) -- convertidos a
-    por-36 y pasados por lineup_synergy.compute_style_profile() tal cual
-    (reusa la fórmula real, no la reimplementa). dedupe_traded_seasons()
-    colapsa las filas 'TOT' que nba_api añade para un jugador traspasado
-    a mitad de temporada -- mismo patrón que aging_curve.py/injury_model.py.
-    """
+    """{(player_id, season): perfil de estilo}, por-36 desde backtest_sweep_player_career_stats.csv vía lineup_synergy.compute_style_profile(). dedupe_traded_seasons() colapsa filas 'TOT' de traspasos a mitad de temporada."""
     paths = get_paths(config)
     path = paths["processed"] / "backtest_sweep_player_career_stats.csv"
     if not path.exists():
@@ -120,13 +82,7 @@ def build_player_style_profiles(config: dict) -> dict:
 
 
 def build_tracking_style_features(config: dict) -> dict:
-    """{(player_id, season): {post_volume, pullup_volume, catchshoot_volume,
-    drive_volume}} por-36, desde league_tracking_stats.csv (ver
-    data_pipeline.build_league_tracking_stats_dataset). Ya viene sin
-    filas duplicadas por jugador-temporada (comprobado: leaguedashptstats
-    con player_or_team='Player' ya agrega traspasos a mitad de temporada
-    en una sola fila, a diferencia de PlayerCareerStats -- no hace falta
-    dedupe_traded_seasons() aquí)."""
+    """{(player_id, season): {post_volume, pullup_volume, catchshoot_volume, drive_volume}} por-36, desde league_tracking_stats.csv. Ya viene sin duplicados por traspaso, no hace falta dedupe."""
     paths = get_paths(config)
     path = paths["processed"] / "league_tracking_stats.csv"
     if not path.exists():
@@ -136,11 +92,7 @@ def build_tracking_style_features(config: dict) -> dict:
     tracking = tracking[tracking["MIN"] > 0]
 
     def _safe(value: float) -> float:
-        # `value or 0.0` NO basta: NaN es "truthy" en Python
-        # (bool(float('nan')) es True), así que un hueco real de datos
-        # (jugador sin fila para esa categoría de tracking en un merge)
-        # se colaba como NaN en vez de caer al 0.0 por defecto -- rompía
-        # el OLS más abajo con "exog contains inf or nans".
+        # `value or 0.0` no basta: NaN es truthy en Python, se colaría sin convertir a 0.0.
         return 0.0 if pd.isna(value) else float(value)
 
     features = {}
@@ -162,16 +114,7 @@ def _parse_group_id(group_id: str) -> tuple:
 
 
 def build_pair_dataset(config: dict, min_shared_minutes: float = MIN_SHARED_MINUTES) -> pd.DataFrame:
-    """Una fila por pareja de jugadores REAL (compartieron cancha esa
-    temporada, con al menos `min_shared_minutes`): los 2 efectos
-    originales de lineup_synergy.py + los 3 candidatos nuevos (ver
-    docstring del módulo), todos calculados con tasas por-36 reales de
-    ESA temporada, más el NET_RATING real de esa pareja. Una pareja sin
-    datos de tracking disponibles (temporada sin cobertura, jugador con 0
-    intentos en alguna categoría) SÍ se incluye -- los candidatos nuevos
-    quedan en 0 para esa fila en vez de descartarla entera, porque 0
-    intentos reales de tiro en suspensión/poste es información válida
-    (ese jugador de verdad no hace eso), no un dato ausente."""
+    """Una fila por pareja real (>= min_shared_minutes juntos) con los 2 efectos originales + 3 candidatos nuevos y el NET_RATING real. Sin datos de tracking, el candidato queda en 0 en vez de descartar la fila (0 intentos es información válida, no ausencia)."""
     paths = get_paths(config)
     lineups_path = paths["processed"] / "league_2man_lineups.csv"
     if not lineups_path.exists():
@@ -224,8 +167,7 @@ def build_pair_dataset(config: dict, min_shared_minutes: float = MIN_SHARED_MINU
     return pd.DataFrame(rows)
 
 
-# Signo esperado de cada candidato, para el resumen final -- positivo si
-# la teoría dice "esto ayuda a la pareja", negativo si "esto la perjudica".
+# Signo esperado de cada candidato (positivo = ayuda, negativo = perjudica).
 EXPECTED_SIGNS = {
     "usage_clash": -1,
     "playmaking_spacing_synergy": 1,
@@ -236,10 +178,7 @@ EXPECTED_SIGNS = {
 
 
 def run_regression_and_loso(df: pd.DataFrame, feature_cols: list, label: str):
-    """OLS sobre todas las temporadas + leave-one-season-out, para un
-    subconjunto de columnas de `df` (un candidato solo, o varios a la
-    vez). Imprime el resumen; devuelve (model, loso_df) por si se quiere
-    guardar aparte."""
+    """OLS sobre todas las temporadas + leave-one-season-out, para un subconjunto de columnas de `df`. Imprime el resumen; devuelve (model, loso_df)."""
     import statsmodels.api as sm
 
     y = df["net_rating"]
@@ -301,16 +240,14 @@ def main() -> None:
     df.to_csv(features_path, index=False)
     print(f"Guardado: {features_path}")
 
-    # 1) Los dos efectos originales (ya reportados en CLAUDE.md: sin
-    #    apoyo, se repite aquí solo para comparar en el mismo run).
+    # 1) Los dos efectos originales.
     run_regression_and_loso(df, ["usage_clash", "playmaking_spacing_synergy"], "Efectos originales")
 
-    # 2) Cada candidato nuevo, SOLO, para ver si individualmente aporta algo.
+    # 2) Cada candidato nuevo, solo.
     for col in ["post_creator_synergy", "onball_offball_shooter_synergy", "drive_interior_synergy"]:
         run_regression_and_loso(df, [col], f"Candidato nuevo: {col}")
 
-    # 3) Los 5 juntos, por si hay una combinación que sí funcione aunque
-    #    ninguno solo lo haga.
+    # 3) Los 5 juntos.
     all_cols = [
         "usage_clash", "playmaking_spacing_synergy",
         "post_creator_synergy", "onball_offball_shooter_synergy", "drive_interior_synergy",

@@ -47,26 +47,18 @@ DEFAULT_MIN_MPG_SIXTH_MAN = 12.0
 DEFAULT_MIN_MPG_ROY = 10.0
 DEFAULT_MIN_MPG_MIP = 15.0
 
-# Umbral REAL de la NBA (desde 2023-24, "Player Participation Policy")
-# para optar a premios de FIN DE TEMPORADA (quintetos All-NBA/All-
-# Defensive, MVP/DPOY/etc.) -- no aplica al All-Star, que se vota a mitad
-# de temporada sin requisito de partidos.
+# Umbral real de la NBA (desde 2023-24, "Player Participation Policy")
+# para premios de fin de temporada; no aplica al All-Star.
 DEFAULT_MIN_GAMES_SEASON_AWARDS = 65
 
-# Cupos por quinteto, formato clásico 2 bases/escoltas + 2 aleros/ala-
-# pívots + 1 pívot -- el mismo que usa la NBA real para All-NBA y All-
-# Defensive (a diferencia del All-Star moderno, que ya no fuerza cupos de
-# posición en las reservas). Claves = primera letra de POSITION_GROUPS.
+# Cupos por quinteto (2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot),
+# igual que usa la NBA real para All-NBA/All-Defensive.
 DEFAULT_TEAM_POSITION_SLOTS: Dict[str, int] = {"G": 2, "F": 2, "C": 1}
 
-# Nº de quintetos: la NBA real elige 3 equipos All-NBA (Primero/Segundo/
-# Tercero) y 2 equipos All-Defensive (Primero/Segundo).
 ALL_NBA_TEAM_NAMES = ["Primer equipo All-NBA", "Segundo equipo All-NBA", "Tercer equipo All-NBA"]
 ALL_DEFENSIVE_TEAM_NAMES = ["Primer equipo All-Defensive", "Segundo equipo All-Defensive"]
 
-# Total de seleccionados All-Star por conferencia en la NBA real (12 c/u,
-# incluyendo titulares y reservas -- este proyecto no distingue entre
-# ambos, ver compute_all_star_selections).
+# Seleccionados All-Star por conferencia en la NBA real (titulares + reservas).
 DEFAULT_ALL_STARS_PER_CONFERENCE = 12
 
 
@@ -79,17 +71,12 @@ def _avg_mpg(df: pd.DataFrame, games_per_season: int) -> pd.Series:
     return df["projected_total_minutes"] / games_per_season
 
 
-# Stats por-partido para comparar candidatos de un vistazo -- YA vienen
-# calculadas en `player_df` (PER_GAME_STATS + FG%/3P% de
-# dashboard/data_loader.py y del builder equivalente de
-# league_simulation.py), así que aquí solo hace falta incluirlas en la
-# selección de columnas de cada función, no recalcularlas.
+# Stats por-partido para comparar candidatos de un vistazo -- ya vienen
+# calculadas en `player_df`, solo hace falta incluirlas en la selección
+# de columnas de cada función.
 OFFENSIVE_COMPARISON_STATS = ["PPG", "RPG", "APG", "SPG", "BPG", "FG%", "3P%"]
-# DPOY es puramente defensivo -- PPG/APG/tiro no son relevantes para ese
-# premio y solo añadirían ruido a la tabla. PFPG (faltas por partido) se
-# añade como extra: es el único término NEGATIVO de defensive_score_per36,
-# así que da contexto de por qué un jugador con buenos robos/tapones
-# puede quedar penalizado.
+# PFPG (faltas/partido) da contexto: es el único término NEGATIVO de
+# defensive_score_per36.
 DEFENSIVE_COMPARISON_STATS = ["RPG", "SPG", "BPG", "PFPG"]
 
 
@@ -111,18 +98,8 @@ def compute_mvp_candidates(
     """
     MVP heurístico: valor de temporada ponderado por el % de victorias
     proyectado del equipo -- el MVP real casi siempre juega en un equipo
-    ganador, no solo acumula estadísticas en un equipo mediocre.
-
-    `team_win_pct`: dict/Series player_id -> % de victorias del equipo en
-    [0, 1]. Si no se pasa (o falta para un jugador), se asume 0.5 -- el
-    ranking queda sin ajuste de equipo (útil para el roster propio, donde
-    todos los jugadores comparten el mismo equipo y el ajuste no aporta
-    nada).
-
-    `team_record`: dict/Series player_id -> récord "W-L" del equipo (solo
-    para mostrar, no afecta al ranking -- ver `_attach_team_record`).
-    Incluye además OFFENSIVE_COMPARISON_STATS (PPG/RPG/APG/SPG/BPG/FG%/3P%)
-    para comparar candidatos de un vistazo.
+    ganador. `team_win_pct` sin datos para un jugador se asume 0.5 (sin
+    ajuste de equipo). `team_record` es solo para mostrar.
     """
     df = player_df.copy()
     df["mpg"] = _avg_mpg(df, games_per_season)
@@ -154,20 +131,11 @@ def compute_dpoy_candidates(
 ) -> pd.DataFrame:
     """
     DPOY heurístico: "defensive_score_per36" = 1.5*STL_per36 +
-    1.5*BLK_per36 + 0.3*DREB_per36 - 0.2*PF_per36 -- pesos de este
-    proyecto, NO una métrica oficial. Limitación importante: el box score
-    no captura la mayoría de la defensa individual real (contención de
-    tiro, rotaciones, defensa de perímetro sin robo/tapón) -- este
-    proxy solo ve robos, tapones, rebote defensivo y faltas.
-    Escalado a valor de temporada completa (recompensa también jugar
-    muchos minutos, no solo tasas altas en pocos minutos).
-
-    Incluye DEFENSIVE_COMPARISON_STATS (RPG/SPG/BPG + PFPG, faltas por
-    partido -- el único término NEGATIVO de la fórmula) MÁS
-    OFFENSIVE_COMPARISON_STATS completo (PPG/APG/tiro incluidos). El
-    ranking (dpoy_score) sigue siendo puramente defensivo; estas columnas
-    de más son solo para que la vista previa al pasar el ratón en
-    webapp/ muestre el mismo set de stats que el resto de premios.
+    1.5*BLK_per36 + 0.3*DREB_per36 - 0.2*PF_per36 (pesos de este proyecto,
+    no una métrica oficial), escalado a valor de temporada completa. El
+    box score no captura la mayoría de la defensa real (contención de
+    tiro, rotaciones, defensa de perímetro sin robo/tapón), así que este
+    proxy es limitado a robos/tapones/rebote defensivo/faltas.
     """
     df = player_df.copy()
     df["mpg"] = _avg_mpg(df, games_per_season)
@@ -199,13 +167,9 @@ def compute_dpoy_candidates(
 
 
 def compute_bench_player_ids(career_stats_df: pd.DataFrame) -> Set[Any]:
-    """
-    Jugadores que en su temporada REAL más reciente registrada empezaron
-    (GS) menos de la mitad de los partidos que jugaron (GP) -- "salieron
-    del banquillo" la mayoría de las veces. Aproximación de rol de
-    equipo: no distingue a un titular que perdió su puesto a mitad de
-    temporada de alguien que siempre fue suplente.
-    """
+    """Jugadores cuya temporada real más reciente tuvo menos partidos
+    empezados (GS) que jugados/2 (GP) -- aproximación de "suplente" que no
+    distingue a un titular que perdió su puesto de alguien siempre suplente."""
     if career_stats_df.empty or "GS" not in career_stats_df.columns:
         return set()
     df = career_stats_df.assign(_start_year=career_stats_df["SEASON_ID"].apply(season_start_year))
@@ -222,13 +186,8 @@ def compute_sixth_man_candidates(
     min_mpg: float = DEFAULT_MIN_MPG_SIXTH_MAN,
     top_n: int = 5,
 ) -> pd.DataFrame:
-    """
-    6MOY heurístico: entre los jugadores marcados como "banquillo" (ver
-    compute_bench_player_ids), el de mayor valor de temporada. Umbral de
-    minutos más bajo que MVP/DPOY porque los suplentes juegan
-    estructuralmente menos. Incluye OFFENSIVE_COMPARISON_STATS, ver
-    compute_mvp_candidates.
-    """
+    """6MOY heurístico: mayor valor de temporada entre los jugadores marcados
+    como "banquillo" (ver compute_bench_player_ids)."""
     bench_ids = set(bench_player_ids)
     df = player_df[player_df["player_id"].isin(bench_ids)].copy()
     df["mpg"] = _avg_mpg(df, games_per_season)
@@ -247,17 +206,10 @@ def compute_sixth_man_candidates(
 
 
 def compute_rookie_player_ids(career_stats_df: pd.DataFrame) -> Set[Any]:
-    """
-    Un jugador se considera rookie si TODA su historia en
-    roster_career_stats.csv / league_player_career_stats.csv (pedida vía
-    nba_api PlayerCareerStats, que devuelve la carrera COMPLETA del
-    jugador) cae en una sola temporada -- es decir, la temporada más
-    reciente es literalmente su único año en la NBA según los datos
-    disponibles. Limitación: si por algún motivo los datos de carrera de
-    un jugador veterano llegaran incompletos, esta heurística lo marcaría
-    (incorrectamente) como rookie -- no hay forma de distinguir eso sin
-    datos externos de "años de experiencia" que este proyecto no descarga.
-    """
+    """Rookie = toda su historia en career_stats (carrera COMPLETA vía
+    PlayerCareerStats) cae en una sola temporada. Si los datos de carrera
+    de un veterano llegaran incompletos, esta heurística lo marcaría
+    (incorrectamente) como rookie."""
     if career_stats_df.empty:
         return set()
     seasons_per_player = career_stats_df.groupby("PLAYER_ID")["SEASON_ID"].nunique()
@@ -272,11 +224,8 @@ def compute_roy_candidates(
     min_mpg: float = DEFAULT_MIN_MPG_ROY,
     top_n: int = 5,
 ) -> pd.DataFrame:
-    """
-    ROY heurístico: entre los jugadores marcados como rookies (ver
-    compute_rookie_player_ids), el de mayor valor de temporada. Incluye
-    OFFENSIVE_COMPARISON_STATS, ver compute_mvp_candidates.
-    """
+    """ROY heurístico: mayor valor de temporada entre los jugadores
+    marcados como rookies (ver compute_rookie_player_ids)."""
     rookie_ids = set(rookie_player_ids)
     df = player_df[player_df["player_id"].isin(rookie_ids)].copy()
     df["mpg"] = _avg_mpg(df, games_per_season)
@@ -301,15 +250,11 @@ def compute_mip_candidates(
 ) -> pd.DataFrame:
     """
     MIP heurístico: compara el Game Score por-36 REAL (no proyectado) de
-    las DOS temporadas más recientes de cada jugador -- el salto de
-    rendimiento que YA ocurrió, no una proyección de la temporada
-    simulada. MIP se vota sobre lo que un jugador ya mejoró respecto al
-    año anterior, así que usar datos reales es más fiel al espíritu del
-    premio que MVP/DPOY (que sí usan la proyección). Requiere al menos 2
-    temporadas en los datos y un mínimo de minutos/partido en AMBAS
-    (evita que un salto de bajísimo volumen a bajo volumen parezca una
-    mejora enorme). Excluye implícitamente a los rookies -- solo tienen 1
-    temporada, ver compute_roy_candidates.
+    las DOS temporadas más recientes de cada jugador -- el salto que YA
+    ocurrió, más fiel al espíritu del premio que usar la proyección.
+    Requiere un mínimo de minutos/partido en AMBAS temporadas (evita que
+    un salto de bajísimo a bajo volumen parezca una mejora enorme).
+    Excluye implícitamente a los rookies, que solo tienen 1 temporada.
     """
     if career_stats_df.empty:
         return pd.DataFrame(
@@ -357,32 +302,20 @@ PREV_SEASON_STATS_COLUMNS = ["prev_PPG", "prev_RPG", "prev_APG", "prev_SPG", "pr
 
 def compute_latest_real_season_stats(career_stats_df: pd.DataFrame) -> pd.DataFrame:
     """
-    PPG/RPG/APG/SPG/BPG/FG%/3P% REALES de la última temporada YA jugada
-    de cada jugador (una fila por jugador) -- para que el popup de MIP
-    (webapp/) pueda comparar la temporada PROYECTADA (mergeada aparte,
-    desde player_df, ver dashboard.data_loader.compute_awards_summary)
-    contra la temporada real inmediatamente anterior. DISTINTO de
-    `previous_game_score_per36` de compute_mip_candidates: esa usa la
-    PENÚLTIMA temporada real (para calcular cuánto mejoró un jugador de
-    un año real a otro); esto usa la ÚLTIMA real, la que precede a la
-    proyección.
+    PPG/RPG/APG/SPG/BPG/FG%/3P% REALES de la última temporada YA jugada de
+    cada jugador -- para que el popup de MIP compare la temporada
+    PROYECTADA contra la real inmediatamente anterior. Distinto de
+    `previous_game_score_per36` de compute_mip_candidates, que usa la
+    PENÚLTIMA temporada real.
     """
     if career_stats_df.empty:
         return pd.DataFrame(columns=["player_id"] + PREV_SEASON_STATS_COLUMNS)
 
-    # dedupe_traded_seasons() agrupa por SEASON_ID, así que debe aplicarse
-    # POR JUGADOR, nunca sobre el DataFrame multi-jugador completo:
-    # llamarla sobre la liga entera compara temporadas de jugadores
-    # DISTINTOS entre sí (si CUALQUIER jugador de la liga fue traspasado
-    # en la temporada X, "has_tot" sale True para la temporada X de TODOS
-    # los jugadores, y a quienes no fueron traspasados esa temporada se
-    # les descarta su única fila de esa temporada por no ser 'TOT') -- con
-    # ~577 jugadores reales eso puede dejar la temporada de ROOKIE de un
-    # veterano marcada como "la más reciente" porque casi todas sus demás
-    # temporadas se descartan por trades de otros jugadores. Mismo
-    # criterio que ya usa compute_mip_candidates, que itera con
-    # `.groupby("PLAYER_ID")` antes de llamar a compute_per36_stats, que
-    # a su vez llama a dedupe_traded_seasons ya sobre un solo jugador.
+    # dedupe_traded_seasons() agrupa por SEASON_ID y debe aplicarse POR
+    # JUGADOR, no sobre el DataFrame multi-jugador completo: si se llama
+    # sobre la liga entera, un trade de CUALQUIER jugador en la temporada
+    # X hace que se descarte la fila de esa temporada para todos los
+    # demás jugadores que no fueron traspasados (por no ser 'TOT').
     df = pd.concat(
         [dedupe_traded_seasons(group) for _, group in career_stats_df.groupby("PLAYER_ID")], ignore_index=True
     )
@@ -390,10 +323,8 @@ def compute_latest_real_season_stats(career_stats_df: pd.DataFrame) -> pd.DataFr
     df["_start_year"] = df["SEASON_ID"].apply(season_start_year)
     latest = df.sort_values("_start_year", ascending=False).groupby("PLAYER_ID").head(1)
 
-    # FG_PCT/FG3_PCT no siempre están (p.ej. career_stats_df construido a
-    # mano en tests, sin las columnas de tiro) -- se degradan a NaN en
-    # vez de romper el resto de esta función, mismo criterio que el
-    # resto del proyecto ante una columna opcional ausente.
+    # FG_PCT/FG3_PCT pueden faltar (p.ej. datos de test construidos a mano)
+    # -- se degradan a NaN en vez de romper el resto de la función.
     gp = latest["GP"]
     fg_pct = latest["FG_PCT"] * 100 if "FG_PCT" in latest.columns else np.nan
     fg3_pct = latest["FG3_PCT"] * 100 if "FG3_PCT" in latest.columns else np.nan
@@ -418,18 +349,11 @@ def compute_coy_candidates(
     top_n: int = 5,
 ) -> pd.DataFrame:
     """
-    COY heurístico de EQUIPO, no de entrenador -- este proyecto no modela
-    entrenadores en absoluto. Aproxima el proxy más común que usan los
-    votantes reales de COY: el equipo que más mejoró respecto al récord
-    REAL de la temporada anterior (`prior_season_standings.csv`). Un
-    salto grande de victorias suele reflejar un cambio de sistema/gestión
-    de plantilla más que solo mejores jugadores -- pero es una
-    correlación, no una medición directa de la calidad de un entrenador.
-
-    `team_wins_df`: columnas team_abbreviation, wins_mean (victorias
-    medias proyectadas para la temporada simulada).
-    `prior_wins_by_team`: dict team_abbreviation -> victorias REALES de
-    la temporada anterior.
+    COY heurístico de EQUIPO, no de entrenador -- el proxy más común de
+    los votantes reales: el equipo que más mejoró respecto al récord REAL
+    de la temporada anterior. `team_wins_df`: columnas team_abbreviation,
+    wins_mean. `prior_wins_by_team`: dict team_abbreviation -> victorias
+    reales del año anterior.
     """
     df = team_wins_df.copy()
     df["prior_wins"] = df["team_abbreviation"].map(prior_wins_by_team)
@@ -441,13 +365,8 @@ def compute_coy_candidates(
 
 
 def _expected_games_played(df: pd.DataFrame, games_per_season: int) -> pd.Series:
-    """
-    Partidos jugados ESPERADOS de la temporada simulada (ver
-    simulation.compute_expected_games_played) si hay `risk_score`; si
-    falta (p. ej. injury_risk.csv no corrido), se asume la temporada
-    completa -- degradar a "todos elegibles" es más seguro que excluir a
-    todo el mundo por un dato que no llegó.
-    """
+    """Partidos jugados ESPERADOS (ver simulation.compute_expected_games_played)
+    si hay `risk_score`; si no, se asume la temporada completa."""
     if "risk_score" not in df.columns:
         return pd.Series(float(games_per_season), index=df.index)
     risk = df["risk_score"].fillna(0.0).to_numpy()
@@ -455,15 +374,9 @@ def _expected_games_played(df: pd.DataFrame, games_per_season: int) -> pd.Series
 
 
 def _position_group(df: pd.DataFrame) -> pd.Series:
-    """
-    Primera letra de `position` (Guard/Forward/Center o G/F/C, ambos
-    formatos conviven -- ver data_pipeline.fetch_player_common_info),
-    limitada a G/F/C. Jugadores sin `position` (roster_positions.csv no
-    corrido, o liga sin ese dato) quedan como None -- no participan en
-    los quintetos, que exigen cupo de posición, pero sí pueden aparecer
-    en el All-Star (que no distingue posición aquí, ver
-    compute_all_star_selections).
-    """
+    """Primera letra de `position` (Guard/Forward/Center o G/F/C conviven),
+    limitada a G/F/C. Sin `position`, queda None -- no participa en los
+    quintetos (que exigen cupo de posición) pero sí en el All-Star."""
     if "position" not in df.columns:
         return pd.Series(None, index=df.index, dtype=object)
     first_letter = df["position"].astype(str).str[0]
@@ -494,37 +407,21 @@ def compute_all_star_selections(
     n_starters_per_conference: int = DEFAULT_ALL_STAR_STARTERS_PER_CONFERENCE,
 ) -> pd.DataFrame:
     """
-    All-Star heurístico: SIN restricción de partidos jugados (el All-Star
-    se juega a mitad de temporada, antes de que el requisito de 65
-    partidos de fin de temporada pueda siquiera evaluarse) ni de minutos
-    mínimos -- solo valor de temporada, igual que MVP pero sin filtrar
-    rotación marginal (un candidato a All-Star real casi siempre supera
-    ese umbral de todos modos, así que el filtro no cambiaría nada en la
-    práctica, y omitirlo simplifica la función). SIN distinción de
-    posición -- coincide con la regla real desde esta temporada.
+    All-Star heurístico: SIN restricción de partidos jugados ni minutos
+    mínimos, solo valor de temporada -- SIN distinción de posición
+    (coincide con la regla real desde esta temporada).
 
-    METODOLOGÍA REAL vs. LO QUE ESTE PROYECTO PUEDE HACER: los 5
-    titulares de cada conferencia se votan 50% fans + 25% jugadores
-    actuales + 25% panel de medios; los 7 reservas los eligen los
-    entrenadores. Este proyecto NO tiene forma de obtener ninguno de esos
-    tres votos (no existe ese dato en `nba_api` ni en ningún sitio
-    accesible) ni de modelar el criterio de un entrenador -- así que
-    `season_value` actúa como proxy ÚNICO para las tres electorados y
-    para el criterio de los entrenadores, algo que la vida real nunca
-    hace. La columna `selection_type` ("Titular"/"Reserva") es solo una
-    ETIQUETA sobre el ranking de ese proxy (los `n_starters_per_conference`
-    de mayor valor = "Titular"), no una simulación de un voto real.
+    En la vida real los 5 titulares por conferencia se votan 50% fans +
+    25% jugadores + 25% medios, y los 7 reservas los eligen los
+    entrenadores; este proyecto no tiene acceso a ninguno de esos votos,
+    así que `season_value` actúa como proxy único para todos ellos.
+    `selection_type` ("Titular"/"Reserva") es solo una ETIQUETA sobre ese
+    ranking (los de mayor valor = "Titular"), no un voto simulado.
 
-    Si `player_df` trae `conference_col` con más de una conferencia
-    distinta (scope "league", los 30 equipos), se eligen los
-    `n_per_conference` de mayor valor de temporada DE CADA conferencia
-    (12 c/u = 24 en total, el tamaño real del roster de la NBA).
-
-    Si no hay conferencia (scope "own", un solo equipo -- o si falta la
-    columna), se toma un único top `n_per_conference` sobre todo
-    `player_df`, sin split -- con un roster de ~13 jugadores esto en la
-    práctica selecciona a casi todo el mundo, lo cual es razonable: no
-    hay forma de simular "contra el resto de la NBA" con un solo equipo.
+    Con más de una conferencia en `conference_col` (scope "league"), se
+    eligen los `n_per_conference` de mayor valor DE CADA conferencia. Sin
+    conferencia (scope "own", un solo equipo), se toma un único top
+    `n_per_conference` sobre todo `player_df`.
     """
     df = player_df.copy()
     df["season_value"] = _season_value(df)
@@ -564,21 +461,11 @@ def check_all_star_nationality_quota(
 ) -> Dict[str, Any]:
     """
     Verifica la cuota REAL de nacionalidad de la NBA sobre una selección
-    de All-Star ya calculada (`compute_all_star_selections`): al menos
-    `min_us` jugadores de EE.UU. y `min_international` internacionales.
-
-    SOLO VERIFICA, NO CORRIGE: si la selección natural no cumple el
-    mínimo, en la vida real el comisionado de la NBA añade jugadores a su
-    propio criterio -- eso es la decisión discrecional de una persona
-    real y este proyecto, por principio, no predice decisiones
-    discrecionales de personas reales (mismo motivo por el que MVP/DPOY/
-    etc. son heurísticas, no una predicción de la votación real). Esta
-    función se limita a informar si haría falta esa intervención.
-
-    Requiere una columna `country` en `selections` (de
-    roster_positions.csv / league_player_countries.csv, ambos vía
-    CommonPlayerInfo) -- sin ella, devuelve `checked=False` en vez de
-    fingir un resultado.
+    de All-Star ya calculada: al menos `min_us` jugadores de EE.UU. y
+    `min_international` internacionales. SOLO VERIFICA, NO CORRIGE -- en
+    la vida real el comisionado añade jugadores a su propio criterio, una
+    decisión discrecional que este proyecto no predice. Requiere una
+    columna `country` en `selections`; sin ella devuelve `checked=False`.
     """
     if "country" not in selections.columns or selections.empty:
         return {
@@ -624,27 +511,16 @@ def add_commissioner_picks_for_nationality_quota(
     min_international: int = DEFAULT_MIN_INTERNATIONAL_ALL_STARS,
 ) -> pd.DataFrame:
     """
-    Si `quota` (de check_all_star_nationality_quota) señala que la
-    selección natural no cumple el mínimo, añade jugadores de la
-    nacionalidad que falta hasta cubrirlo, en vez de dejarlo solo como
-    un aviso.
-
-    QUÉ ES ESTO REALMENTE: en la vida real, el comisionado de la NBA
-    (Adam Silver) elige a su criterio quién se añade -- una decisión
-    discrecional de una persona real que este proyecto NO puede predecir
-    (mismo límite que el resto de premios: no hay forma de simular el
-    juicio subjetivo de alguien concreto). Lo que SÍ se puede hacer es
-    una aproximación razonable: coger, de entre los jugadores NO
+    Si `quota` (de check_all_star_nationality_quota) no se cumple, añade
+    jugadores de la nacionalidad que falta hasta cubrirla. En la vida
+    real esto lo decide el comisionado a su criterio, algo que este
+    proyecto no puede predecir; la aproximación es coger, de entre los NO
     seleccionados de la nacionalidad que falta, los de mayor
-    `season_value` (mismo proxy que el resto del All-Star) hasta llegar
-    al mínimo. Cada jugador añadido así queda marcado con
+    `season_value`. Cada jugador añadido queda marcado con
     `selection_type = COMMISSIONER_ADDITION_SELECTION_TYPE` y
-    `commissioner_pick = True` -- un warning explícito de que NO llegó
-    por mérito del ranking natural, sino para tapar un hueco de cuota.
-
-    Devuelve `selections` sin tocar si la cuota ya se cumple, o si falta
-    la columna `country` (no se puede saber a quién añadir sin saber su
-    nacionalidad).
+    `commissioner_pick = True`, para distinguirlo de una selección por
+    mérito. Devuelve `selections` sin tocar si la cuota ya se cumple o si
+    falta la columna `country`.
     """
     if not quota.get("checked") or quota.get("meets_both"):
         return selections.assign(commissioner_pick=False) if not selections.empty else selections
@@ -669,16 +545,11 @@ def add_commissioner_picks_for_nationality_quota(
     picks = [p for p in picks if not p.empty]
     base = selections.assign(commissioner_pick=False)
     if "selection_type" not in base.columns:
-        # Garantiza que la columna sobrevive al reindex de abajo incluso
-        # si el llamante no pasó por compute_all_star_selections (que sí
-        # la incluye siempre) -- si no, un `selections` sin esta columna
-        # haría que el reindex la descartara en silencio de `added`.
+        # Garantiza que la columna sobrevive al reindex de abajo aunque el
+        # llamante no haya pasado por compute_all_star_selections.
         base["selection_type"] = None
     if not picks:
-        # No hay candidatos elegibles de la nacionalidad que falta (caso
-        # extremo con un roster pequeño/hipotético) -- se devuelve la
-        # selección natural sin poder cubrir el hueco.
-        return base
+        return base  # sin candidatos elegibles de la nacionalidad que falta
 
     added = pd.concat(picks, ignore_index=True)
     added["selection_type"] = COMMISSIONER_ADDITION_SELECTION_TYPE
@@ -696,16 +567,11 @@ def _pick_positional_teams(
 ) -> pd.DataFrame:
     """
     Reparte `df` (ya filtrado por elegibilidad) en `len(team_names)`
-    quintetos consecutivos, cada uno con los cupos de posición de
-    `slots` (2 G + 2 F + 1 C por defecto), llenando cada cupo con el
-    jugador de mayor `value_col` de esa posición que quede disponible.
-    Un jugador ya elegido en un equipo no puede repetir en otro.
-
-    LIMITACIÓN: si una posición se queda sin candidatos elegibles (p. ej.
-    un roster hipotético sin ningún pívot real), ese cupo queda vacío en
-    vez de forzar a alguien de otra posición -- un roster inventado no
-    tiene por qué cubrir las 3 posiciones con profundidad real, y rellenar
-    el hueco con un jugador de otra posición falsearía el formato.
+    quintetos consecutivos con los cupos de posición de `slots` (2 G + 2
+    F + 1 C por defecto), llenando cada cupo con el jugador de mayor
+    `value_col` disponible de esa posición; nadie repite entre equipos.
+    Si una posición se queda sin candidatos, el cupo queda vacío en vez
+    de forzar a alguien de otra posición.
     """
     remaining = df.dropna(subset=["_position_group"]).sort_values(value_col, ascending=False).copy()
     rows = []
@@ -728,21 +594,12 @@ def compute_all_nba_teams(
     team_names: List[str] = ALL_NBA_TEAM_NAMES,
 ) -> pd.DataFrame:
     """
-    Quintetos All-NBA heurísticos: 3 equipos (Primero/Segundo/Tercero),
-    2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot cada uno, ordenados
-    por valor de temporada (mismo `_season_value` que MVP) -- a
-    diferencia del MVP, SIN ponderar por % de victorias del equipo (el
-    All-NBA histórico premia producción individual incluso en equipos
-    mediocres más de lo que lo hace la votación de MVP).
-
-    ELEGIBILIDAD: partidos jugados ESPERADOS >= `min_games_played` (65
-    por defecto, la política real de la NBA desde 2023-24) -- ver
-    `_expected_games_played`.
-
-    Incluye OFFENSIVE_COMPARISON_STATS + team_record (para la vista
-    previa al pasar el ratón en webapp/) -- mismas columnas que
-    MVP/ROY/6MOY, así que el quinteto es comparable de un vistazo con
-    cualquier otro premio.
+    Quintetos All-NBA heurísticos: 3 equipos (Primero/Segundo/Tercero), 2
+    bases/escoltas + 2 aleros/ala-pívots + 1 pívot cada uno, ordenados por
+    valor de temporada -- a diferencia del MVP, SIN ponderar por % de
+    victorias del equipo. Elegibilidad: partidos jugados ESPERADOS >=
+    `min_games_played` (65 por defecto, política real de la NBA desde
+    2023-24, ver `_expected_games_played`).
     """
     df = player_df.copy()
     df["games_played_expected"] = _expected_games_played(df, games_per_season)
@@ -769,19 +626,11 @@ def compute_all_defensive_teams(
     team_names: List[str] = ALL_DEFENSIVE_TEAM_NAMES,
 ) -> pd.DataFrame:
     """
-    Quintetos All-Defensive heurísticos: 2 equipos (Primero/Segundo),
-    2 bases/escoltas + 2 aleros/ala-pívots + 1 pívot cada uno, ordenados
-    por el mismo `defensive_score_per36` escalado a temporada que usa
-    DPOY (ver compute_dpoy_candidates) -- MISMA limitación que el DPOY:
-    el box score no ve casi nada de la defensa individual real más allá
-    de robos, tapones, rebote defensivo y faltas.
-
-    ELEGIBILIDAD: partidos jugados ESPERADOS >= `min_games_played` (65
-    por defecto) -- ver `_expected_games_played`.
-
-    Incluye OFFENSIVE_COMPARISON_STATS + team_record (para la vista
-    previa al pasar el ratón en webapp/) -- mismas columnas que el resto
-    de premios, aunque el ranking en sí siga siendo puramente defensivo.
+    Quintetos All-Defensive heurísticos: 2 equipos (Primero/Segundo), 2
+    bases/escoltas + 2 aleros/ala-pívots + 1 pívot cada uno, ordenados por
+    el mismo `defensive_score_per36` escalado a temporada que usa DPOY
+    (misma limitación de box score, ver compute_dpoy_candidates).
+    Elegibilidad: partidos jugados ESPERADOS >= `min_games_played`.
     """
     df = player_df.copy()
     df["games_played_expected"] = _expected_games_played(df, games_per_season)

@@ -1,51 +1,28 @@
 """
 bayesian_calibration.py
 
-EXPERIMENTO, no forma parte del pipeline de producción -- no lo importa
-ni lo llama ningún módulo de src/, dashboard/ ni webapp/, y no toca
-NINGÚN archivo existente. Explora si `game_score_to_net_rating_scale`
-(hoy una constante única en `config/team_config.yaml`, recalibrada dos
-veces a mano en la historia de este proyecto -- ver CLAUDE.md) se puede
-sustituir por un modelo bayesiano jerárquico con "partial pooling" por
-temporada: en vez de UN número fijo para las 16 temporadas del sweep,
-cada temporada tiene su propio slope, pero esos slopes se encogen hacia
-una media común tanto más cuanto menos datos (30 equipos) tenga esa
-temporada -- así una temporada rara no puede desviar la calibración
-tanto como si se ajustara sola, pero tampoco se le fuerza el número
-global si la era es sistemáticamente distinta (ver la inflación de
-Net Rating por era ya documentada en simulation.py -- exactamente el
-tipo de variación por temporada que un slope único no puede capturar).
+EXPERIMENTO, no forma parte del pipeline de producción. Explora si
+`game_score_to_net_rating_scale` (constante única en team_config.yaml,
+recalibrada a mano dos veces -- ver CLAUDE.md) se puede sustituir por un
+modelo bayesiano jerárquico con partial pooling por temporada: cada
+temporada tiene su propio slope, encogido hacia una media común en
+proporción inversa a sus datos, capturando variación por era sin dejar
+que una temporada rara desvíe la calibración global.
 
-Por qué esto y no una red neuronal: con 480 filas (30 equipos x 16
-temporadas) un modelo profundo sobreajusta. Un modelo bayesiano
-jerárquico con priors débilmente informativos es el punto correcto en
-la escala de complejidad para este tamaño de datos, y de paso da
-directamente lo que el resto del proyecto ya expone en todas partes --
-un RANGO con incertidumbre, no un punto -- en vez de la constante fija
-actual.
+Con 480 filas (30 equipos x 16 temporadas) un modelo jerárquico con
+priors débilmente informativos es el punto correcto de complejidad, y da
+un RANGO con incertidumbre en vez de la constante puntual actual.
 
-Qué mide `x` (predictor) e `y` (target) por cada caso equipo-temporada:
-  x = Game Score de equipo ESPERADO (con lesiones/fatiga/sinergia ya
-      aplicados, ver backtesting.expected_team_game_score_equivalent)
-      MENOS la línea base de liga esa temporada (con la misma
-      restricción de suma cero que ya usa build_backtest_sweep_dataset,
-      ver compute_projected_league_baselines) -- exactamente el mismo
-      número que hoy se multiplica por game_score_to_net_rating_scale.
-  y = DiffPointsPG REAL de ese equipo esa temporada (de
-      backtest_sweep_standings.csv) -- el diferencial de puntos que de
-      verdad tuvo, no el simulado.
+x = Game Score de equipo esperado (con lesión/fatiga/sinergia aplicados)
+menos la línea base de liga esa temporada -- el mismo número que hoy se
+multiplica por game_score_to_net_rating_scale. y = DiffPointsPG real de
+ese equipo esa temporada. Regresión directa sobre el diferencial de
+temporada (un paso antes de la logística partido a partido de
+producción), suficiente para comparar slope fijo vs. partial pooling.
 
-El modelo actual usa slope * x = net_rating_estimate y de ahí una
-logística para ganar/perder partido a partido; este experimento se
-queda en el paso anterior (regresión directa sobre el diferencial de
-temporada), más simple y suficiente para comparar "un slope fijo" contra
-"slopes con partial pooling por temporada".
-
-Requiere haber corrido antes `python src/data_pipeline.py --backtest-sweep`
-(los CSV backtest_sweep_*.csv deben existir) y tener instaladas las
-dependencias de `scripts/experiments/requirements-experiments.txt`
-(pymc + arviz -- NO están en el requirements.txt principal, son pesadas
-y solo las usa este experimento).
+Requiere `python src/data_pipeline.py --backtest-sweep` corrido antes y
+las dependencias de requirements-experiments.txt (pymc + arviz, pesadas,
+fuera del requirements.txt principal).
 
 Uso:
     python scripts/experiments/bayesian_calibration.py
@@ -84,14 +61,7 @@ LOSO_DIAGNOSTICS_FILENAME = "experiment_bayesian_calibration_loso_diagnostics.cs
 
 
 def build_calibration_features(config: Dict[str, Any]) -> pd.DataFrame:
-    """
-    Una fila por caso equipo-temporada del sweep, con el predictor `x` y
-    el target real `y` descritos en el docstring del módulo. Reutiliza
-    `project_backtest_team` / `expected_team_game_score_equivalent` /
-    `compute_projected_league_baselines` de `src/backtesting.py` TAL
-    CUAL -- ni una fórmula nueva, para que `x` sea exactamente lo que la
-    producción calcula hoy antes de aplicar la constante fija.
-    """
+    """Una fila por caso equipo-temporada con el predictor `x` y target `y` del docstring del módulo, reutilizando las funciones de producción en src/backtesting.py sin reimplementarlas."""
     paths = get_paths(config)
     cases = resolve_backtest_sweep_cases(config)
     if not cases:
@@ -164,38 +134,18 @@ def build_calibration_features(config: Dict[str, Any]) -> pd.DataFrame:
 
 def fit_hierarchical_model(features: pd.DataFrame, draws: int, tune: int, chains: int, seed: int):
     """
-    y ~ Normal(alpha[temporada] + beta[temporada] * x, sigma)
-    alpha[s] ~ Normal(alpha_mu, alpha_sigma)   -- partial pooling del intercepto
-    beta[s]  ~ Normal(beta_mu, beta_sigma)     -- partial pooling del slope
-                                                   (el sustituto de game_score_to_net_rating_scale)
+    y ~ Normal(alpha[temporada] + beta[temporada] * x, sigma), con partial
+    pooling de alpha y beta hacia alpha_mu/beta_mu (beta_mu es el sustituto
+    de game_score_to_net_rating_scale). alpha_mu se centra en 0 porque la
+    restricción de suma cero de compute_projected_league_baselines hace
+    que x=0 y el diferencial de liga medio sean 0 por construcción; beta_mu
+    parte de un prior débil alrededor del valor calibrado a mano (0.21).
 
-    alpha_mu se centra en 0 a propósito: por la restricción de suma cero
-    que ya usa compute_projected_league_baselines, el equipo "promedio"
-    de cada temporada tiene x=0, y el diferencial de puntos medio de la
-    liga TAMBIÉN es exactamente 0 por construcción (una liga siempre
-    reparte tantas victorias como derrotas) -- si alpha_mu se aleja
-    mucho de 0 en el resultado, es una señal de que algo del feature
-    engineering no está centrado, no un hallazgo real.
-
-    beta_mu parte de un prior débilmente informativo alrededor del valor
-    ya calibrado a mano (0.21) -- no ciego, pero tampoco impide que los
-    datos lo muevan si la evidencia es fuerte.
-
-    PARAMETRIZACIÓN NO CENTRADA (`alpha_offset`/`beta_offset` ~ Normal
-    estándar, `alpha = alpha_mu + alpha_sigma * alpha_offset`, igual para
-    beta) en vez de `alpha ~ Normal(alpha_mu, alpha_sigma)` directo.
-    Con la parametrización centrada, el muestreo sobre los 480 casos
-    reales produce 752/4000 muestras divergentes (19%) y alpha_mu con
-    r_hat=1.23 (debería rondar 1.00) -- el "embudo de Neal" clásico de
-    modelos jerárquicos cuando la varianza de grupo (alpha_sigma) quiere
-    ser pequeña: por la restricción de suma cero de
-    compute_projected_league_baselines(), cada alpha[temporada] SÍ
-    debería salir cerca de 0, así que alpha_sigma se ve empujado hacia
-    valores pequeños donde el muestreador centrado degenera
-    geométricamente. La parametrización no centrada es la solución
-    estándar documentada (Betancourt, "A Conceptual Introduction to
-    Hamiltonian Monte Carlo") -- separa la escala de la localización
-    para que NUTS pueda explorar ambas con pasos de tamaño razonable.
+    Usa parametrización no centrada (alpha/beta = mu + sigma * offset)
+    porque la centrada, con alpha_sigma empujado a valores pequeños por la
+    restricción de suma cero, produce el embudo de Neal: 19% de muestras
+    divergentes y r_hat=1.23 en alpha_mu. La no centrada es la solución
+    estándar (Betancourt) para este caso.
     """
     import pymc as pm
 
@@ -247,8 +197,7 @@ def summarize(idata, features: pd.DataFrame, current_scale: float) -> pd.DataFra
     else:
         print("-> La constante actual cae DENTRO del 94% HDI -- el modelo no la contradice.")
 
-    # Comparación simple de ajuste: R² de "un solo slope fijo" (el actual)
-    # vs. el slope posterior medio de cada temporada.
+    # R² del slope fijo actual vs. el slope posterior medio por temporada.
     seasons = sorted(features["season"].unique())
     beta_by_season = dict(zip(seasons, idata.posterior["beta"].mean(dim=("chain", "draw")).values))
     alpha_by_season = dict(zip(seasons, idata.posterior["alpha"].mean(dim=("chain", "draw")).values))
@@ -282,24 +231,13 @@ def run_loso_validation(
     features: pd.DataFrame, current_scale: float, draws: int, tune: int, chains: int, seed: int,
 ) -> pd.DataFrame:
     """
-    Leave-one-season-out: para cada una de las 16 temporadas, entrena el
-    modelo con las otras 15 (la temporada escondida NUNCA se ve durante
-    el ajuste) y predice esa temporada usando SOLO los hiperparámetros
-    globales (`alpha_mu`/`beta_mu`) -- es la predicción correcta para un
-    grupo nuevo del que no hay datos propios todavía, no un `beta[temporada]`
-    que no existe para una temporada que el modelo nunca vio.
-
-    Comparación justa con la producción actual: `pred_fixed` usa
-    EXACTAMENTE la misma fórmula que usa hoy el motor de simulación
-    (`x * game_score_to_net_rating_scale`, sin intercepto -- ver
-    simulation.py línea ~794), para que ninguno de los dos lados tenga
-    una ventaja estructural que el otro no tenga.
-
-    Repite el ajuste MCMC 16 veces (una por temporada excluida) -- esto
-    es justo la prueba que faltaba: el R²/MAE de la vuelta anterior se
-    midió contra los MISMOS datos con los que se entrenó, que siempre
-    sale optimista. Aquí cada predicción es sobre datos que el modelo de
-    esa tirada nunca vio.
+    Leave-one-season-out: entrena con 15 temporadas, predice la excluida
+    usando solo los hiperparámetros globales (alpha_mu/beta_mu) -- la
+    predicción correcta para un grupo sin datos propios. `pred_fixed` usa
+    la misma fórmula que producción (x * game_score_to_net_rating_scale,
+    sin intercepto) para comparación justa. Repite el ajuste MCMC 16
+    veces; a diferencia del R² in-sample de `summarize`, aquí cada
+    predicción es sobre datos nunca vistos por ese ajuste.
     """
     import pymc as pm  # noqa: F401 -- solo para que un fallo de import salga aquí, no a mitad del bucle
 

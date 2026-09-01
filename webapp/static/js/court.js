@@ -1,12 +1,8 @@
-// court.js -- mapa de tiros real (LOC_X/LOC_Y de ShotChartDetail, ver
-// data_pipeline.fetch_player_shot_chart / build_roster_shot_charts_dataset)
-// sobre una media cancha dibujada a mano en SVG, sin librería externa
-// (mismo criterio que charts.js: nada de Chart.js/D3 vendorizado). Las
-// medidas de la cancha (aro, tablero, zona, línea de 3, semicírculo de
-// tiros libres) son las medidas físicas reales de una cancha NBA en
-// décimas de pie desde el aro -- el mismo sistema de coordenadas que
-// devuelve `ShotChartDetail`, así que los puntos se colocan
-// directamente sin reescalar.
+// court.js -- mapa de tiros real (LOC_X/LOC_Y de ShotChartDetail) sobre
+// una media cancha dibujada a mano en SVG, sin librería externa. Las
+// medidas son las físicas reales de una cancha NBA en décimas de pie
+// desde el aro -- mismo sistema de coordenadas que ShotChartDetail, los
+// puntos se colocan sin reescalar.
 
 import { el, playerPhoto } from "./ui.js";
 import { openPlayerModal } from "./player-modal.js";
@@ -25,21 +21,14 @@ function svgEl(tag, attrs = {}) {
 function courtLines() {
   const group = svgEl("g", { class: "court-lines" });
   group.append(
-    // Límite de la media cancha (línea de banda + línea de medio campo).
-    svgEl("rect", { x: -250, y: -47.5, width: 500, height: 470, class: "court-boundary" }),
-    // Aro.
-    svgEl("circle", { cx: 0, cy: 0, r: 7.5, class: "court-hoop" }),
-    // Tablero.
-    svgEl("line", { x1: -30, y1: -7.5, x2: 30, y2: -7.5, class: "court-backboard" }),
-    // Área restringida (semicírculo bajo el aro).
-    svgEl("path", { d: "M -40 0 A 40 40 0 0 0 40 0", class: "court-restricted" }),
-    // Zona (rectángulo exterior + interior).
-    svgEl("rect", { x: -80, y: -47.5, width: 160, height: 190, class: "court-paint-outer" }),
+    svgEl("rect", { x: -250, y: -47.5, width: 500, height: 470, class: "court-boundary" }), // límite de media cancha
+    svgEl("circle", { cx: 0, cy: 0, r: 7.5, class: "court-hoop" }), // aro
+    svgEl("line", { x1: -30, y1: -7.5, x2: 30, y2: -7.5, class: "court-backboard" }), // tablero
+    svgEl("path", { d: "M -40 0 A 40 40 0 0 0 40 0", class: "court-restricted" }), // área restringida
+    svgEl("rect", { x: -80, y: -47.5, width: 160, height: 190, class: "court-paint-outer" }), // zona
     svgEl("rect", { x: -60, y: -47.5, width: 120, height: 190, class: "court-paint-inner" }),
-    // Semicírculo de tiros libres.
-    svgEl("path", { d: "M -60 142.5 A 60 60 0 0 0 60 142.5", class: "court-ft-circle" }),
-    // Línea de 3: esquinas rectas + arco.
-    svgEl("line", { x1: -220, y1: -47.5, x2: -220, y2: 92.5, class: "court-three" }),
+    svgEl("path", { d: "M -60 142.5 A 60 60 0 0 0 60 142.5", class: "court-ft-circle" }), // tiros libres
+    svgEl("line", { x1: -220, y1: -47.5, x2: -220, y2: 92.5, class: "court-three" }), // línea de 3
     svgEl("line", { x1: 220, y1: -47.5, x2: 220, y2: 92.5, class: "court-three" }),
     svgEl("path", { d: "M -220 92.5 A 237.5 237.5 0 0 0 220 92.5", class: "court-three" })
   );
@@ -86,15 +75,10 @@ export function courtShotChart(shots, { title } = {}) {
   ]);
 }
 
-// Posiciones fijas del quinteto clásico 2-2-1 (G-G-F-F-C) sobre la media
-// cancha -- NO son las 5 posiciones reales (base/escolta/alero/ala-pívot/
-// pívot): `awards_projection._pick_positional_teams` solo distingue 3
-// grupos (G, F, C, 2+2+1), así que dentro de cada grupo el orden es
-// simplemente "de mayor a menor valor de temporada" (ver
-// compute_all_nba_teams/compute_all_defensive_teams), no una posición
-// concreta. Colocar al primer G a la izquierda y al segundo a la
-// derecha es una decisión puramente visual, no una afirmación de que
-// uno es base y el otro escolta.
+// Posiciones fijas del quinteto clásico 2-2-1 (G-G-F-F-C) -- NO son las 5
+// posiciones reales: `awards_projection._pick_positional_teams` solo
+// distingue 3 grupos (G, F, C), ordenados por valor de temporada dentro
+// de cada uno. Izquierda/derecha es puramente visual.
 const LINEUP_SLOT_COORDS = {
   C: [[0, 55]],
   F: [
@@ -111,14 +95,8 @@ function fmt1(value) {
   return typeof value === "number" ? value.toFixed(1) : value;
 }
 
-/** Set de stats UNIFICADO con leaderboard.js:
- * PPG/RPG/APG/SPG/BPG/FG%/3P%/récord de equipo + el "valor" que ordena
- * el quinteto (season_value en All-NBA, defensive_value en
- * All-Defensive -- awards_projection.compute_all_nba_teams/
- * compute_all_defensive_teams ya incluyen las mismas columnas que
- * MVP/DPOY/ROY/6.º Hombre). Siempre de la temporada proyectada -- los
- * quintetos, a diferencia de MIP, no tienen una "temporada anterior"
- * con la que compararse. */
+/** Set de stats unificado con leaderboard.js. `awardValue` es
+ * season_value (All-NBA) o defensive_value (All-Defensive). */
 function lineupStats(record) {
   const stat = (label, key) => (record[key] != null ? { label, value: fmt1(record[key]) } : null);
   const awardValue = record.season_value ?? record.defensive_value;
@@ -136,18 +114,12 @@ function lineupStats(record) {
   ].filter(Boolean);
 }
 
-/** `records`: 5 filas de un quinteto (all_nba/all_defensive), cada una
- * con player_id, player_name, position_slot ("G"/"F"/"C"), y
- * season_value o defensive_value según el premio. Dibuja la misma
- * media cancha que courtShotChart() (SVG, coordenadas físicas reales)
- * y coloca la foto real de cada jugador (playerPhoto(), mismo hotlink +
- * fallback a iniciales que el resto de la app) encima, vía `<div>`
- * posicionados en % sobre el mismo viewBox -- mezclar HTML dentro de un
- * SVG (`<foreignObject>`) es más frágil entre navegadores que
- * superponer una capa HTML absoluta sobre el SVG. Cada foto es
- * clicable (abre el popup de detalle del jugador, mismo que el resto
- * de la app) y al pasar el ratón muestra un resumen rápido -- así el
- * gráfico basta por sí solo, sin necesitar la tabla de al lado. */
+/** `records`: 5 filas de un quinteto (all_nba/all_defensive) con
+ * player_id, player_name, position_slot, season_value/defensive_value.
+ * Coloca la foto de cada jugador en `<div>` posicionados en % sobre el
+ * viewBox de la cancha (más robusto entre navegadores que
+ * `<foreignObject>`). Clic abre el popup de detalle; hover muestra un
+ * resumen rápido. */
 export function courtLineup(records, { title, teamIds = {}, season } = {}) {
   const svg = svgEl("svg", {
     viewBox: "-250 -60 500 500",

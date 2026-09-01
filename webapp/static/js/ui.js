@@ -1,6 +1,5 @@
 // ui.js -- helpers de renderizado compartidos entre vistas (tablas, stat
-// tiles, glosario, estado vacío, insignia de equipo) -- equivalente a los
-// helpers de dashboard/app.py (render_glossary_expander, st.metric, etc.).
+// tiles, glosario, estado vacío, insignia de equipo).
 
 export function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
@@ -17,10 +16,8 @@ export function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-/** Tooltip compartido (#chart-tooltip en index.html, un único nodo para
- * toda la app) -- usado por charts.js, court.js y leaderboard.js. Un
- * solo sitio para esta lógica en vez de triplicarla en cada archivo de
- * visualización. */
+/** Tooltip compartido (#chart-tooltip en index.html) usado por charts.js,
+ * court.js y leaderboard.js. */
 export function showTooltip(event, text) {
   if (!text) return;
   const tip = document.getElementById("chart-tooltip");
@@ -46,11 +43,8 @@ export function apiErrorState(err) {
   return emptyState(err.message || "No se encontró el dataset todavía.");
 }
 
-/** Placeholder de carga con shimmer, en vez de un texto fijo "Cargando...".
- * `lines` describe el contenido aproximado que va a llegar (una card con
- * título + un par de filas por defecto) para minimizar el salto de layout
- * cuando el dato real reemplaza al esqueleto -- ver progressive-loading en
- * la skill de UI/UX de este proyecto. */
+/** Placeholder de carga con shimmer. `lines` describe el contenido
+ * aproximado que va a llegar, para minimizar el salto de layout. */
 export function skeleton(lines = ["title", "", "short"]) {
   return el(
     "div",
@@ -74,10 +68,8 @@ export function statGrid(items) {
   );
 }
 
-/** Selector compacto tipo pill (usado como control LOCAL de "Por partido /
- * Totales" junto a cada tabla, en vez de un toggle global en una barra
- * lateral). `options`: [{value, label}]. Llama a `onChange(value)` al
- * cambiar de selección; el propio botón se marca activo. */
+/** Selector compacto tipo pill, control LOCAL junto a cada tabla.
+ * `options`: [{value, label}]. Llama a `onChange(value)` al cambiar. */
 export function pillToggle(options, current, onChange) {
   const container = el("div", { class: "segmented" });
   const buttons = options.map((opt) =>
@@ -98,14 +90,11 @@ export function pillToggle(options, current, onChange) {
   return container;
 }
 
-/** Insignia genérica: iniciales/texto de respaldo sobre un color de
- * fondo, con intento de imagen real cargada EN VIVO (nunca guardada en
- * el repo -- ver README) que cae de vuelta al texto si la imagen no
- * carga. El texto y la imagen son ALTERNATIVOS, nunca se apilan -- si
- * se dejan los dos en el DOM a la vez, el hueco que deja `object-fit:
- * contain` dentro del círculo deja asomar el texto por un lado (se ve
- * como "logos con letras a la izquierda"). `teamBadge()` y la foto de
- * jugador del popup son dos casos de este mismo mecanismo. */
+/** Insignia genérica: iniciales de respaldo + intento de imagen cargada
+ * EN VIVO (nunca guardada en el repo -- ver README). Texto e imagen son
+ * ALTERNATIVOS, nunca se apilan (si quedan los dos en el DOM se ve como
+ * "logos con letras a la izquierda"). Usado por teamBadge() y la foto
+ * del popup de jugador. */
 export function photoBadge(src, fallbackText, size = 40, extraClass = "") {
   const label = document.createTextNode(fallbackText || "?");
   const badge = el("div", { class: `team-badge ${extraClass}`.trim() }, [label]);
@@ -131,10 +120,7 @@ export function teamBadge(teamId, abbreviation, size = 40) {
   return photoBadge(src, abbreviation ? abbreviation.slice(0, 3) : "NBA", size);
 }
 
-/** Foto de un jugador -- caso particular de photoBadge() con la URL de
- * headshots de cdn.nba.com. Cae a un círculo con las iniciales del
- * nombre si la foto no carga (jugador sin headshot oficial, red caída
- * en el entorno de pruebas, etc.). */
+/** Foto de jugador vía cdn.nba.com/headshots -- cae a iniciales si no carga. */
 export function playerPhoto(playerId, playerName, size = 96) {
   const initials = (playerName || "?")
     .split(" ")
@@ -155,8 +141,7 @@ export function teamCell(teamId, abbreviation) {
   ]);
 }
 
-// Columnas ya en formato de display (PPG, GP, FG%, 3PM...) se dejan tal
-// cual -- solo se reformatean snake_case/UPPER_SNAKE_CASE crudos de pandas.
+// Columnas ya en formato de display (PPG, GP, FG%...) se dejan tal cual.
 const PRESERVE_LABEL = /^[A-Z0-9%.]{1,6}$/;
 
 function prettifyLabel(col) {
@@ -167,12 +152,8 @@ function prettifyLabel(col) {
     .join(" ");
 }
 
-/** Compara dos valores de celda para ordenar: numérico si los dos son
- * number, alfabético (localeCompare es-ES, sensible a números embebidos
- * p.ej. "Jugador 9" antes que "Jugador 10") en cualquier otro caso.
- * null/undefined siempre al final, sea cual sea la dirección -- ordenar
- * por una columna con huecos no debe esconder las filas completas ni
- * mezclarlas de forma rara al invertir. */
+/** Compara valores de celda: numérico si ambos son number, alfabético
+ * (localeCompare es-ES) si no. null/undefined siempre al final. */
 function compareCellValues(a, b) {
   const aMissing = a == null;
   const bMissing = b == null;
@@ -183,20 +164,14 @@ function compareCellValues(a, b) {
   return String(a).localeCompare(String(b), "es", { numeric: true, sensitivity: "base" });
 }
 
-/** Tabla con tooltip nativo (title=) por columna documentada en el glosario
- * + un <details> con el texto completo debajo -- mismo patrón que
- * render_glossary_expander() de dashboard/app.py. Ordenable por columna
- * por defecto (clic en la cabecera -- asc / desc / vuelta al orden
- * original): un <button> dentro de cada <th>, no el <th> mismo, para que
- * quede alcanzable por teclado y con foco visible sin reinventar el rol
- * ARIA de una celda de cabecera. `options.sortable: false` lo desactiva
- * para una tabla concreta (p.ej. donde el orden de fila ya es el dato,
- * como un log de partidos por día) sin tocar las demás. */
+/** Tabla con tooltip nativo (title=) por columna del glosario + un
+ * <details> con el texto completo debajo. Ordenable por columna (clic en
+ * la cabecera: asc / desc / orden original) vía un <button> dentro de
+ * cada <th> para foco de teclado accesible. `options.sortable: false` la
+ * desactiva para una tabla concreta. */
 export function dataTable(records, glossary = {}, options = {}) {
   const { formatters = {}, maxRows = null, hiddenColumns = [], doubleClick = null, rowClass = null, sortable = true } = options;
-  // doubleClick acepta un único {column, onOpen} o varios a la vez
-  // (p.ej. Premios individuales: doble clic en el jugador Y en el
-  // equipo de la misma tabla) -- se normaliza a un Map columna -> onOpen.
+  // doubleClick acepta un {column, onOpen} o varios (normalizado a Map).
   const doubleClickByColumn = new Map(
     (Array.isArray(doubleClick) ? doubleClick : doubleClick ? [doubleClick] : []).map((d) => [d.column, d.onOpen])
   );
@@ -207,7 +182,7 @@ export function dataTable(records, glossary = {}, options = {}) {
   const baseRows = maxRows ? records.slice(0, maxRows) : records;
 
   let sortColumn = null;
-  let sortDirection = null; // "asc" | "desc" | null (null = orden original)
+  let sortDirection = null; // "asc" | "desc" | null = orden original
   const headerCellByColumn = new Map();
 
   function buildRow(record) {
@@ -269,10 +244,7 @@ export function dataTable(records, glossary = {}, options = {}) {
           class: "th-sort-btn",
           onclick: () => {
             if (sortColumn === col) {
-              // asc -> desc -> orden original, en vez de solo alternar
-              // entre asc/desc para siempre -- deja volver al orden que
-              // trajo la tabla (p.ej. ya ordenada por relevancia desde el
-              // backend) sin tener que recargar la vista entera.
+              // asc -> desc -> orden original (deja volver al orden que trajo la tabla).
               sortDirection = sortDirection === "asc" ? "desc" : sortDirection === "desc" ? null : "asc";
               if (sortDirection === null) sortColumn = null;
             } else {
@@ -301,14 +273,10 @@ export function dataTable(records, glossary = {}, options = {}) {
   const scrollRegion = el("div", { class: "table-scroll-region" }, [wrap, shadowLeft, shadowRight]);
   const container = el("div", {}, [scrollRegion]);
 
-  // Sombra de scroll horizontal -- ver el comentario de .scroll-shadow en
-  // components.css. Se recalcula al hacer scroll; requestAnimationFrame
-  // porque scrollWidth recién montado puede no estar listo en el mismo
-  // tick que el append. Sin listener de `resize` a propósito -- varias
-  // vistas recrean su tabla en cada clic (re-simular bracket/calendario),
-  // y acumular listeners de `window` que nunca se limpian sí sería un
-  // leak real; el de `scroll` vive y muere con `wrap`, que sí se
-  // descarta entero al re-renderizar.
+  // Sombra de scroll horizontal (ver .scroll-shadow en components.css).
+  // requestAnimationFrame porque scrollWidth recién montado puede no estar
+  // listo en el mismo tick. Sin listener de `resize` a propósito -- viviría
+  // en `window` y nunca se limpiaría; el de `scroll` muere con `wrap`.
   const updateShadows = () => {
     const maxScroll = wrap.scrollWidth - wrap.clientWidth;
     shadowLeft.classList.toggle("visible", wrap.scrollLeft > 2);

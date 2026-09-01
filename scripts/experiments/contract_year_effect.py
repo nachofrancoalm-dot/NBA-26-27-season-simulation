@@ -1,65 +1,26 @@
 """
 contract_year_effect.py
 
-EXPERIMENTO, no forma parte del pipeline de producción. Evalúa si
-merece la pena incorporar información salarial/contractual (año de
-contrato / agencia libre inminente) al motor de proyección, bajo la
-hipótesis de que un jugador en el último año de su contrato ("contract
-year"/"walk year") produce más de lo esperado para asegurarse una
-buena extensión.
+EXPERIMENTO, no forma parte del pipeline de producción. Evalúa la
+hipótesis de que un jugador en el último año de contrato ("contract
+year"/"walk year") produce más de lo esperado para asegurarse una buena
+extensión.
 
-Fuentes de datos (ninguna forma parte del pipeline de nba_api ya
-existente -- nba_api no expone salarios ni contratos; ambas descargadas
-manualmente desde Kaggle, ver data/raw/contract_data/):
-  - "NBA Player Stats and Salaries_2010-2025.csv"
-    (kaggle.com/datasets/ratin21/nba-player-stats-and-salaries-2010-2025):
-    una fila por jugador-temporada (2010-2025), con salario y
-    estadísticas reales POR PARTIDO (no totales). Convención de la
-    columna Year = año en que TERMINA la temporada -- verificado a mano
-    contra contratos conocidos: LeBron James Year=2011/Team=MIA/
-    Salary=14.5M coincide con su salario real de la temporada 2010-11
-    (primera en Miami), y Stephen Curry Year=2014/Salary=9.89M coincide
-    con el primer año de su extensión de 2013 (temporada 2013-14).
-  - "nba_contracts_history.csv"
-    (kaggle.com/datasets/jarosawjaworski/current-nba-players-contracts-history):
-    199 contratos de 138 jugadores con CONTRACT_START/CONTRACT_END (año
-    calendario de inicio/fin de CADA contrato). Solo cubre contratos que
-    estaban "vigentes o recientes" en el momento del scrape, NO el
-    historial contractual completo de la liga -- por eso el análisis
-    solo puede usar esta muestra parcial de contratos, no todos los
-    jugador-temporada del otro CSV. Convención verificada con los
-    contratos de 1 año de LeBron (CONTRACT_START=2015/END=2016 y
-    2016/2017, los conocidos acuerdos "1+1" con opción de jugador que
-    firmó en Cleveland precisamente para maximizar renegociación anual
-    -- un ejemplo del propio patrón que este experimento intenta medir
-    de forma sistemática): CONTRACT_END coincide con la convención
-    Year=season_end_year del otro CSV, así que la temporada "de
-    contrato" (la última antes de la agencia libre) de un contrato dado
-    es season_end_year == CONTRACT_END.
+Datos (descargados manualmente de Kaggle, nba_api no expone salarios;
+ver data/raw/contract_data/): "NBA Player Stats and Salaries_2010-2025"
+(jugador-temporada 2010-2025, salario + stats por partido, Year = año
+en que termina la temporada) y "nba_contracts_history" (199 contratos de
+138 jugadores con CONTRACT_START/END, muestra parcial de contratos
+vigentes/recientes al momento del scrape). Ambas convenciones de año
+verificadas a mano contra contratos conocidos.
 
-Diseño del experimento (por qué esta comparación y no otra):
-  Comparar la producción de un jugador en su año de contrato contra la
-  de OTROS jugadores no sirve (cada jugador tiene su propio nivel).
-  Comparar contra la temporada anterior/posterior del MISMO jugador
-  tampoco basta a secas: la producción sube y baja con la edad de forma
-  predecible, así que un año de contrato que cae en la cima de la curva
-  de edad de un jugador parecería "efecto contrato" sin serlo. Por eso,
-  para contratos de >= 2 temporadas (`MIN_CONTRACT_SPAN_SEASONS`), se
-  compara la temporada FINAL (season_end_year == CONTRACT_END,
-  is_final_year=True) contra las temporadas INTERMEDIAS del MISMO
-  contrato y del MISMO jugador, de dos formas complementarias:
-    1) Delta pareado por contrato: GmSc(final) - media(GmSc no-final),
-       con test de signos (¿en cuántos contratos el año final es mejor
-       que el resto del mismo contrato?) y t de Student pareada.
-    2) Regresión con efectos fijos por jugador (demeaning dentro de
-       jugador) controlando por edad y edad² -- así el coeficiente de
-       is_final_year no puede explicarse por "este jugador es bueno"
-       (efecto fijo) ni por "esta temporada le tocó estar en su pico de
-       edad" (control de edad).
-  Game Score (Hollinger) se usa como métrica de producción compuesta
-  porque combina lo que ya está disponible por partido en el CSV
-  (PTS, FG, FGA, FT, FTA, ORB, DRB, AST, STL, BLK, TOV, PF) sin
-  necesitar re-descargar nada.
+Método: para contratos de >= 2 temporadas, compara la temporada final
+(season_end_year == CONTRACT_END) contra las intermedias del mismo
+contrato y jugador, de dos formas: (1) delta pareado por contrato
+(GmSc final - media no-final) con t de Student, y (2) regresión OLS con
+efectos fijos por jugador (demeaning) controlando por edad y edad², para
+aislar el efecto de "es buen jugador" o "le tocó su pico de edad". Game
+Score (Hollinger) es la métrica de producción.
 
 Uso:
     python scripts/experiments/contract_year_effect.py
@@ -82,14 +43,12 @@ CONTRACT_DATA_SUBDIR = "contract_data"
 SALARY_STATS_FILENAME = "NBA Player Stats and Salaries_2010-2025.csv"
 CONTRACTS_FILENAME = "nba_contracts_history.csv"
 
-# Duración mínima de contrato (temporadas) para poder comparar la final
-# contra al menos una intermedia del mismo contrato.
+# Duración mínima de contrato (temporadas) para comparar final vs. intermedias.
 MIN_CONTRACT_SPAN_SEASONS = 2
 
 
 def compute_game_score(row: pd.Series) -> float:
-    """Game Score (Hollinger), fórmula estándar, sobre columnas POR
-    PARTIDO (no totales -- el CSV de salarios ya viene así)."""
+    """Game Score (Hollinger) sobre columnas por partido (no totales)."""
     return (
         row["PTS"]
         + 0.4 * row["FG"]
@@ -106,8 +65,7 @@ def compute_game_score(row: pd.Series) -> float:
 
 
 def load_season_stats(config: dict) -> pd.DataFrame:
-    """Devuelve una fila por jugador-temporada con `player`,
-    `season_end_year`, `age`, `game_score` (por partido)."""
+    """Una fila por jugador-temporada con `player`, `season_end_year`, `age`, `game_score`."""
     paths = get_paths(config)
     path = paths["raw"] / CONTRACT_DATA_SUBDIR / SALARY_STATS_FILENAME
     if not path.exists():
@@ -120,10 +78,7 @@ def load_season_stats(config: dict) -> pd.DataFrame:
 
 
 def load_contracts(config: dict) -> pd.DataFrame:
-    """Devuelve una fila por contrato con `player`, `contract_id`,
-    `contract_start`, `contract_end` -- solo contratos con duración >=
-    MIN_CONTRACT_SPAN_SEASONS (necesitan al menos una temporada
-    intermedia además de la final para poder comparar)."""
+    """Una fila por contrato con `player`, `contract_id`, `contract_start`, `contract_end`; solo duración >= MIN_CONTRACT_SPAN_SEASONS."""
     paths = get_paths(config)
     path = paths["raw"] / CONTRACT_DATA_SUBDIR / CONTRACTS_FILENAME
     if not path.exists():
@@ -143,12 +98,7 @@ def load_contracts(config: dict) -> pd.DataFrame:
 
 
 def build_contract_year_panel(config: dict) -> pd.DataFrame:
-    """Una fila por (contrato, temporada real encontrada en el CSV de
-    salarios): `player`, `contract_id`, `season_end_year`, `age`,
-    `game_score`, `is_final_year`. Solo se quedan los contratos que
-    tienen AL MENOS una temporada final y una no-final con datos reales
-    -- si falta una de las dos, ese contrato no aporta nada a la
-    comparación."""
+    """Una fila por (contrato, temporada) con `is_final_year`; descarta contratos sin datos tanto en la temporada final como en al menos una intermedia."""
     stats = load_season_stats(config)
     contracts = load_contracts(config)
 
@@ -206,12 +156,7 @@ def paired_delta_test(panel: pd.DataFrame):
 
 
 def fixed_effects_regression(panel: pd.DataFrame):
-    """OLS de game_score ~ is_final_year + age + age^2, con efectos
-    fijos por jugador vía demeaning dentro de cada jugador (resta la
-    media del propio jugador a cada variable, incluida la variable
-    dependiente) -- el coeficiente de is_final_year queda así aislado de
-    "este jugador es bueno" y, con los controles de edad, también de
-    "le tocó la temporada en su pico de edad natural"."""
+    """OLS de game_score ~ is_final_year + age + age^2, con efectos fijos por jugador vía demeaning, para aislar is_final_year de nivel de jugador y edad."""
     import statsmodels.api as sm
 
     df = panel.copy()

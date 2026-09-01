@@ -4,35 +4,23 @@ data_loader.py
 Funciones puras de carga/combinación de los CSV en data/processed/ --
 la capa de datos que consume webapp/ (cada router de webapp/routers/
 importa de aquí en vez de leer CSV por su cuenta). Separada de la capa
-de renderizado a propósito: la lógica de qué datos se muestran es
-testeable (ver tests/test_dashboard_data_loader.py) con independencia
-de cómo se pinte.
+de renderizado a propósito: es testeable (ver
+tests/test_dashboard_data_loader.py) sin depender de cómo se pinte.
 
 Ninguna función aquí llama a la API -- todo lee CSV ya generados por el
-pipeline (data_pipeline.py, aging_curve.py, injury_model.py,
-fatigue_accumulation.py, simulation.py, backtesting.py, lineup_synergy.py,
-league_simulation.py). Si un CSV no existe todavía, se devuelve None --
-el caller (webapp/) decide cómo avisar al usuario, esta capa no lanza
-excepciones por archivos faltantes.
+pipeline. Si un CSV no existe todavía, se devuelve None -- el caller
+decide cómo avisar, esta capa no lanza excepciones por archivos
+faltantes.
 
-Cuatro excepciones a "solo lee CSV": run_single_bracket_simulation() sí
-ejecuta código en vivo (una simulación de bracket de playoffs) -- es
-rápido (proyecta 30 equipos desde CSV ya cacheados, sin red) y el botón
-de la pestaña "Liga y Playoffs" lo necesita para mostrar un bracket
-distinto cada vez que se pulsa. run_single_season_player_log_simulation()
-simula UNA temporada concreta (no la distribución agregada de
-simulation_results.csv) para el botón "Simular partidos de la temporada"
-de la pestaña Simulación -- misma idea que el bracket: rápido, sin red,
-sobre CSV ya cacheados. run_single_league_season_simulation() es lo
-mismo pero para los 30 equipos de Liga NBA -- calendario, resultado de
-cada partido y boxscore ilustrativo por jugador, para el botón "Simular
-calendario de la temporada" (a diferencia del bracket y del resto de la
-liga, sí persiste CSV propios -- league_single_season_game_log.csv /
-league_single_season_player_box_scores.csv -- porque son caros de
-regenerar en cada request). compute_awards_summary() no
-llama a la API ni simula nada nuevo, pero sí importa lógica de negocio
-de src/awards_projection.py (en vez de solo leer y reformatear un CSV)
-para calcular los premios individuales sobre los CSV ya generados.
+Excepciones a "solo lee CSV": `run_single_bracket_simulation()`,
+`run_single_league_season_simulation()` y
+`run_single_season_player_log_simulation()` sí ejecutan una simulación
+en vivo (rápida, sin red, sobre CSV ya cacheados) para los botones de
+"tirada nueva cada vez que se pulsa" del dashboard; las dos de liga
+persisten sus propios CSV porque son caras de regenerar en cada
+request. `compute_awards_summary()` no simula nada nuevo, pero importa
+lógica de negocio de src/awards_projection.py en vez de solo reformatear
+un CSV.
 """
 
 from __future__ import annotations
@@ -53,10 +41,8 @@ def _read_csv_if_exists(path: Path) -> Optional[pd.DataFrame]:
     return pd.read_csv(path)
 
 
-# Estadísticas "por partido" mostradas en el dashboard -> columna de
-# aging_curve_projection.csv / league_player_projections.csv de la que se
-# derivan (total de temporada / games_per_season). Un solo diccionario
-# para no repetir la lista de columnas entre los loaders y la leyenda.
+# Estadísticas "por partido" -> columna de origen (total de temporada /
+# games_per_season). Fuente única, reusada por loaders y leyenda.
 PER_GAME_STATS: Dict[str, str] = {
     "PPG": "PTS_projected",
     "RPG": "REB_projected",
@@ -67,8 +53,7 @@ PER_GAME_STATS: Dict[str, str] = {
     "3PM": "FG3M_projected",
 }
 
-# Columnas de TOTAL de temporada -> nombre limpio para mostrar (vista
-# "Totales" del toggle en la pestaña de roster).
+# Columnas de TOTAL de temporada -> nombre limpio (vista "Totales" del toggle).
 TOTAL_STATS: Dict[str, str] = {
     "PTS_projected": "PTS",
     "REB_projected": "REB",
@@ -88,23 +73,17 @@ LEAGUE_PLAYER_META_COLUMNS: List[str] = [
     "GP", "MPG", "minutes_projection", "game_score_per36", "risk_score", "fatigue_score",
 ]
 
-# Columnas crudas (de aging_curve.project_player_season) -> nombre limpio
-# de display. El NOMBRE de columna sigue siendo "*_last_season" (así se
-# llama en los CSV ya generados por el pipeline), pero el CONTENIDO que
-# llega aquí ya no es necesariamente el histórico real:
-# _apply_simulated_games_and_minutes() lo sustituye por la versión
-# simulada (partidos/minutos esperados de la temporada que se está
-# simulando) antes de este rename, cuando hay risk_score disponible --
-# distinto de minutes_projection, que sigue siendo el minutaje ASUMIDO
-# (input fijo, no una salida del modelo).
+# Columnas crudas ("*_last_season") -> nombre de display. El NOMBRE sigue
+# siendo histórico, pero _apply_simulated_games_and_minutes() sustituye el
+# CONTENIDO por la versión simulada antes de este rename cuando hay
+# risk_score -- distinto de minutes_projection, que es el minutaje ASUMIDO.
 GAMES_MINUTES_DISPLAY_COLUMNS: Dict[str, str] = {
     "games_played_last_season": "GP",
     "minutes_per_game_last_season": "MPG",
 }
 
-# Leyenda completa de todas las columnas que puede mostrar la pestaña de
-# roster (y la de liga, que comparte casi las mismas) -- una sola fuente
-# de verdad para los tooltips de columna y la leyenda de texto en webapp/.
+# Leyenda de todas las columnas mostrables (roster propio y liga) -- fuente
+# única para tooltips y leyenda de texto en webapp/.
 ROSTER_STAT_GLOSSARY: Dict[str, str] = {
     "PPG": "Puntos por partido (proyectados)",
     "RPG": "Rebotes por partido (proyectados)",
@@ -179,8 +158,7 @@ LEAGUE_GLOSSARY: Dict[str, str] = {
     "seed": "Posición dentro de su conferencia, ordenada por victorias medias simuladas (1 = mejor)",
 }
 
-# "situacion" es texto, no numérico -- se documenta aparte para el texto
-# de leyenda (glosario expandible en webapp/).
+# "situacion" es texto, no numérico -- documentado aparte para la leyenda.
 STANDINGS_SITUATION_GLOSSARY = (
     "**situacion** — según el seed dentro de la conferencia: **Clasifica directo** "
     "(seeds 1-6), **Play-in** (seeds 7-10, juegan por las 2 últimas plazas de playoffs), "
@@ -190,18 +168,12 @@ STANDINGS_SITUATION_GLOSSARY = (
 
 def load_roster_overview(config: Dict[str, Any]) -> Optional[pd.DataFrame]:
     """
-    Combina, por jugador del roster: metadata de team_config.yaml
-    (role_expected, minutes_projection, unit), la proyección de
-    aging_curve.py (totales de temporada, stats por partido derivadas --
-    ver PER_GAME_STATS -- y game_score_per36), el risk_score de
-    injury_model.py, el fatigue_score de fatigue_accumulation.py y la
-    posición real de roster_positions.csv (data_pipeline.py, vía
-    CommonPlayerInfo -- necesaria para los quintetos All-NBA/All-
-    Defensive de awards_projection.py). None si aging_curve_projection.csv
-    no existe todavía (el resto son opcionales, se dejan en blanco si
-    faltan). Devuelve TODAS las columnas (totales y por partido) --
-    select_roster_view() elige el subconjunto a mostrar según el modo
-    activo en el dashboard.
+    Combina, por jugador del roster: metadata de team_config.yaml, la
+    proyección de aging_curve.py, risk_score (injury_model.py),
+    fatigue_score (fatigue_accumulation.py) y posición real
+    (roster_positions.csv). None si aging_curve_projection.csv no existe
+    todavía (el resto son opcionales). Devuelve TODAS las columnas --
+    select_roster_view() elige el subconjunto a mostrar.
     """
     paths = get_paths(config)
     aging = _read_csv_if_exists(paths["processed"] / "aging_curve_projection.csv")
@@ -256,55 +228,30 @@ def _apply_simulated_games_and_minutes(
 ) -> pd.DataFrame:
     """
     Sustituye `games_played_last_season`/`minutes_per_game_last_season`
-    (dato histórico REAL) por sus versiones SIMULADAS. Fila por fila:
-    donde falte `risk_score` o `minutes_projection` se conserva el valor
-    histórico de esa fila en vez de dejarlo en blanco -- degradar así es
-    más útil que perder el dato por completo.
+    (histórico real) por versiones SIMULADAS. Fila por fila: si falta
+    `risk_score` o `minutes_projection` se conserva el histórico en vez
+    de dejarlo en blanco.
 
-    GP = partidos jugados ESPERADOS en la temporada simulada
-    (`simulation.compute_expected_games_played`, games_per_season ×
-    (1 − risk_score)) -- SÍ depende del riesgo de lesión.
+    GP = partidos ESPERADOS en la temporada simulada
+    (`compute_expected_games_played`, games_per_season × (1 − risk_score)).
+    MPG = `minutes_projection` tal cual, SIN descontar por risk_score a
+    propósito -- descontarlo (versión anterior) mezclaba "ritmo por
+    partido" con "carga de temporada" y producía cifras absurdas tipo "9
+    MPG" para un jugador de alto riesgo. GP mide disponibilidad, MPG mide
+    ritmo cuando juega; conceptos separados a propósito.
 
-    MPG = `minutes_projection` tal cual, el input curado del roster --
-    los minutos que se asumen los partidos en que el jugador SÍ juega.
-    A propósito NO se descuenta por risk_score. Una versión anterior
-    mostraba minutes_projection × (1 − risk_score) (la carga efectiva a
-    lo largo de TODA la temporada, contando 0 en partidos perdidos), pero
-    para un jugador de alto riesgo como Embiid eso producía algo como "9
-    MPG", que se lee como un error -- nadie juega 9 minutos cuando sale a
-    cancha. Esa cifra mezclaba "minutos por partido" con "carga de
-    temporada" en un solo número confuso. MPG = ritmo cuando juega,
-    GP = para cuántos partidos se espera que esté disponible; conceptos
-    separados a propósito.
+    También escala los TOTALES (`TOTAL_STATS`) por `(1 - risk_score)` --
+    si no, cambiar de escenario "con"/"sin lesiones" solo movía GP/MPG y
+    dejaba los totales de producción intactos. PER_GAME_STATS (PPG/RPG/...)
+    se deja SIN escalar a propósito: representa el ritmo cuando el
+    jugador SÍ juega, y así Total = PPG × GP se mantiene exacto. Mismo
+    factor que usa `webapp/routers/players.py::_projected_season_row`.
 
-    También escala los TOTALES de temporada (columnas `TOTAL_STATS`:
-    PTS_projected, REB_projected...) por el mismo factor de
-    disponibilidad `(1 - risk_score)`. Sin esto, cambiar el escenario de
-    liga "con" / "sin lesiones" solo movía GP y MPG -- los totales de
-    puntos/rebotes/asistencias quedaban igual, como si jugar menos
-    partidos no costara nada de producción. Las columnas PER_GAME_STATS
-    (PPG/RPG/...) se dejan SIN escalar a propósito -- representan el
-    ritmo del jugador cuando SÍ juega (igual que un PPG real de la NBA no
-    baja porque un jugador se pierda partidos), y la relación
-    Total = PPG × GP se mantiene exacta con este diseño (PTS_projected ×
-    disponibilidad = PTS_projected/games_per_season × (games_per_season ×
-    disponibilidad) = PPG constante × GP simulado). Mismo factor exacto
-    que ya usa `webapp/routers/players.py::_projected_season_row` para
-    la fila de proyección del popup de jugador -- no una fórmula nueva.
-
-    Limitación conocida, no arreglada a propósito: PPG/RPG/APG es un
-    punto fijo (ritmo per-36 × minutes_projection, ninguna de las dos
-    depende de risk_score), así que es matemáticamente idéntico en los
-    escenarios "con" y "sin lesiones" -- no hay ruido partido a partido
-    simulado a nivel de jugador en esta tabla. Esto ignora un efecto
-    real: jugar los 82 partidos sin descanso (escenario "sin lesiones")
-    acumula fatiga y podría reducir el ritmo real, mientras que un
-    jugador que se pierde partidos por lesión llega más descansado a los
-    que sí juega. El proyecto ya mide ese desgaste (`fatigue_score`, ver
-    fatigue_accumulation.py) pero hoy solo alimenta el resultado
-    ganar/perder a nivel de EQUIPO, nunca se conecta a estos promedios
-    individuales por partido -- conectarlo exigiría decidir la magnitud
-    del efecto y recalibrarlo, no es un ajuste trivial.
+    Limitación conocida, no arreglada: PPG/RPG/APG no depende de
+    risk_score, así que es idéntico en ambos escenarios -- ignora que
+    jugar 82 partidos sin descanso acumula fatiga real (`fatigue_score`,
+    ver fatigue_accumulation.py), que hoy solo afecta al resultado de
+    EQUIPO, no a estos promedios individuales.
     """
     if games_per_season is None or "risk_score" not in overview.columns:
         return overview
@@ -314,9 +261,8 @@ def _apply_simulated_games_and_minutes(
     has_risk = overview["risk_score"].notna()
 
     if "games_played_last_season" in overview.columns:
-        # El histórico llega como entero (partidos jugados); el simulado
-        # es continuo -- convertir a float ANTES de asignar, si no pandas
-        # avisa (y en el futuro fallará) al meter floats en una columna int.
+        # Convertir a float antes de asignar: el simulado es continuo, y
+        # pandas avisa (fallará en el futuro) si se mete float en col int.
         overview["games_played_last_season"] = overview["games_played_last_season"].astype(float)
         simulated_gp = compute_expected_games_played(overview["risk_score"].fillna(0).to_numpy(), games_per_season)
         overview.loc[has_risk, "games_played_last_season"] = simulated_gp[has_risk.to_numpy()]
@@ -340,21 +286,15 @@ def select_roster_view(
     games_per_season: Optional[int] = None,
 ) -> pd.DataFrame:
     """
-    Selecciona el subconjunto de columnas a mostrar según el modo del
-    toggle: "totals" (temporada completa proyectada, nombres limpios vía
-    TOTAL_STATS) o "per_game" (por partido, ya con nombres limpios --
-    PPG/RPG/... -- vía PER_GAME_STATS). `meta_columns` por defecto es
-    ROSTER_META_COLUMNS; se pasa uno distinto para league players (que no
-    tienen role_expected/unit del config propio).
+    Selecciona el subconjunto de columnas según el modo del toggle:
+    "totals" (vía TOTAL_STATS) o "per_game" (vía PER_GAME_STATS).
+    `meta_columns` por defecto es ROSTER_META_COLUMNS; se pasa uno
+    distinto para league players.
 
-    GP y MPG se SUSTITUYEN por sus versiones simuladas
-    (`simulation.compute_expected_games_played` /
-    `compute_expected_effective_minutes_per_game`) cuando se pasa
+    GP/MPG se sustituyen por sus versiones simuladas (ver
+    `_apply_simulated_games_and_minutes`) cuando se pasa
     `games_per_season` y el DataFrame trae `risk_score` y
-    `minutes_projection` -- ver `_apply_simulated_games_and_minutes`. Sin
-    `games_per_season`, o si falta alguna de las otras dos columnas (p.
-    ej. injury_risk.csv no se ha corrido todavía), se cae a los valores
-    históricos reales sin fallar.
+    `minutes_projection`; si no, caen a los valores históricos sin fallar.
     """
     meta_columns = meta_columns if meta_columns is not None else ROSTER_META_COLUMNS
     overview = _apply_simulated_games_and_minutes(overview, games_per_season)
@@ -366,10 +306,8 @@ def select_roster_view(
     meta_cols = [c for c in meta_columns if c in overview.columns]
 
     if mode == "totals":
-        # Redondeado a entero: son proyecciones continuas (aging_curve.py
-        # no predice un número exacto de puntos), pero "1600 PTS" se lee
-        # mejor que "1600.34" -- decimales en un TOTAL de temporada no
-        # aportan precisión real, solo ruido visual.
+        # Redondeado a entero: decimales en un TOTAL de temporada son ruido
+        # visual, no precisión real (son proyecciones continuas).
         stat_cols = [c for c in TOTAL_STATS if c in overview.columns]
         stat_df = overview[stat_cols].round(0).astype("Int64").rename(columns=TOTAL_STATS)
     else:
@@ -384,13 +322,9 @@ def select_roster_view(
 
 
 def load_league_player_projections(config: Dict[str, Any], scenario: str = "with_injuries") -> Optional[pd.DataFrame]:
-    """
-    Proyecciones por jugador de los 30 equipos (league_simulation.py).
-    None si no se ha corrido. `scenario="no_injuries"` lee la variante
-    sin riesgo de lesión (ver league_simulation._apply_scenario) --
-    default sin cambios, mismo archivo de siempre, así que los callers
-    existentes siguen funcionando igual sin tocar sus llamadas.
-    """
+    """Proyecciones por jugador de los 30 equipos. None si no se ha
+    corrido. `scenario="no_injuries"` lee la variante sin riesgo de
+    lesión (ver league_simulation._apply_scenario)."""
     from league_simulation import _scenario_suffix
 
     paths = get_paths(config)
@@ -455,12 +389,10 @@ def load_champion_seed_trajectories(config: Dict[str, Any]) -> Optional[pd.DataF
 
 
 def compute_champion_seed_distribution(title_paths: pd.DataFrame) -> pd.DataFrame:
-    """
-    Distribución REAL de seeds campeones -- el contraste más útil contra
-    el simulador. En las temporadas cubiertas, ningún campeón salió de un
-    seed peor que el 3, así que si el modelo produce campeones de seed 4+
-    con frecuencia apreciable es una miscalibración medible.
-    """
+    """Distribución REAL de seeds campeones -- el contraste más útil
+    contra el simulador. Ningún campeón real salió de un seed peor que
+    el 3; campeones simulados de seed 4+ frecuentes son una señal de
+    miscalibración."""
     if title_paths is None or title_paths.empty or "seed" not in title_paths.columns:
         return pd.DataFrame(columns=["seed", "n_champions", "pct"])
     counts = title_paths["seed"].value_counts().sort_index()
@@ -519,9 +451,8 @@ def load_league_single_season_player_box_scores(
     )
 
 
-# Estado real de playoffs NBA aplicado al seed simulado (1-6 clasifica
-# directo, 7-10 juega el play-in, 11-15 queda fuera) -- mismo formato que
-# league_simulation.py simula (ver resolve_play_in / simulate_conference_bracket).
+# Corte real de playoffs NBA por seed (1-6 directo, 7-10 play-in, 11-15
+# fuera) -- ver resolve_play_in / simulate_conference_bracket.
 PLAYOFF_SEED_CUTOFFS = {"direct": 6, "play_in": 10}
 
 
@@ -537,14 +468,10 @@ def compute_conference_standings(
     regular_season_summary: pd.DataFrame, playoff_summary: pd.DataFrame
 ) -> Dict[str, pd.DataFrame]:
     """
-    Clasificación de la temporada regular simulada, dividida por
-    conferencia ("East"/"West") y ordenada por victorias medias
-    descendente (seed 1-15), con las probabilidades de playoffs/
-    campeonato ya calculadas mergeadas. Añade una columna `situacion`
-    marcando la línea real de playoffs de la NBA que league_simulation.py
-    simula: seeds 1-6 clasifican directo, 7-10 juegan el play-in, 11-15
-    quedan fuera. Devuelve {"East": df, "West": df}, cada uno con 15
-    filas (o menos si a algún equipo le faltan datos de playoffs).
+    Clasificación de temporada regular simulada por conferencia, ordenada
+    por victorias medias descendente (seed 1-15), con probabilidades de
+    playoffs/campeonato mergeadas y columna `situacion` (ver
+    PLAYOFF_SEED_CUTOFFS). Devuelve {"East": df, "West": df}.
     """
     playoff_cols = ["team_abbreviation", "playoff_pct", "conf_semis_pct", "conf_finals_pct", "finals_pct", "championship_pct"]
     merged = regular_season_summary.merge(
@@ -619,20 +546,14 @@ def compute_awards_summary(
     config: Dict[str, Any], top_n: int = 5, scenario: str = "with_injuries"
 ) -> Optional[Dict[str, Any]]:
     """
-    Calcula los premios individuales heurísticos (ver src/awards_projection.py:
-    MVP, DPOY, 6MOY, ROY, MIP y, si hay datos de liga completa, COY) sobre
-    el scope disponible -- los 30 equipos de la liga si
-    league_player_projections.csv existe (más significativo: compara
-    contra toda la NBA), si no sobre el roster propio
-    (aging_curve_projection.csv). None si ni siquiera el roster propio
-    está disponible todavía.
+    Calcula los premios heurísticos (MVP, DPOY, 6MOY, ROY, MIP y COY si
+    hay liga completa -- ver src/awards_projection.py) sobre los 30
+    equipos si league_player_projections.csv existe, si no sobre el
+    roster propio. None si tampoco hay roster propio.
 
-    `scenario="no_injuries"` calcula los premios sobre la variante de
-    liga sin riesgo de lesión -- afecta directamente la elegibilidad de
-    All-NBA/All-Defensive (`games_played_expected >= 65`, ver
-    src/awards_projection.py), que con `risk_score=0` deja de excluir a
-    jugadores propensos a lesión. No afecta al scope "own" (roster
-    propio), que no depende de la liga completa.
+    `scenario="no_injuries"` afecta la elegibilidad All-NBA/All-Defensive
+    (`games_played_expected >= 65`), que con `risk_score=0` deja de
+    excluir a jugadores propensos a lesión. No afecta al scope "own".
     """
     import awards_projection as ap
 
@@ -652,13 +573,8 @@ def compute_awards_summary(
 
         if regular is not None:
             wins_by_team = (regular.set_index("team_abbreviation")["wins_mean"] / games_per_season).to_dict()
-            # keyed por player_id (no por índice posicional), que es lo
-            # que esperan las funciones de awards_projection.
+            # keyed por player_id, lo que esperan las funciones de awards_projection.
             team_win_pct = dict(zip(player_df["player_id"], player_df["team_abbreviation"].map(wins_by_team)))
-            # Récord "V-D" del equipo, para comparar candidatos en las
-            # tablas de premios individuales. Redondeado: wins_mean es
-            # una media continua de la simulación, no un resultado real
-            # exacto.
             record_by_team = {
                 abbrev: _win_loss_record(wins, games_per_season)
                 for abbrev, wins in regular.set_index("team_abbreviation")["wins_mean"].items()
@@ -685,9 +601,7 @@ def compute_awards_summary(
         player_df = roster_overview
         career = _read_csv_if_exists(paths["processed"] / "roster_career_stats.csv")
 
-        # Un solo equipo -- el "récord" es el mismo para todo el roster,
-        # tomado de la simulación Monte Carlo propia (no hay un rival
-        # real por jugador con el que variar, a diferencia del scope liga).
+        # Un solo equipo -- el "récord" es el mismo para todo el roster.
         simulation_results = load_simulation_results(config)
         if simulation_results is not None and "player_id" in player_df.columns:
             record = _win_loss_record(simulation_results["wins"].mean(), games_per_season)
@@ -700,27 +614,23 @@ def compute_awards_summary(
     bench_ids = ap.compute_bench_player_ids(career)
     all_star = ap.compute_all_star_selections(player_df, games_per_season, team_win_pct=team_win_pct, team_record=team_record)
     all_star_quota = ap.check_all_star_nationality_quota(all_star)
-    # Selección FINAL, con los añadidos del comisionado si la cuota
-    # natural no llega al mínimo -- ver el warning "commissioner_pick"
-    # que consume webapp/routers/awards.py.
+    # Selección FINAL con añadidos del comisionado si la cuota no llega
+    # al mínimo -- ver "commissioner_pick" en webapp/routers/awards.py.
     all_star_final = ap.add_commissioner_picks_for_nationality_quota(
         player_df, all_star, all_star_quota, team_win_pct=team_win_pct
     )
 
     mip = ap.compute_mip_candidates(career, top_n=top_n)
-    # MIP se calcula sobre career_stats_df (temporadas REALES, ver
-    # docstring de compute_mip_candidates), no sobre player_df -- no
-    # tiene de dónde sacar las stats proyectadas ni el récord de equipo,
-    # así que se enriquece aquí, uniendo por player_id. Mismas columnas
-    # que MVP/6MOY/ROY para que sea comparable de un vistazo.
+    # MIP se calcula sobre career_stats_df (temporadas REALES), no sobre
+    # player_df -- se enriquece aquí uniendo por player_id, mismas
+    # columnas que MVP/6MOY/ROY para que sea comparable de un vistazo.
     if not mip.empty and "player_id" in player_df.columns:
         extra_cols = [c for c in ap.OFFENSIVE_COMPARISON_STATS + ["team_abbreviation"] if c in player_df.columns]
         mip = mip.merge(player_df[["player_id"] + extra_cols], on="player_id", how="left")
         if team_record:
             mip["team_record"] = mip["player_id"].map(team_record)
-        # PPG/RPG/APG/etc de la ÚLTIMA temporada REAL (distinto de los de
-        # arriba, que son la proyección) -- para que el popup de MIP en
-        # webapp/ compare "de dónde viene" vs "hacia dónde va".
+        # PPG/RPG/APG de la ÚLTIMA temporada REAL (no la proyección) --
+        # para que el popup de MIP compare "de dónde viene" vs "hacia dónde va".
         mip = mip.merge(ap.compute_latest_real_season_stats(career), on="player_id", how="left")
 
     return {
@@ -731,9 +641,7 @@ def compute_awards_summary(
         "roy": ap.compute_roy_candidates(player_df, rookie_ids, games_per_season, team_record=team_record, top_n=top_n),
         "mip": mip,
         "coy": coy,
-        # Selección NATURAL (24, sin añadidos) -- la cuota se informa
-        # siempre sobre esta, no sobre la final (que ya la cumple por
-        # construcción una vez se aplican los añadidos).
+        # Selección NATURAL (24, sin añadidos) -- la cuota se informa sobre esta.
         "all_star": all_star,
         "all_star_nationality_quota": all_star_quota,
         "all_star_final": all_star_final,
@@ -745,16 +653,10 @@ def compute_awards_summary(
 def run_single_bracket_simulation(
     config: Dict[str, Any], random_seed: Optional[int] = None, scenario: str = "with_injuries"
 ) -> Dict[str, Any]:
-    """
-    ÚNICA excepción a "esta capa solo lee CSV": simula un bracket de
-    playoffs concreto (league_simulation.simulate_single_bracket) para el
-    botón "Simular un bracket" del dashboard. No llama a la API ni corre
-    la temporada regular -- reutiliza league_regular_season_summary.csv
-    (ya calculado) para el seeding y proyecta los 30 equipos desde los
-    CSV de league_rosters/league_player_career_stats ya cacheados, así
-    que es rápido (segundos, no minutos). `scenario="no_injuries"` juega
-    el bracket con el roster de cada equipo sano.
-    """
+    """Simula un bracket de playoffs concreto para el botón "Simular un
+    bracket" -- reutiliza league_regular_season_summary.csv para el
+    seeding y CSV ya cacheados para proyectar los 30 equipos, sin red.
+    `scenario="no_injuries"` juega con cada roster sano."""
     from league_simulation import simulate_single_bracket
 
     return simulate_single_bracket(config, random_seed=random_seed, scenario=scenario)
@@ -763,15 +665,10 @@ def run_single_bracket_simulation(
 def run_single_league_season_simulation(
     config: Dict[str, Any], random_seed: Optional[int] = None, scenario: str = "with_injuries"
 ) -> Dict[str, pd.DataFrame]:
-    """
-    Excepción a "esta capa solo lee CSV": simula UNA temporada regular
-    concreta -- calendario, resultado de cada partido y boxscore
-    ilustrativo por jugador (league_simulation.run_single_league_season_simulation)
-    -- para el botón "Simular calendario de la temporada". Guarda los CSV
-    en disco de paso (mismo patrón que el bracket), así que llamadas
-    posteriores a load_league_single_season_game_log() los encuentran sin
-    tener que volver a simular.
-    """
+    """Simula UNA temporada regular concreta -- calendario, resultado de
+    cada partido y boxscore ilustrativo -- para "Simular calendario de la
+    temporada". Persiste los CSV, así que llamadas posteriores a
+    load_league_single_season_game_log() los encuentran sin resimular."""
     from league_simulation import run_single_league_season_simulation as _run
 
     return _run(config, scenario=scenario, random_seed=random_seed)
@@ -782,17 +679,15 @@ def run_single_season_player_log_simulation(
 ) -> Optional[pd.DataFrame]:
     """
     Simula UNA temporada concreta del roster propio (no la distribución
-    agregada de simulation_results.csv) y devuelve, por jugador, partidos
-    jugados/perdidos y el detalle de cada ausencia con su categoría
-    ilustrativa (simulation.simulate_single_season_player_log -- ver ahí
-    el porqué la categoría NO es un diagnóstico real). None si falta
+    agregada de simulation_results.csv): partidos jugados/perdidos por
+    jugador y categoría ILUSTRATIVA de cada ausencia (no un diagnóstico
+    real, ver simulate_single_season_player_log). None si falta
     aging_curve_projection.csv o injury_risk.csv.
 
-    Usa un `random_seed` distinto por defecto (basado en el reloj) al de
-    `config["simulation"]["random_seed"]` -- ese seed es el que reproduce
-    exactamente simulation_results.csv; usarlo aquí daría SIEMPRE la misma
-    temporada individual en vez de una tirada nueva cada vez que se pulsa
-    el botón del dashboard.
+    Usa un `random_seed` por reloj, distinto de
+    `config["simulation"]["random_seed"]` (ese reproduce siempre
+    simulation_results.csv) -- para que cada pulsación del botón dé una
+    tirada nueva.
     """
     import numpy as np
 

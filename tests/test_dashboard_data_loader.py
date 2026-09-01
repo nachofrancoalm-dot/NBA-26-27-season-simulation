@@ -558,12 +558,8 @@ def test_run_single_season_player_log_simulation_is_reproducible_with_same_seed(
 
 
 def test_run_single_season_player_log_simulation_varies_without_an_explicit_seed(config):
-    """
-    Sin seed explícito debe sortear una temporada NUEVA cada vez (para el
-    botón del dashboard) -- distinto del seed de
-    config["simulation"]["random_seed"], que reproduce siempre
-    simulation_results.csv.
-    """
+    # sin seed explícito debe sortear una temporada nueva cada vez (botón del dashboard), a diferencia
+    # de config["simulation"]["random_seed"], que reproduce siempre simulation_results.csv
     processed = Path(config["paths"]["processed_data_dir"])
     pd.DataFrame(
         [{"player_id": 1, "player_name": "Player One", "game_score_per36": 15.0}]
@@ -592,18 +588,12 @@ def test_select_roster_view_replaces_gp_mpg_with_simulated_values_when_games_per
     )
     view = select_roster_view(overview, mode="per_game", games_per_season=82)
 
-    # GP simulado = 82 * (1 - 0.5) = 41, NO el histórico real (70).
-    assert view.iloc[0]["GP"] == 41
-    # MPG = minutes_projection tal cual (30.0), NO el histórico real (28.0)
-    # y SIN descontar por risk_score (representa el ritmo cuando juega, no
-    # la carga de temporada -- ver docstring de
-    # _apply_simulated_games_and_minutes).
-    assert view.iloc[0]["MPG"] == pytest.approx(30.0)
+    assert view.iloc[0]["GP"] == 41  # simulado = 82*(1-0.5), no el histórico real (70)
+    assert view.iloc[0]["MPG"] == pytest.approx(30.0)  # minutes_projection tal cual, sin descontar risk_score
 
 
 def test_select_roster_view_keeps_real_gp_mpg_without_games_per_season():
-    """Sin games_per_season (llamante que no lo pasa) se conserva el
-    comportamiento histórico -- no debe romper a nadie que no migre."""
+    # sin games_per_season se conserva el comportamiento histórico -- no debe romper a nadie que no migre
     overview = pd.DataFrame(
         [{
             "player_name": "Player One", "game_score_per36": 18.0, "risk_score": 0.5,
@@ -618,8 +608,7 @@ def test_select_roster_view_keeps_real_gp_mpg_without_games_per_season():
 
 
 def test_select_roster_view_falls_back_to_real_values_when_risk_score_missing():
-    """Si risk_score no está (injury_risk.csv no corrido todavía), se
-    conserva el histórico en vez de dejarlo en blanco."""
+    # sin risk_score (injury_risk.csv no corrido todavía) se conserva el histórico
     overview = pd.DataFrame(
         [{
             "player_name": "Player One", "game_score_per36": 18.0,
@@ -648,12 +637,8 @@ def test_select_roster_view_falls_back_row_by_row_when_some_players_lack_risk_sc
     assert row_b["GP"] == 60  # sin risk_score -> histórico conservado
 
 
-# ---------------------------------------------------------------------------
-# Totales de temporada (PTS/REB/AST...) escalados por disponibilidad --
-# regresión: cambiar de escenario "con" / "sin lesiones" solo movía
-# GP/MPG, los totales y el PPG derivado se quedaban igual en ambos
-# escenarios.
-# ---------------------------------------------------------------------------
+# Totales de temporada escalados por disponibilidad -- regression: cambiar de escenario
+# "con"/"sin lesiones" solo movía GP/MPG, los totales se quedaban igual.
 
 
 def test_select_roster_view_scales_season_totals_by_availability_in_totals_mode():
@@ -667,18 +652,12 @@ def test_select_roster_view_scales_season_totals_by_availability_in_totals_mode(
     )
     view = select_roster_view(overview, mode="totals", games_per_season=82)
 
-    # PTS/REB totales escalados por (1 - 0.5): un jugador de alto riesgo
-    # ya no muestra los mismos puntos totales que si estuviera sano toda
-    # la temporada.
-    assert view.iloc[0]["PTS"] == 800
+    assert view.iloc[0]["PTS"] == 800  # escalado por (1 - risk_score)
     assert view.iloc[0]["REB"] == 200
 
 
 def test_select_roster_view_keeps_per_game_rate_constant_while_totals_scale():
-    """PPG/RPG (ritmo cuando el jugador SÍ juega) se dejan sin escalar a
-    propósito -- igual que un PPG real de la NBA no baja porque un
-    jugador se pierda partidos. La relación Total = PPG * GP se mantiene
-    exacta con el escalado de _apply_simulated_games_and_minutes."""
+    # PPG/RPG (ritmo cuando el jugador sí juega) se dejan sin escalar a propósito
     overview = pd.DataFrame(
         [{
             "player_name": "Player One", "game_score_per36": 18.0, "risk_score": 0.5,
@@ -691,9 +670,7 @@ def test_select_roster_view_keeps_per_game_rate_constant_while_totals_scale():
 
     assert view.iloc[0]["PPG"] == pytest.approx(19.5, abs=0.05)
     assert view.iloc[0]["GP"] == 41
-    # Total implícito (PPG * GP) coincide con el total ya visto en modo
-    # "totals" para el mismo jugador (800, ver test anterior).
-    assert view.iloc[0]["PPG"] * view.iloc[0]["GP"] == pytest.approx(800, abs=5)
+    assert view.iloc[0]["PPG"] * view.iloc[0]["GP"] == pytest.approx(800, abs=5)  # coincide con el total en modo "totals"
 
 
 def test_select_roster_view_keeps_totals_real_without_games_per_season():

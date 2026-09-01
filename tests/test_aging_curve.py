@@ -71,19 +71,12 @@ def test_recency_weighted_baseline_favors_recent_seasons():
         ]
     )
     baseline = compute_recency_weighted_baseline(seasons, n_seasons=2, half_life_seasons=1.0)
-    # Media simple sería (7.2+25.2)/2=16.2; ponderado por recencia debe
-    # acercarse más al valor de la temporada reciente (25.2).
-    assert baseline["PTS_per36"] > 16.2
+    assert baseline["PTS_per36"] > 16.2  # media simple sería 16.2; ponderado por recencia se acerca a 25.2
 
 
 def test_recency_weighted_baseline_downweights_a_short_recent_season():
-    """Usa las temporadas reales de Jayson Tatum (16 partidos / 522 min
-    tras volver de una lesión de Aquiles, precedidos por dos temporadas
-    completas de ~2600 min) para verificar que una temporada corta NO
-    pesa igual que una completa solo por ser "la más reciente". Con solo
-    peso de recencia (sin peso de fiabilidad por minutos), la línea base
-    caería mucho más cerca de la temporada corta; con el peso de
-    fiabilidad, debe quedarse más cerca de las dos temporadas completas."""
+    # temporadas reales de Jayson Tatum (16 partidos tras lesión de Aquiles, precedidos por 2
+    # temporadas completas) -- una temporada corta no debe pesar igual que una completa solo por ser reciente
     seasons = _seasons(
         [
             {"season": "2023-24", "age": 25, "min": 2645, "pts": 2000},  # completa, PTS/36 ~ 27.2
@@ -93,8 +86,7 @@ def test_recency_weighted_baseline_downweights_a_short_recent_season():
     )
     baseline = compute_recency_weighted_baseline(seasons, n_seasons=3, half_life_seasons=1.5)
 
-    # Recencia pura (sin peso de fiabilidad), para comparar contra el
-    # resultado ponderado de arriba.
+    # recencia pura (sin peso de fiabilidad), para comparar contra el resultado ponderado de arriba
     per36 = compute_per36_stats(seasons)
     recent = per36.sort_values("SEASON_ID", ascending=False).reset_index(drop=True)
     seasons_ago = recent.index.to_numpy()
@@ -103,20 +95,13 @@ def test_recency_weighted_baseline_downweights_a_short_recent_season():
         (recency_only_weights * recent["PTS_per36"].to_numpy()).sum() / recency_only_weights.sum()
     )
 
-    # El peso de fiabilidad debe acercar el resultado a las dos
-    # temporadas completas (PTS/36 ~26-27), no a la corta (~20.7) --
-    # es decir, debe salir MÁS ALTO que si solo pesara la recencia.
+    # el peso de fiabilidad debe acercar el resultado a las 2 temporadas completas, no a la corta
     assert baseline["PTS_per36"] > recency_only_baseline
 
 
 def test_reliability_weighted_minutes_per_game_favors_full_seasons_over_a_short_recent_one():
-    """Usa las temporadas reales de Dereck Lively II (DAL): temporadas
-    completas de ~23 MPG y una última temporada de solo 7 partidos
-    (16.4 MPG) por una fractura de pie. El MPG ponderado debe quedar
-    mucho más cerca de su rol habitual (~23) que del promedio ingenuo de
-    la última temporada sola, para que no caiga fuera del top-N de
-    rotación de league_simulation.project_team_roster por una muestra
-    corta."""
+    # temporadas reales de Dereck Lively II: temporadas completas de ~23 MPG y una última de solo
+    # 7 partidos por fractura de pie -- el MPG ponderado debe quedar cerca del rol habitual, no de la muestra corta
     seasons = _seasons(
         [
             {"season": "2023-24", "age": 19, "gp": 55, "min": 1294},
@@ -128,18 +113,12 @@ def test_reliability_weighted_minutes_per_game_favors_full_seasons_over_a_short_
 
     naive_last_season_mpg = 115 / 7
     assert weighted_mpg > naive_last_season_mpg
-    # Debe quedar razonablemente cerca del nivel de las dos temporadas
-    # completas (~23 MPG), no colapsado hacia la corta (~16.4).
-    assert weighted_mpg == pytest.approx(22.39, abs=0.1)
+    assert weighted_mpg == pytest.approx(22.39, abs=0.1)  # cerca de las 2 temporadas completas, no de la corta
 
 
 def test_reliability_weighted_minutes_per_game_does_not_inflate_a_genuine_role_reduction():
-    """Usa las temporadas reales de Caleb Martin (DAL): temporada actual
-    con muestra GRANDE (58 partidos) a rol de banquillo (14.8 MPG), tras
-    ser titular hace 2 temporadas (~27 MPG). Con partidos suficientes, la
-    temporada actual YA es fiable -- NO debe mezclarse con el pasado ni
-    inflarse hacia el rol antiguo (una reducción de rol genuina no debe
-    tratarse como ruido de muestra corta)."""
+    # temporadas reales de Caleb Martin: muestra grande de banquillo (58 partidos, 14.8 MPG) tras
+    # ser titular -- con partidos suficientes, no debe mezclarse con el rol antiguo
     seasons = _seasons(
         [
             {"season": "2023-24", "age": 27, "gp": 64, "min": 1757},  # titular, ~27.5 MPG
@@ -162,11 +141,7 @@ def test_reliability_weighted_minutes_per_game_empty_input_returns_zero():
 
 
 def test_recency_weighted_baseline_matches_pure_recency_when_minutes_equal():
-    """Con minutos iguales entre temporadas (caso normal, sin lesiones),
-    el peso de fiabilidad vale 1.0 para todas -- el resultado debe ser
-    IDÉNTICO al de una temporada con minutos ligeramente distintos pero
-    en la misma proporción (es decir, el peso de fiabilidad no
-    introduce ningún sesgo cuando no hace falta)."""
+    # con minutos iguales entre temporadas, el peso de fiabilidad vale 1.0 y no debe introducir sesgo
     equal_minutes = _seasons(
         [
             {"season": "2021-22", "age": 25, "min": 2000, "pts": 400},
@@ -174,8 +149,6 @@ def test_recency_weighted_baseline_matches_pure_recency_when_minutes_equal():
         ]
     )
     baseline = compute_recency_weighted_baseline(equal_minutes, n_seasons=2, half_life_seasons=1.0)
-    # Con minutos iguales, PTS/36 = 7.2 y 25.2 -- pesos de recencia
-    # puros: 1.0 y 0.5. Media ponderada = (1.0*25.2 + 0.5*7.2) / 1.5.
     expected = (1.0 * 25.2 + 0.5 * 7.2) / 1.5
     assert baseline["PTS_per36"] == pytest.approx(expected)
 
@@ -203,14 +176,11 @@ def test_age_adjustment_factor_no_change_when_target_not_older():
 def test_age_adjustment_factor_compounds_over_multiple_years():
     one_year = compute_age_adjustment_factor(29, 30, DEFAULT_GENERAL_AGE_CURVE)
     two_years = compute_age_adjustment_factor(29, 31, DEFAULT_GENERAL_AGE_CURVE)
-    # Dos años de declive consecutivo deben componer a un factor más bajo
-    # que un solo año.
     assert two_years < one_year < 1.0
 
 
 def test_shooting_curve_peaks_later_than_general_curve():
-    # A los 29 años, la curva general ya está en declive claro mientras la
-    # de tiro exterior todavía está cerca de su pico (declive tardío, ~30).
+    # a los 29 la curva general ya declina mientras el tiro exterior sigue cerca de su pico
     general_factor = compute_age_adjustment_factor(29, 30, DEFAULT_GENERAL_AGE_CURVE)
     shooting_factor = compute_age_adjustment_factor(29, 30, DEFAULT_SHOOTING_AGE_CURVE)
     assert shooting_factor > general_factor
@@ -228,7 +198,6 @@ def test_project_player_season_scales_by_minutes_and_games():
     )
 
     assert projection["projected_total_minutes"] == pytest.approx(36.0 * 82)
-    # PTS_projected debe ser coherente con PTS_per36_projected * minutos totales / 36.
     expected_pts = projection["PTS_per36_projected"] / 36 * projection["projected_total_minutes"]
     assert projection["PTS_projected"] == pytest.approx(expected_pts)
 
@@ -266,8 +235,7 @@ def test_zero_player_projection_has_same_keys_as_project_player_season():
 def test_build_aging_projection_dataset_gives_zero_floor_to_rookie_with_no_history(tmp_path):
     processed = tmp_path / "processed"
     processed.mkdir(parents=True)
-    # Solo el veterano tiene temporadas registradas -- el rookie no aparece
-    # en absoluto en roster_career_stats.csv (0 partidos de liga regular).
+    # solo el veterano tiene temporadas registradas -- el rookie no aparece en roster_career_stats.csv
     _seasons(
         [{"player_id": 1, "season": "2023-24", "age": 27, "min": 2000, "pts": 1200}]
     ).assign(PLAYER_ID=1).to_csv(processed / "roster_career_stats.csv", index=False)
@@ -312,8 +280,7 @@ def test_compute_league_game_score_baseline_excludes_low_minute_players():
     career = pd.concat(
         [
             _seasons([{"player_id": 1, "season": "2015-16", "age": 25, "min": 2000, "pts": 1000}]),
-            # 100 minutos: por debajo del umbral, no debe contar
-            _seasons([{"player_id": 2, "season": "2015-16", "age": 22, "min": 100, "pts": 200}]),
+            _seasons([{"player_id": 2, "season": "2015-16", "age": 22, "min": 100, "pts": 200}]),  # bajo umbral
         ],
         ignore_index=True,
     )
@@ -324,8 +291,7 @@ def test_compute_league_game_score_baseline_excludes_low_minute_players():
 
 
 def test_compute_league_game_score_baseline_weights_by_minutes():
-    # Dos jugadores con producción por-36 muy distinta: el de más minutos
-    # debe dominar la media ponderada.
+    # el jugador con más minutos debe dominar la media ponderada
     career = pd.concat(
         [
             _seasons([{"player_id": 1, "season": "2015-16", "age": 25, "min": 3000, "pts": 1500}]),
@@ -342,6 +308,5 @@ def test_compute_league_game_score_baseline_weights_by_minutes():
         career[career["MIN"] < 3000], min_minutes=500
     )["league_game_score_per36"].iloc[0]
 
-    # La media ponderada queda entre ambos pero mucho más cerca del que juega 3000 min.
-    assert only_light < weighted < only_heavy
+    assert only_light < weighted < only_heavy  # más cerca del que juega 3000 min
     assert abs(weighted - only_heavy) < abs(weighted - only_light)

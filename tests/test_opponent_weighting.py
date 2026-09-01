@@ -82,13 +82,11 @@ def test_opponent_weight_scales_with_win_pct_and_steepness():
 
 
 def test_weighted_net_rating_favors_games_against_strong_opponents():
-    # Mismo net_rating_estimate en ambos partidos, pero un rival es mucho
-    # más fuerte que el otro -- la media ponderada debe acercarse a lo que
-    # pasó contra el rival fuerte, no a la media simple.
+    # mismo net_rating en ambos partidos pero un rival es mucho más fuerte -- debe pesar más
     net_rating = pd.Series([10.0, 10.0])
     weight = pd.Series([0.1, 0.9])
     weighted = compute_weighted_net_rating(net_rating, weight)
-    assert weighted == pytest.approx(10.0)  # mismo valor en ambos, no cambia nada aquí
+    assert weighted == pytest.approx(10.0)
 
     net_rating_diff = pd.Series([2.0, 20.0])
     weighted_diff = compute_weighted_net_rating(net_rating_diff, weight)

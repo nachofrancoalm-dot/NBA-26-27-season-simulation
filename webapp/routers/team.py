@@ -3,10 +3,9 @@ routers/team.py
 
 Endpoints para las 4 sub-pestañas de "Mi equipo" (Roster, Simulación,
 Sinergia, Backtesting). Cada uno reutiliza dashboard/data_loader.py sin
-reimplementar transformaciones -- este archivo solo empaqueta la salida en
-JSON (ver webapp/serializers.py) y decide qué código HTTP devolver cuando
-falta un CSV, con el mismo mensaje informativo que hoy muestran los
-st.warning() de dashboard/app.py.
+reimplementar transformaciones -- solo empaqueta la salida en JSON (ver
+webapp/serializers.py) y decide qué código HTTP devolver cuando falta
+un CSV.
 """
 
 from __future__ import annotations
@@ -54,10 +53,8 @@ def get_roster(mode: str = Query("per_game", pattern="^(per_game|totals)$")):
     roster_view = select_roster_view(
         overview, mode=mode, games_per_season=config["simulation"]["games_per_season"]
     )
-    # player_id no es una columna visible de select_roster_view -- se
-    # adjunta aquí solo para que el frontend sepa a quién
-    # pedir en el popup de doble clic; el orden de filas no cambia dentro
-    # de select_roster_view, así que el zip por posición es seguro.
+    # player_id se adjunta aparte (select_roster_view no lo expone) para
+    # el popup de doble clic -- el orden de filas no cambia, zip por posición seguro.
     roster_view = roster_view.assign(player_id=overview["player_id"].to_numpy())
     glossary = {col: ROSTER_STAT_GLOSSARY[col] for col in roster_view.columns if col in ROSTER_STAT_GLOSSARY}
     return {"players": df_to_records(roster_view), "glossary": glossary}
@@ -86,13 +83,8 @@ def get_simulation():
 
 @router.post("/simulation/no-injuries")
 def post_simulation_no_injuries():
-    """
-    Variante "en vivo" de la simulación asumiendo salud perfecta (nadie
-    pierde partidos por lesión) -- para comparar contra /simulation
-    (con lesiones, el resultado persistido normal) y responder "¿cómo
-    rendiría mi equipo si nadie se lesionara?". No escribe
-    simulation_results.csv -- ver simulation.compute_simulation_results.
-    """
+    """Variante "en vivo" de la simulación con salud perfecta, para
+    comparar contra /simulation. No escribe simulation_results.csv."""
     config = load_config()
     player_ids = [p["player_id"] for p in config["roster"] if p.get("player_id")]
     if not player_ids:

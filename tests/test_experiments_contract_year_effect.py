@@ -1,11 +1,7 @@
 """
-Test de la parte pura de scripts/experiments/contract_year_effect.py --
-compute_game_score(), build_contract_year_panel() y paired_delta_test().
-No cubre la regresión de efectos fijos en sí (ver el docstring del
-módulo, resultado real sobre datos de Kaggle: SIN apoyo empírico --
-39.7% de los 126 contratos con año final mejor que el resto del mismo
-contrato (p=0.45), coeficiente is_final_year=0.032 (p=0.89) en la
-regresión con efectos fijos por jugador + control de edad).
+Tests de compute_game_score(), build_contract_year_panel() y
+paired_delta_test() en contract_year_effect.py. No cubre la regresión de
+efectos fijos en sí (RESULTADO NEGATIVO sobre datos de Kaggle, ver CLAUDE.md).
 """
 
 import sys
@@ -33,12 +29,8 @@ def contract_config(tmp_path):
     raw = tmp_path / "raw" / "contract_data"
     raw.mkdir(parents=True)
 
-    # Jugador A: contrato de 3 temporadas (2014, 2015, 2016 en la
-    # convención season_end_year), temporada final (2016) MUCHO mejor
-    # -- caso "sí hay efecto".
-    # Jugador B: contrato de 2 temporadas (2014, 2015), temporada final
-    # PEOR -- caso "efecto contrario", para que el test no pase por
-    # casualidad si el signo estuviera invertido en alguna parte.
+    # Jugador A: temporada final mucho mejor (efecto). Jugador B: temporada final peor (contra-caso,
+    # para que el test no pase por casualidad si el signo estuviera invertido).
     salaries = pd.DataFrame(
         [
             {"Player": "Player A", "Year": 2014, "Age": 24, "PTS": 15.0, "FG": 6.0, "FGA": 13.0, "FT": 2.0, "FTA": 2.5, "ORB": 1.0, "DRB": 3.0, "STL": 1.0, "AST": 3.0, "BLK": 0.3, "TOV": 2.0, "PF": 2.0},
@@ -56,8 +48,7 @@ def contract_config(tmp_path):
         [
             {"NAME": "Player A", "CONTRACT_START": 2013, "CONTRACT_END": 2016},
             {"NAME": "Player B", "CONTRACT_START": 2013, "CONTRACT_END": 2015},
-            # Contrato de 1 sola temporada -- por debajo de MIN_CONTRACT_SPAN_SEASONS, debe descartarse.
-            {"NAME": "Player D", "CONTRACT_START": 2014, "CONTRACT_END": 2015},
+            {"NAME": "Player D", "CONTRACT_START": 2014, "CONTRACT_END": 2015},  # 1 temporada -- descartado
         ]
     )
     contracts.to_csv(raw / cye.CONTRACTS_FILENAME, index=False)
@@ -92,7 +83,5 @@ def test_paired_delta_test_sign_matches_direction_of_synthetic_effect(contract_c
     delta_a = deltas[deltas["player"] == "Player A"]["delta"].iloc[0]
     delta_b = deltas[deltas["player"] == "Player B"]["delta"].iloc[0]
 
-    # Player A: año final mucho mejor -> delta positivo.
-    assert delta_a > 0
-    # Player B: año final peor -> delta negativo.
-    assert delta_b < 0
+    assert delta_a > 0  # año final mucho mejor
+    assert delta_b < 0  # año final peor

@@ -4,41 +4,21 @@ schedule_strength.py
 Tercer submódulo de la capa de contexto de temporada (ver roadmap en
 README.md): calcula un `difficulty_score` (0-1) POR PARTIDO del
 calendario del equipo, combinando fuerza del rival, back-to-backs y
-viaje. A diferencia de injury_model.py y fatigue_accumulation.py, este
-módulo NO es por-jugador -- es por-partido del calendario del equipo.
+viaje -- a diferencia de injury_model.py y fatigue_accumulation.py, no
+es por-jugador.
 
-LIMITACIONES DE DATOS IMPORTANTES
------------------------------------
-1. Fuerza del rival: `team_config.yaml` puede apuntar a una temporada que
-   todavía no se ha jugado (p. ej. 2026-27). No existen resultados reales
-   de esa temporada para medir qué tan bueno es cada rival. Se usa como
-   proxy el WinPCT de cada rival en la temporada ANTERIOR
-   (`prior_season_standings.csv`, generado por
-   `data_pipeline.build_prior_season_standings_dataset`). Es la misma
-   aproximación que usa cualquier preview de calendario real -- pero es
-   eso, una aproximación, no un dato de la temporada en curso.
-2. Viaje: `nba_api` no expone distancias. Se usa una tabla estática de
-   coordenadas de las ciudades de las 30 franquicias NBA (hecho
-   geográfico de la liga, no específico de ningún equipo/jugador -- no
-   viola la regla de "nada hardcodeado en src/") y distancia geodésica
-   (haversine) entre la ciudad del partido anterior y la de este. Partes
-   neutrales fuera de las 30 ciudades conocidas (México, Londres, París)
-   no tienen coordenada -- su tramo de viaje se trata como 0 y se avisa
-   una vez por ejecución, en vez de fallar.
+Dos aproximaciones de datos: (1) la fuerza del rival usa como proxy su
+WinPCT de la temporada ANTERIOR (`prior_season_standings.csv`), porque el
+config puede apuntar a una temporada que aún no se jugó; (2) el viaje usa
+una tabla estática de coordenadas de las 30 ciudades NBA y distancia
+geodésica (haversine) entre partidos consecutivos -- sedes neutrales sin
+coordenada (México, Londres, París) cuentan como 0 km, con aviso.
 
-DISEÑO DEL difficulty_score
-------------------------------
-Tres componentes 0-1 por partido, pesos configurables en
-`config["schedule_strength"]` (nunca hardcodeados):
-
-1. `opponent_strength_score` -- WinPCT del rival en la temporada anterior
-   (ya está en escala 0-1, no hace falta normalizar y evita inventar una
-   escala arbitraria).
-2. `back_to_back_score` -- 1.0 si el partido anterior del equipo fue el
-   día previo (0 días de descanso), si no 0.0.
-3. `travel_score` -- distancia (km) desde la ciudad del partido anterior,
-   normalizada con un tope configurable de "viaje largo" (3000 km por
-   defecto: similar a un vuelo costa a costa en EE. UU.), capado en 1.0.
+difficulty_score combina tres componentes 0-1 con pesos configurables en
+`config["schedule_strength"]`: opponent_strength_score (WinPCT del rival,
+ya 0-1), back_to_back_score (1.0 si 0 días de descanso), travel_score
+(distancia normalizada contra un tope de "viaje largo", 3000 km por
+defecto, capado en 1.0).
 """
 
 from __future__ import annotations

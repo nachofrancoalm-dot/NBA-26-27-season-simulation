@@ -1,14 +1,7 @@
 """
-Test de la parte pura de scripts/experiments/injury_survival_model.py --
-build_survival_features() y heuristic_expected_games(). No cubre
-run_loso() (ajuste de Cox real, lento y es el experimento en sí, no
-lógica que deba cubrir un test rápido) -- ver el docstring del módulo:
-experimento con RESULTADO NEGATIVO (ninguna alternativa probada supera
-al heurístico actual de injury_model.py), documentado con el mismo rigor
-que las investigaciones que sí aportaron algo.
-
-pytest.importorskip -- lifelines es una dependencia opcional de
-scripts/experiments/, no del proyecto principal.
+Tests de build_survival_features() y heuristic_expected_games() en
+injury_survival_model.py. No cubre run_loso() (ajuste de Cox real, lento).
+lifelines es una dependencia opcional, de ahí el importorskip.
 """
 
 import sys
@@ -38,19 +31,15 @@ def _career_seasons(rows: list[dict]) -> pd.DataFrame:
 
 
 def test_build_survival_features_uses_only_prior_seasons_no_look_ahead():
-    # Temporada objetivo con GP=10 (muy lesionado) -- si hubiera
-    # look-ahead, historical_load_prior/recency_prior lo reflejarían.
+    # si hubiera look-ahead, historical_load_prior/recency_prior reflejarían el GP=10 de la temporada objetivo
     seasons = _career_seasons([
         {"season": "2017-18", "age": 25, "gp": 82},
-        {"season": "2018-19", "age": 26, "gp": 10},  # temporada objetivo, NO debe leerse
+        {"season": "2018-19", "age": 26, "gp": 10},  # temporada objetivo, no debe leerse
     ])
     features = ism.build_survival_features(seasons, ["2018-19"])
 
     assert len(features) == 1
     row = features.iloc[0]
-    # Solo hay una temporada previa (2017-18, GP=82 -> games_missed_pct=0)
-    # -- historical_load_prior/recency_prior deben ser 0, no reflejar el
-    # GP=10 de la propia temporada objetivo.
     assert row["historical_load_prior"] == pytest.approx(0.0)
     assert row["recency_prior"] == pytest.approx(0.0)
 
@@ -78,8 +67,6 @@ def test_build_survival_features_marks_full_attendance_as_censored():
 
 
 def test_build_survival_features_skips_players_without_any_prior_season():
-    # Rookie en su primera temporada -- sin historial previo, no hay
-    # covariables que calcular (mismo principio que compute_risk_score).
     seasons = _career_seasons([{"season": "2020-21", "age": 20, "gp": 82}])
     features = ism.build_survival_features(seasons, ["2020-21"])
     assert features.empty
@@ -96,10 +83,8 @@ def test_build_survival_features_mpg_prior_uses_the_most_recent_prior_season():
 
 
 def test_heuristic_expected_games_matches_the_production_formula():
-    """El heurístico de comparación debe reproducir EXACTAMENTE
-    injury_model.compute_risk_score -- si diverge, la comparación contra
-    Cox/OLS estaría midiendo un heurístico distinto del que hay en
-    producción."""
+    # debe reproducir exactamente injury_model.compute_risk_score, o la comparación contra Cox/OLS
+    # mediría un heurístico distinto del que hay en producción
     from context.injury_model import DEFAULT_WEIGHTS
 
     features = pd.DataFrame([{

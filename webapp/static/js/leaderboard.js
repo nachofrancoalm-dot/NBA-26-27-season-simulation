@@ -1,11 +1,7 @@
 // leaderboard.js -- ranking visual de un premio (MVP, DPOY, ROY, MIP,
-// 6.º Hombre): foto real + barra proporcional al valor de temporada,
-// en vez de una tabla. Pensado para complementar (no sustituir del
-// todo) los quintetos sobre cancha de court.js -- mismo espíritu de
-// "menos tabla, más foto real". La vista previa al pasar el ratón usa
-// player-preview.js (tarjeta real con foto + stats), no el tooltip de
-// una línea de charts.js -- un jugador tiene más que enseñar que un
-// solo número.
+// 6.º Hombre): foto real + barra proporcional al valor de temporada, en
+// vez de una tabla. La vista previa al pasar el ratón usa
+// player-preview.js (tarjeta con foto + stats), no el tooltip de charts.js.
 
 import { el, playerPhoto, teamBadge } from "./ui.js";
 import { openPlayerModal } from "./player-modal.js";
@@ -13,22 +9,12 @@ import { openTeamModal } from "./team-modal.js";
 import { showPlayerPreview, hidePlayerPreview } from "./player-preview.js";
 
 /**
- * `records`: filas YA ordenadas por el backend (mvp_score/dpoy_score/
- * season_value/improvement descendente, ver src/awards_projection.py).
- * `valueKey`: columna a usar como longitud de barra.
- * `valueFormat`: formatea el valor mostrado a la derecha de la barra.
- * `statsFn(record)`: [{label, value}] para la vista previa -- opcional
- * (se omite si no aporta nada para ese premio). Qué stats son y de qué
- * temporada (proyectada, real, o una comparación de ambas) lo decide
- * el caller (ver LEADERBOARD_CONFIG en views/awards.js), este módulo
- * solo las pinta.
- * `captionFn(record)`: pie de foto de la vista previa (p.ej.
- * "Temporada proyectada 2026-27") -- función y no un string fijo porque
- * MIP necesita uno DISTINTO por fila (cada jugador tiene su propia
- * temporada real anterior).
- * Clic en cualquier fila abre el popup de detalle del jugador (mismo
- * popup que el resto de la app, ver player-modal.js) -- doble
- * clic/tabla ya no hace falta para "ver más": es la fila entera.
+ * `records`: filas ya ordenadas por el backend (ver src/awards_projection.py).
+ * `valueKey`: columna usada como longitud de barra. `valueFormat`:
+ * formatea el valor a la derecha. `statsFn(record)`: [{label, value}]
+ * opcional para la vista previa. `captionFn(record)`: pie de foto de la
+ * vista previa, función (no string fijo) porque MIP necesita uno
+ * distinto por fila. Clic en cualquier fila abre el popup de detalle.
  */
 export function leaderboardChart(
   records,
@@ -58,9 +44,7 @@ export function leaderboardChart(
           el("span", { class: "leaderboard-name" }, record.player_name),
           record.team_abbreviation ? el("span", { class: "leaderboard-team" }, record.team_abbreviation) : null,
         ]),
-        // selection_type ("Titular"/"Reserva") solo lo trae el All-Star
-        // (ver compute_all_star_selections) -- en cualquier otro premio
-        // el campo no existe y esto simplemente no se pinta.
+        // selection_type ("Titular"/"Reserva") solo lo trae el All-Star.
         record.selection_type ? el("span", { class: "leaderboard-tag" }, record.selection_type) : null,
         el("div", { class: "leaderboard-bar-track" }, [el("div", { class: "leaderboard-bar", style: `width: ${widthPct}%;` })]),
         el("span", { class: "leaderboard-value" }, valueFormat(value)),
@@ -89,13 +73,8 @@ export function leaderboardChart(
 
 /**
  * Mismo lenguaje visual que leaderboardChart() pero para EQUIPOS, no
- * jugadores -- Entrenador del Año (`data.coy`, ver
- * awards_projection.compute_coy_candidates) es un premio de equipo
- * (este proyecto no modela entrenadores en absoluto, ver su docstring),
- * así que no encaja en leaderboardChart() (foto de jugador, abre el
- * popup de JUGADOR al hacer clic). `records` necesita `team_abbreviation`
- * y `valueKey`; `teamIds`: abreviatura -> team_id (para el escudo y para
- * abrir el popup de EQUIPO, ver team-modal.js).
+ * jugadores (Entrenador del Año, `data.coy`, premio de equipo -- este
+ * proyecto no modela entrenadores). `teamIds`: abreviatura -> team_id.
  */
 export function teamLeaderboardChart(records, { valueKey, valueFormat = (v) => (typeof v === "number" ? v.toFixed(1) : "—"), statsFn, captionFn, teamIds = {} } = {}) {
   if (!records || !records.length) {

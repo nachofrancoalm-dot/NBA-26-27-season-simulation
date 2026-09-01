@@ -9,10 +9,8 @@ import { courtShotChart } from "./court.js";
 
 const PER_GAME_STATS = ["MIN", "PTS", "REB", "AST", "STL", "BLK"];
 
-/** Totales de temporada -> por partido (dividido por GP), igual que la
- * vista "Por partido" del resto de tablas -- se calcula en el cliente
- * porque los totales ya vienen en la respuesta y es una simple división,
- * sin necesidad de otro viaje al backend. Los % de tiro y GP no cambian. */
+/** Totales de temporada -> por partido (dividido por GP), calculado en
+ * el cliente sin otro viaje al backend. Los % de tiro y GP no cambian. */
 function toPerGame(seasons) {
   return seasons.map((season) => {
     const row = { ...season };
@@ -130,11 +128,9 @@ export async function openPlayerModal(playerId, teamId) {
   loadShotChart(shotChartBox, playerId);
 }
 
-/** Se carga aparte (no bloquea el resto del popup, que ya tiene todo lo
- * que necesita de api.player()) porque roster_shot_charts.csv puede no
- * existir para jugadores fuera del roster propio (ver
- * webapp/routers/players.py::get_player_shot_chart) -- en ese caso la
- * sección simplemente no aparece, en vez de fallar el popup entero. */
+/** Se carga aparte (no bloquea el resto del popup): roster_shot_charts.csv
+ * puede no existir para jugadores fuera del roster propio, en cuyo caso
+ * la sección simplemente no aparece. */
 async function loadShotChart(container, playerId) {
   try {
     const data = await api.playerShotChart(playerId);
@@ -144,6 +140,6 @@ async function loadShotChart(container, playerId) {
       courtShotChart(data.shots, { title: `Mapa de tiros de ${playerId}` })
     );
   } catch {
-    // Sin mapa de tiros disponible -- se omite en silencio, no es un dato crítico del popup.
+    // Sin mapa de tiros disponible -- se omite en silencio.
   }
 }

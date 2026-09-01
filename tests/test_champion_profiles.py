@@ -35,7 +35,6 @@ def test_derive_champions_picks_the_winner_of_the_last_playoff_game():
         [
             _playoff_log("2023-24", 1, "BOS", "2024-06-01", "W", "BOS vs. DAL"),
             _playoff_log("2023-24", 2, "DAL", "2024-06-01", "L", "DAL @ BOS"),
-            # Partido posterior: este decide el titulo.
             _playoff_log("2023-24", 1, "BOS", "2024-06-17", "W", "BOS vs. DAL"),
             _playoff_log("2023-24", 2, "DAL", "2024-06-17", "L", "DAL @ BOS"),
         ]
@@ -128,7 +127,6 @@ def test_compute_roster_profile_measures_star_concentration():
 
     profile = compute_roster_profile(roster, career, "2023-24", star_count=2)
 
-    # 6000 de 10000 minutos en los 2 mas usados.
     assert profile["star_minutes_share"] == pytest.approx(60.0)
     assert profile["players_with_minutes"] == 4
 

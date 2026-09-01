@@ -1,11 +1,4 @@
-"""
-Tests de la API del frontend web (webapp/). Usan un config + directorio
-temporal con CSV sintéticos (mismo patrón que
-tests/test_dashboard_data_loader.py) -- no requieren red ni el pipeline
-real corrido. load_config() se monkeypatchea en cada router para apuntar
-al config de prueba, igual que el resto del proyecto monkeypatchea
-referencias de módulo (ver CLAUDE.md).
-"""
+"""Tests de la API del frontend web (webapp/) con config + CSV sintéticos; load_config() se monkeypatchea por router."""
 
 from pathlib import Path
 
@@ -100,8 +93,6 @@ def test_roster_endpoint_returns_json_serializable_players(client, config):
     response = client.get("/api/roster?mode=per_game")
     assert response.status_code == 200
     body = response.json()
-    # Round-trip: si hubiera un NaN crudo, json.loads ya habría fallado --
-    # confirmamos además explícitamente que no aparece el literal no válido.
     assert "NaN" not in response.text
     assert body["players"][0]["player_name"] == "Player One"
 
@@ -138,10 +129,7 @@ def test_simulation_no_injuries_404_when_missing_inputs(client):
 
 
 def test_simulation_no_injuries_ignores_cached_risk_score(client, config):
-    """Con risk_score=0.5 cacheado en injury_risk.csv, la variante
-    /no-injuries debe simular como si ese jugador nunca se lesionara
-    (risk_score=0 real, no el 0.5 cacheado) -- confirmado comparando
-    total_games_missed contra la simulación normal con ese mismo riesgo."""
+    """/no-injuries debe simular con risk_score=0 real, ignorando el 0.5 cacheado en injury_risk.csv."""
     processed_dir = tmp_path_from_config(config)
     pd.DataFrame(
         [{
@@ -162,16 +150,10 @@ def test_simulation_no_injuries_ignores_cached_risk_score(client, config):
     assert "NaN" not in response.text
     assert body["n_seasons"] == 50
 
-    # Determinista: mismo config, mismo random_seed -> mismo resultado en
-    # dos llamadas seguidas.
+    # Determinista: mismo config y seed -> mismo resultado en dos llamadas seguidas.
     again = client.post("/api/simulation/no-injuries").json()
     assert again["summary"]["mean"] == body["summary"]["mean"]
 
-    # Con risk_score=0 real, el único jugador del roster juega siempre --
-    # el máximo de victorias observado no debería quedar deprimido por
-    # ausencias (net_rating por temporada no debería colapsar a un único
-    # valor si hubiera lesiones aleatorias de por medio -- aquí solo
-    # confirmamos que la simulación corrió con éxito de punta a punta).
     assert body["summary"]["mean"] > 0
 
 
@@ -228,9 +210,7 @@ def test_league_standings_404_when_missing(client):
 
 
 def test_league_simulate_404_without_league_rosters(client):
-    # build_league_simulation_dataset necesita league_rosters.csv +
-    # league_player_career_stats.csv (vía load_and_project_all_teams) --
-    # sin esos CSV debe degradar a 404, no a un 500.
+    # Sin league_rosters.csv / league_player_career_stats.csv, debe degradar a 404, no a un 500.
     response = client.post("/api/league/simulate?scenario=no_injuries")
     assert response.status_code == 404
 
@@ -346,9 +326,7 @@ def test_explainer_ask_503_without_api_key(client, monkeypatch):
 
 
 def test_explainer_ask_forwards_pasted_news_text(client, monkeypatch):
-    # news_text es opcional y solo llega si se pega texto en el textarea
-    # del frontend -- este test confirma que el router lo reenvia a
-    # explain_question tal cual, sin tocarlo.
+    # news_text es opcional; el router debe reenviarlo a explain_question tal cual.
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     captured = {}
 
@@ -550,11 +528,7 @@ def test_player_detail_appends_projected_season_row(client, config):
 
 
 def test_player_detail_projection_discounts_injury_risk(client, config):
-    """Bug real reportado: la fila de proyección mostraba SIEMPRE los
-    games_per_season completos (82), como si ningún jugador se fuera a
-    lesionar -- debe usar la misma fórmula de disponibilidad
-    (games_per_season * (1 - risk_score)) que ya usa la columna GP del
-    resto de tablas."""
+    """Regresión: la fila de proyección mostraba siempre 82 GP; debe usar la misma fórmula de disponibilidad que la columna GP."""
     processed_dir = tmp_path_from_config(config)
     pd.DataFrame(
         [{
@@ -580,8 +554,6 @@ def test_player_detail_projection_discounts_injury_risk(client, config):
         }]
     ).to_csv(processed_dir / "aging_curve_projection.csv", index=False)
 
-    # risk_score alto (0.6) -- jugador propenso a lesión, como Embiid en
-    # los datos reales del proyecto.
     pd.DataFrame([{"player_id": 42, "player_name": "Test Player", "risk_score": 0.6}]).to_csv(
         processed_dir / "injury_risk.csv", index=False
     )
@@ -592,9 +564,7 @@ def test_player_detail_projection_discounts_injury_risk(client, config):
     # 82 * (1 - 0.6) = 32.8 -> 33
     assert projected["GP"] == 33
     assert projected["GP"] < 82
-    # Los totales de PTS/REB/etc también se descuentan por el mismo
-    # factor de disponibilidad -- si no, el modo "Por partido" del popup
-    # saldría inflado (misma producción total repartida en menos partidos).
+    # Totales también descontados por el mismo factor de disponibilidad.
     assert projected["PTS"] == round(2000 * (33 / 82))
 
 

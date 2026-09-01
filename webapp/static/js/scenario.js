@@ -1,13 +1,8 @@
 // scenario.js -- estado compartido del escenario de Liga NBA ("con
-// lesiones" / "sin lesiones", ver src/league_simulation.py::_apply_scenario).
-// Un módulo, no localStorage: el escenario "sin lesiones" vive solo
-// mientras dure la sesión del servidor (los CSV se regeneran en cada
-// POST /simulate), así que persistirlo entre recargas del navegador
-// sería confuso si el server se reinició entre medias. league.js
-// ("Liga y Playoffs") y awards.js ("Premios individuales") comparten
-// este mismo estado -- cambiar de escenario en uno afecta al otro la
-// próxima vez que se visite, mismo espíritu que pillToggle pero a nivel
-// de pestaña en vez de por tabla.
+// lesiones" / "sin lesiones"). Un módulo, no localStorage: el escenario
+// "sin lesiones" vive solo mientras dure la sesión del servidor (los CSV
+// se regeneran en cada POST /simulate). league.js y awards.js comparten
+// este mismo estado.
 
 import { api } from "./api.js";
 import { el } from "./ui.js";
@@ -18,10 +13,8 @@ const SCENARIOS = [
 ];
 
 let currentScenario = "with_injuries";
-// Qué escenarios ya se han simulado esta sesión -- evita volver a
-// preguntar al backend cada vez que se cambia de sub-pestaña dentro de
-// Liga NBA. Arranca con "with_injuries" en true porque ese es el
-// resultado ya persistido por el pipeline normal (no necesita botón).
+// Escenarios ya simulados esta sesión -- evita re-preguntar al backend.
+// "with_injuries" arranca en true: es el resultado ya persistido por el pipeline.
 const simulated = { with_injuries: true, no_injuries: false };
 
 export function getScenario() {

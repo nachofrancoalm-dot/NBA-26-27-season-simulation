@@ -1,68 +1,22 @@
 """
 aging_curve.py
 
-Modelo de proyección individual (fuera de src/context/ -- este módulo no
-es parte de la capa de contexto de temporada, es un item separado en el
-roadmap del proyecto). Proyecta la producción por-36-minutos de cada
-jugador del roster para la temporada del config, combinando su propio
-historial reciente (línea base) con un ajuste por curva de edad
-(informado por literatura, no inventado).
+Modelo de proyección individual: proyecta la producción por-36-minutos de
+cada jugador del roster para la temporada del config, combinando su
+historial reciente (línea base ponderada por recencia y fiabilidad de
+minutos) con un ajuste por curva de edad.
 
-LITERATURA USADA PARA LA FORMA DE LA CURVA
----------------------------------------------
-No hay suficientes datos propios en este proyecto (solo el roster de 10
-jugadores) para AJUSTAR una curva de edad poblacional con rigor -- eso
-requeriría carreras completas de cientos de jugadores históricos, fuera
-del alcance actual de `data_pipeline.py`. En su lugar, la UBICACIÓN de
-los puntos de quiebre de la curva viene de investigación pública:
+Los puntos de quiebre de la curva vienen de literatura pública (pico
+general ~26-27 años; el tiro de 3 envejece mejor, pico ~30 -- ver "Large
+data and Bayesian modeling -- aging curves of NBA players", PubMed
+30684225). Las magnitudes exactas (% de cambio anual por tramo) son una
+estimación propia calibrada a esa forma, expuestas en
+`config["aging_curve"]` en vez de hardcodeadas.
 
-- El rendimiento medio de un jugador NBA sube más rápido entre 19-20 años
-  y de nuevo entre 23-25; baja más rápido entre 29-31 y de nuevo entre
-  36-38; el pico general está ~26-27 años.
-- Los tiros de 2 puntos y tiros libres alcanzan su pico ~25 años seguido
-  de declive marcado; el tiro de 3 puntos alcanza su pico más tarde, ~30
-  años -- consistente con que el tiro es más una habilidad que se
-  mantiene con la edad, mientras que las estadísticas ligadas a
-  atletismo (finalización cerca del aro, rebotes, robos, bloqueos) se
-  degradan antes.
-  (Ver "Large data and Bayesian modeling -- aging curves of NBA players",
-  PubMed 30684225; y "Effects of age on physical and technical
-  performance in NBA players".)
-
-Las MAGNITUDES exactas (% de cambio anual en cada tramo) sí son una
-estimación de este proyecto, calibrada para que la forma sea consistente
-con los puntos de quiebre citados arriba -- no vienen literalmente de un
-paper. Están expuestas como parámetros configurables en
-`config["aging_curve"]`, no hardcodeadas, precisamente porque son una
-estimación y no un hecho medido.
-
-DOS CURVAS, NO UNA
---------------------
-Se usa una curva "general" (pico ~26-27) para las estadísticas ligadas a
-atletismo -- puntos totales, rebotes, asistencias, robos, bloqueos,
-pérdidas, tiros de 2/tiro libre -- y una curva "shooting" (pico ~30) SOLO
-para volumen y estadísticas de triples, reflejando el hallazgo de que el
-tiro exterior envejece mejor que el resto del juego.
-
-DISEÑO
-------
-1. `compute_per36_stats()` -- normaliza cada temporada a producción por
-   36 minutos (estándar en análisis de básquet, permite comparar
-   temporadas con distinta carga de minutos).
-2. `compute_recency_weighted_baseline()` -- línea base = media ponderada
-   por recencia (decaimiento exponencial, mismo patrón que
-   injury_model.py/fatigue_accumulation.py) de las últimas N temporadas
-   por-36 del jugador. Esto es "su nivel de talento reciente", antes de
-   ajustar por edad.
-3. `compute_age_adjustment_factor()` -- factor multiplicativo de la
-   línea base a la temporada proyectada, según la curva de edad
-   correspondiente (general o shooting) y la transición de edad real del
-   jugador (puede ser más de un año si faltan temporadas en los datos).
-4. `project_player_season()` -- combina baseline * factor de edad, y
-   escala a totales de temporada usando `minutes_projection` (ya
-   definido por jugador en team_config.yaml) y
-   `simulation.games_per_season` -- reutiliza config existente en vez de
-   inventar campos nuevos.
+Se usan dos curvas: "general" para estadísticas ligadas a atletismo
+(puntos, rebotes, asistencias, robos, bloqueos, tiros de 2/libres) y
+"shooting" (pico más tardío) solo para volumen y estadísticas de
+triples.
 """
 
 from __future__ import annotations
@@ -78,11 +32,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config_loader import get_paths  # noqa: E402
 from season_utils import dedupe_traded_seasons, season_start_year  # noqa: E402
 
-# Estadísticas ligadas a atletismo/skill general -- curva "general", pico ~26-27.
-# Incluye OREB/DREB/FGM/FGA/FTM/FTA/PF (además de PTS/AST/REB/STL/BLK/TOV)
-# porque el Game Score de Hollinger (ver compute_game_score_per36) las
-# necesita por separado -- roster_career_stats.csv ya las trae, no hace
-# falta pedir datos nuevos.
+# Curva "general" (pico ~26-27). Incluye OREB/DREB/FGM/FGA/FTM/FTA/PF
+# porque el Game Score de Hollinger (compute_game_score_per36) las necesita.
 GENERAL_STATS = [
     "PTS", "AST", "REB", "STL", "BLK", "TOV",
     "OREB", "DREB", "FGM", "FGA", "FTM", "FTA", "PF",
@@ -90,11 +41,9 @@ GENERAL_STATS = [
 # Volumen de triples -- curva "shooting", pico ~30 (el tiro envejece mejor).
 SHOOTING_STATS = ["FG3M", "FG3A"]
 
-# Pesos del Game Score de Hollinger (fórmula pública estándar, no inventada
-# para este proyecto): PTS + 0.4*FGM - 0.7*FGA - 0.4*(FTA-FTM) + 0.7*OREB +
-# 0.3*DREB + STL + 0.7*AST + 0.7*BLK - 0.4*PF - TOV. Usado por
-# src/simulation.py para convertir la proyección por-36 de cada jugador en
-# una única "nota de impacto" que sumar al diferencial de puntos del equipo.
+# Game Score de Hollinger (fórmula pública estándar): PTS + 0.4*FGM -
+# 0.7*FGA - 0.4*(FTA-FTM) + 0.7*OREB + 0.3*DREB + STL + 0.7*AST + 0.7*BLK
+# - 0.4*PF - TOV.
 def compute_game_score_per36(per36: Dict[str, float]) -> float:
     """Game Score de Hollinger aplicado a valores por-36 minutos."""
     return (
@@ -111,9 +60,6 @@ def compute_game_score_per36(per36: Dict[str, float]) -> float:
         - per36["TOV_per36"]
     )
 
-# Puntos de quiebre citados en la literatura (ver docstring del módulo);
-# las tasas de cambio anual son una estimación de este proyecto calibrada
-# para esa forma, expuestas como config, no un hecho medido.
 DEFAULT_GENERAL_AGE_CURVE: List[Dict[str, float]] = [
     {"up_to_age": 20, "annual_rate": 0.06},
     {"up_to_age": 22, "annual_rate": 0.03},
@@ -138,11 +84,9 @@ DEFAULT_SHOOTING_AGE_CURVE: List[Dict[str, float]] = [
 DEFAULT_N_SEASONS_LOOKBACK = 3
 DEFAULT_RECENCY_HALF_LIFE_SEASONS = 1.5
 
-# Minutos mínimos para que un jugador cuente en la línea base de liga
-# (ver compute_league_game_score_baseline). 500 minutos ~ deja ~350
-# jugadores por temporada, que es aproximadamente la población de
-# rotación real de la NBA (30 equipos x ~11 jugadores); incluir a todo
-# el que pisó la cancha metería ruido de muestras de 20 minutos.
+# Minutos mínimos para contar en la línea base de liga (~350
+# jugadores/temporada, población de rotación real; evita ruido de
+# muestras minúsculas).
 DEFAULT_LEAGUE_BASELINE_MIN_MINUTES = 500
 
 
@@ -150,24 +94,18 @@ def compute_league_game_score_baseline(
     career_stats: pd.DataFrame, min_minutes: int = DEFAULT_LEAGUE_BASELINE_MIN_MINUTES
 ) -> pd.DataFrame:
     """
-    Game Score/36 medio de la liga POR TEMPORADA, ponderado por minutos.
+    Game Score/36 medio de la liga por temporada, ponderado por minutos.
     Devuelve un DataFrame con columnas (season, league_game_score_per36,
     n_players).
 
-    POR QUÉ EXISTE: el nivel de Game Score de la NBA no es estable en el
-    tiempo -- subió de ~10.7 por-36 en 2010-11 a ~13.4 en 2024-25 (más
-    ritmo de juego y revolución del triple; ver también el ajuste por
-    era en simulation.py). Comparar a un equipo de 2024-25 contra una
-    línea base fija calibrada para "un jugador promedio de Hollinger"
-    (10.0) le regala ~22 puntos de Game Score de ventaja que no son
-    mérito suyo, sino de la época en la que juega. Cada equipo debe
-    compararse contra la media de SU PROPIA temporada.
+    Existe porque el nivel de Game Score de la NBA sube con el tiempo
+    (~10.7 en 2010-11 a ~13.4 en 2024-25, más ritmo y triples); una línea
+    base fija le regalaría ventaja a equipos de temporadas recientes por
+    mérito de su época, no propio.
 
-    `career_stats` debe tener el esquema de roster_career_stats.csv
-    (PLAYER_ID, SEASON_ID, MIN + las columnas de caja). Para que la media
-    sea representativa de la liga hace falta una muestra amplia de
-    jugadores (el sweep de 30 equipos x N temporadas la da; el roster de
-    un solo equipo NO -- ver la advertencia en
+    `career_stats` debe tener el esquema de roster_career_stats.csv.
+    Requiere una muestra amplia de jugadores para ser representativa (el
+    roster de un solo equipo no basta -- ver
     backtesting.build_league_baseline_dataset).
     """
     rows = []
@@ -215,30 +153,16 @@ def compute_recency_weighted_baseline(
 ) -> Dict[str, float]:
     """
     Línea base por-36 de un jugador: media ponderada por recencia
-    (decaimiento exponencial, la temporada más reciente pesa más) Y por
-    fiabilidad (minutos jugados esa temporada respecto al máximo de la
-    ventana) de las últimas n_seasons. Devuelve un dict {stat_per36:
-    valor} para cada estadística en GENERAL_STATS + SHOOTING_STATS.
+    (decaimiento exponencial) y por fiabilidad (minutos jugados esa
+    temporada / máximo de la ventana) de las últimas n_seasons. Devuelve
+    un dict {stat_per36: valor} para GENERAL_STATS + SHOOTING_STATS.
 
-    EL PESO DE FIABILIDAD: pesar solo por recencia no basta -- una
-    temporada corta por lesión (p. ej. vuelta de una lesión de Aquiles a
-    mitad de año, 16 partidos) pesaría lo mismo que una temporada
-    completa de 82 con tal de estar "a la misma distancia" en el
-    tiempo, aunque represente 20 veces menos minutos de muestra. Esto no
-    es un caso aislado: cualquier veterano de rotación con una vuelta de
-    lesión reciente y pocos partidos jugados produce el mismo sesgo si
-    esa temporada corta entra a peso completo -- puede mover el Game
-    Score/36 de línea base varios puntos porcentuales.
-
-    LA FÓRMULA: `peso_fiabilidad = MIN_de_esa_temporada / max(MIN de las
-    n_seasons de la ventana)` -- normalizado DENTRO de la propia ventana
-    del jugador, no contra una constante externa de "temporada
-    completa" (evita tener que saber cuántos partidos tuvo la liga ese
-    año -- 66 en el lockout 2011-12, ~72 en las temporadas COVID, 82 el
-    resto -- y sigue funcionando igual de bien si TODAS las temporadas
-    de la ventana son cortas). Con minutos iguales entre temporadas
-    (el caso normal, sin lesiones), este peso vale 1.0 para todas y el
-    resultado es idéntico a ponderar solo por recencia.
+    El peso de fiabilidad evita que una temporada corta por lesión (pocos
+    partidos) pese igual que una completa por estar "a la misma
+    distancia" en el tiempo. Se normaliza dentro de la propia ventana del
+    jugador (no contra un nº de partidos fijo, ya que varía por temporada
+    -- lockout, COVID); con minutos parejos entre temporadas el peso es
+    1.0 para todas y el resultado es igual a ponderar solo por recencia.
     """
     df = compute_per36_stats(player_seasons)
     recent = _most_recent_n_seasons(df, n_seasons)
@@ -262,12 +186,9 @@ def compute_recency_weighted_baseline(
     return baseline
 
 
-# Partidos mínimos para que la temporada más reciente de un jugador se
-# considere una muestra suficiente de su rol REAL -- ver
-# compute_reliability_weighted_minutes_per_game. ~1/4 de una temporada de
-# 82 partidos: por debajo de eso (vuelta de lesión a mitad de temporada,
-# llamado puntual) el MPG de esa sola temporada es demasiado ruidoso para
-# fijar el rol del jugador sin mirar historial.
+# Partidos mínimos para que la temporada más reciente sea muestra
+# suficiente del rol real del jugador (~1/4 de temporada); por debajo,
+# hace falta mirar historial (ver compute_reliability_weighted_minutes_per_game).
 MIN_RELIABLE_GAMES_FOR_MPG = 20
 
 
@@ -278,36 +199,19 @@ def compute_reliability_weighted_minutes_per_game(
     min_reliable_games: int = MIN_RELIABLE_GAMES_FOR_MPG,
 ) -> float:
     """
-    Minutos/partido reales de un jugador para fijar su ROL actual.
+    Minutos/partido reales de un jugador para fijar su rol actual.
 
     Si la temporada más reciente tiene >= `min_reliable_games` partidos,
-    se usa tal cual (MIN/GP de esa temporada, comportamiento IDÉNTICO al
-    anterior) -- una temporada con una muestra así de grande YA es una
-    medida fiable del rol actual del jugador, sea cual sea ese rol.
+    se usa tal cual (ya es una muestra fiable del rol). Si no (vuelta de
+    lesión, llamado puntual), se promedia por recencia y fiabilidad (GP
+    de la temporada / max(GP) de la ventana) de las últimas `n_seasons`.
 
-    Si no (vuelta de lesión a mitad de temporada, llamado puntual), se
-    hace una media ponderada por recencia Y por fiabilidad (GP de la
-    temporada / max(GP) de la ventana) de las últimas `n_seasons`.
-
-    POR QUÉ NO PROMEDIAR SIEMPRE: `league_simulation.project_team_roster`
-    decide qué `rotation_size` jugadores forman la rotación real de un
-    equipo a partir del MIN/GP proyectado. Si la muestra más reciente es
-    corta por una lesión reciente (pocos partidos, MPG bajo por manejo
-    de minutos en la vuelta), promediar con temporadas previas es
-    correcto: sin eso, un jugador de rol de titular puede caer fuera de
-    la rotación por una muestra de unos pocos partidos que no refleja su
-    rol real.
-
-    Pero promediar siempre (sin umbral) también falla en el caso
-    contrario: un jugador con una temporada actual larga y bien medida
-    (muchos partidos) que tuvo un rol distinto hace 1-2 temporadas (p.
-    ej. era titular en otro equipo) se ve arrastrado hacia ese rol
-    antiguo aunque su rol actual, ya con muestra grande, sea otro --
-    puede desplazar indebidamente a un compañero con un rol de rotación
-    real y vigente. Por eso el umbral usa GP de la temporada más
-    reciente: por encima de `min_reliable_games` esa temporada ya es
-    fiable por sí sola y no se mezcla con historial; por debajo, sí hace
-    falta mirar atrás.
+    El umbral evita dos sesgos: promediar siempre penalizaría a un
+    titular con una temporada corta reciente (poca muestra, no refleja
+    su rol); no promediar nunca arrastraría a un jugador con muestra
+    grande y rol actual claro hacia un rol antiguo de 1-2 temporadas
+    atrás. `league_simulation.project_team_roster` usa este valor para
+    decidir la rotación real del equipo.
     """
     df = dedupe_traded_seasons(player_seasons)
     recent = _most_recent_n_seasons(df, n_seasons)
@@ -378,10 +282,8 @@ def project_player_season(
     baseline = compute_recency_weighted_baseline(player_seasons, n_seasons, half_life_seasons)
     most_recent_row = _most_recent_n_seasons(compute_per36_stats(player_seasons), 1).iloc[0]
     current_age = float(most_recent_row["PLAYER_AGE"])
-    # GP de la temporada más reciente registrada -- informativo (cuántos
-    # partidos jugó realmente esa temporada), NO una proyección de
-    # partidos que jugará en la temporada simulada (eso requeriría un
-    # modelo de supervivencia que este proyecto no implementa).
+    # Informativo (partidos jugados la última temporada registrada), no
+    # una proyección de partidos futuros.
     games_played_last_season = int(most_recent_row["GP"])
 
     projected_total_minutes = minutes_per_game * games_per_season
@@ -410,10 +312,8 @@ def project_player_season(
     per36_projected = {k: v for k, v in result.items() if k.endswith("_per36_projected")}
     per36_projected = {k.replace("_projected", ""): v for k, v in per36_projected.items()}
     result["game_score_per36"] = compute_game_score_per36(per36_projected)
-    # Copia del Game Score de CAJA puro. build_aging_projection_dataset()
-    # sobrescribe `game_score_per36` con la métrica compuesta cuando hay
-    # estadísticas avanzadas (src/advanced_impact.py); esta columna
-    # conserva el valor sin ajustar para poder comparar las dos.
+    # Copia del Game Score de caja puro; build_aging_projection_dataset()
+    # puede sobrescribir game_score_per36 con la métrica compuesta.
     result["game_score_per36_box"] = result["game_score_per36"]
 
     return result
@@ -421,22 +321,16 @@ def project_player_season(
 
 def zero_player_projection(target_age: Optional[float], minutes_per_game: float, games_per_season: int) -> Dict[str, float]:
     """
-    Proyección "piso" (todo cero) para un jugador del roster SIN ninguna
-    temporada previa registrada -- un rookie de verdad que aún no jugó un
-    partido de liga regular. Mismo principio que
-    backtesting.project_historical_player() para el caso análogo en el
-    backtest: "sin datos para proyectar rendimiento/riesgo -- se asume el
-    piso (0), no se inventa un valor 'de liga' sin evidencia". Devuelve
-    las MISMAS claves que project_player_season() (con todos los
-    <stat>_per36_projected/<stat>_projected en 0.0) para que el resto del
-    pipeline (dashboard, simulation.py, league_simulation.py) no tenga
-    que tratar a estos jugadores como un caso especial -- su fila
-    simplemente no aporta nada al equipo, en vez de faltar por completo
-    y hacer fallar aguas abajo por un player_id inesperado.
+    Proyección "piso" (todo cero) para un jugador sin ninguna temporada
+    previa registrada (rookie sin partidos de liga regular). Sin datos
+    para proyectar, se asume el piso en vez de inventar un valor de liga.
+    Devuelve las mismas claves que project_player_season() para que el
+    resto del pipeline no tenga que tratar a estos jugadores como caso
+    especial -- su fila simplemente no aporta nada al equipo.
     """
     projected_total_minutes = minutes_per_game * games_per_season
     result: Dict[str, float] = {
-        "current_age": target_age,  # sin temporada previa no hay edad real que leer; se usa la objetivo como mejor estimación
+        "current_age": target_age,  # sin temporada previa, se usa la edad objetivo como mejor estimación
         "target_age": target_age,
         "games_played_last_season": 0,
         "minutes_per_game_last_season": 0.0,
@@ -517,12 +411,8 @@ def build_aging_projection_dataset(config: Dict[str, Any]) -> pd.DataFrame:
         )
         rows.append({"player_id": player_id, "player_name": player_cfg["name"], **projection})
 
-    # Jugadores del roster sin NINGUNA temporada en roster_career_stats.csv
-    # (rookies de verdad, recién incorporados sin partidos de liga regular
-    # jugados todavía) -- ver zero_player_projection(). Sin este piso,
-    # simulation.build_simulation_dataset() no podría simularlos en
-    # absoluto (fallaría pidiendo correr "el pipeline de proyección" que
-    # no tiene nada que proyectar para ellos).
+    # Jugadores sin ninguna temporada en roster_career_stats.csv (rookies
+    # sin partidos jugados) -- ver zero_player_projection().
     missing_player_ids = set(roster_by_id) - covered_player_ids
     for player_id in missing_player_ids:
         player_cfg = roster_by_id[player_id]

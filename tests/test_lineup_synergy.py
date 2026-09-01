@@ -1,7 +1,4 @@
-"""
-Tests de lineup_synergy.py. Usan perfiles de estilo y matrices sintéticas
--- no requieren red ni los CSV reales de otros submódulos.
-"""
+"""Tests de lineup_synergy.py con perfiles de estilo y matrices sintéticas."""
 
 import sys
 from pathlib import Path
@@ -89,7 +86,6 @@ def test_pair_weight_scales_with_lower_of_the_two_minutes():
     full_minutes = build_synergy_matrix(player_ids, profiles, {1: 36.0, 2: 36.0}, usage_clash_weight=0.0)
     bench_minutes = build_synergy_matrix(player_ids, profiles, {1: 36.0, 2: 6.0}, usage_clash_weight=0.0)
 
-    # Menos minutos compartidos -> menor magnitud de sinergia (positiva o negativa).
     assert abs(bench_minutes[0, 1]) < abs(full_minutes[0, 1])
 
 
@@ -101,7 +97,7 @@ def test_game_synergy_adjustment_zero_when_synergy_player_unavailable():
     adj_both = compute_game_synergy_adjustment(available_both, synergy_matrix)
     adj_one_out = compute_game_synergy_adjustment(available_one_out, synergy_matrix)
 
-    assert adj_both[0, 0] == pytest.approx(10.0)  # 2 * 5.0 (forma cuadrática con off-diagonal)
+    assert adj_both[0, 0] == pytest.approx(10.0)  # quadratic form: 2 * 5.0 off-diagonal
     assert adj_one_out[0, 0] == pytest.approx(0.0)
 
 

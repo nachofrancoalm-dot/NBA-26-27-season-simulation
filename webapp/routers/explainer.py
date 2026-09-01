@@ -33,10 +33,8 @@ router = APIRouter(prefix="/explainer")
 
 class AskRequest(BaseModel):
     question: str
-    # Texto pegado por el usuario (noticias, injury reports, rumores) --
-    # opcional, ver news_text en llm_explainer.explain_question. Nunca
-    # viene de una llamada de red del servidor, solo de lo que el
-    # usuario pega en el textarea del frontend.
+    # Texto opcional pegado por el usuario (noticias/rumores) -- ver
+    # news_text en llm_explainer.explain_question.
     news_text: Optional[str] = None
 
 
@@ -72,12 +70,8 @@ def post_ask(body: AskRequest):
 
 @router.get("/search-news")
 def get_search_news(query: str):
-    """
-    Fase 2 del RAG (ver news_search.py) -- solo se llama cuando el
-    usuario pulsa el botón de buscar en el frontend, nunca automático.
-    El texto devuelto rellena el mismo textarea que en fase 1 se llena a
-    mano; de ahí en adelante sigue el mismo camino (TF-IDF, etiquetado).
-    """
+    """Fase 2 del RAG (ver news_search.py), solo bajo pulsación explícita.
+    Rellena el mismo textarea que en fase 1 se llena a mano."""
     api_key = os.environ.get("TAVILY_API_KEY")
     if not api_key:
         raise HTTPException(

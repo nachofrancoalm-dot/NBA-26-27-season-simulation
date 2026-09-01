@@ -1,65 +1,30 @@
 """
 aging_curve_shrinkage.py
 
-EXPERIMENTO, no forma parte del pipeline de producción -- no lo importa
-ni lo llama ningún módulo de src/, dashboard/ ni webapp/. Comprueba si
-`config["aging_curve"]` (n_seasons_lookback / recency_half_life_seasons,
-ver src/aging_curve.py::compute_recency_weighted_baseline) está
-sobre-encogiendo la proyección de cada jugador hacia su propia media de
-varias temporadas. Motivo: en la predicción de la temporada 26-27, el
-mejor y el peor equipo del Este solo se separan por ~11 victorias, y en
-el backtest sweep el 42% de los 480 casos caen en el 20% más extremo de
-percentiles (debería rondar el 20%) -- señal de que la dispersión de
-talento entre equipos está demasiado comprimida.
+EXPERIMENTO, no forma parte del pipeline de producción. Comprueba si
+`config["aging_curve"]` (n_seasons_lookback / recency_half_life_seasons)
+está sobre-encogiendo la proyección de cada jugador hacia su media de
+varias temporadas, comprimiendo la dispersión de talento entre equipos.
 
-DIAGNÓSTICO PREVIO (ver bayesian_calibration.py): el modelo reparte a
-los 30 equipos reales con aproximadamente LA MITAD de la dispersión
-real (std simulado de victorias medias ~6.8, std real ~12.25 victorias
--- consistente en las 16 temporadas del sweep, no una temporada
-suelta). Descontando el ruido de temporada ya medido en este proyecto
-(K=7.23 en la logística de un partido individual -> std de temporada
-~4.53 VICTORIAS), la dispersión de TALENTO real objetivo es:
-    sqrt(12.25^2 - 4.53^2) ~= 11.38 victorias de temporada.
-Convertido a puntos de diferencial (1 punto = 2.48 victorias, ver
-simulation.py): 11.38 / 2.48 ~= 4.59 puntos. Chequeo de consistencia
-por la vía alternativa: `std(DiffPointsPG real)` por temporada da
-~4.94, con un ruido de temporada en puntos de 4.53/2.48~=1.83, que
-decompone a sqrt(4.94^2 - 1.83^2) ~= 4.59 -- mismo resultado por las
-dos vías. Nota de unidades: el ruido de 4.53 está en VICTORIAS y no se
-puede restar directamente de una dispersión en PUNTOS sin convertir
-primero -- `REAL_SEASON_LUCK_STD_POINTS` más abajo ya viene convertido.
+Diagnóstico previo (bayesian_calibration.py): el modelo reparte talento
+con la MITAD de la dispersión real (std simulado ~6.8 victorias, real
+~12.25, consistente en 16 temporadas). Descontando el ruido de temporada
+ya medido (K=7.23 -> std ~4.53 victorias), la dispersión de TALENTO
+objetivo es sqrt(12.25^2 - 4.53^2) ~= 11.38 victorias ~= 4.59 puntos de
+diferencial (1 punto = 2.48 victorias). Verificado por la vía alternativa
+(std de DiffPointsPG real) con el mismo resultado.
 
-PRERREQUISITO: `league_simulation.project_team_roster()` y
+Prerrequisito: `league_simulation.project_team_roster()` y
 `backtesting.project_historical_player()` deben propagar
-`config["aging_curve"]` hasta `project_player_season()`
-(n_seasons/half_life_seasons); si llaman a la función sin esos
-argumentos, usan los defaults del módulo y calibrar un valor nuevo en
-el YAML no cambia nada en Liga NBA ni en el backtesting.
+`config["aging_curve"]` hasta `project_player_season()`; si no, calibrar
+el YAML no cambia nada en producción ni en el backtesting.
 
-DISEÑO DEL EXPERIMENTO
-------------------------
-Para cada combinación candidata (n_seasons_lookback, half_life_seasons),
-sobre los 480 casos del backtest sweep:
-1. Proyecta cada jugador con `aging_curve.project_player_season()` TAL
-   CUAL (misma función que usa producción, nunca reimplementada), pero
-   filtrando el historial de cada jugador UNA sola vez y evaluando
-   todas las combinaciones del grid sobre esos datos ya en memoria (en
-   vez de repetir el filtrado de pandas por cada punto del grid). Esto
-   reduce un barrido de grid modesto de más de una hora a un solo pase
-   por los 480 casos.
-2. Sin muestreo Monte Carlo de lesión/fatiga/sinergia (a propósito):
-   la pregunta de este experimento es solo "¿cuánto se separan los
-   equipos en talento crudo?", no "¿cuánto talento efectivo sobrevive
-   a las lesiones?" -- esa segunda pregunta no depende de
-   n_seasons_lookback/half_life, así que añadir el muestreo solo
-   encarecería el experimento sin cambiar la respuesta.
-3. Por cada combinación: dispersión (std) del Game Score de equipo
-   crudo entre los 30 equipos de cada temporada (centrado por la media
-   de esa temporada -- restricción de suma cero simplificada, sin el
-   muestreo caro de compute_projected_league_baselines) y correlación
-   con el DiffPointsPG real -- igual que bayesian_calibration.py, pero
-   evaluando el ajuste del propio aging_curve, no el slope de conversión
-   final.
+Método: para cada combinación (n_seasons_lookback, half_life_seasons) del
+grid, sobre los 480 casos del backtest sweep, proyecta con
+`aging_curve.project_player_season()` (misma función de producción, sin
+muestreo Monte Carlo de lesión/fatiga -- no depende de estos parámetros)
+y mide la dispersión del Game Score de equipo (centrada por temporada)
+y su correlación con el DiffPointsPG real.
 
 Uso:
     python scripts/experiments/aging_curve_shrinkage.py
@@ -87,11 +52,8 @@ from advanced_impact import adjust_with_context, build_advanced_context, load_ad
 from simulation import DEFAULT_ROTATION_SIZE, normalize_rotation_minutes  # noqa: E402
 from season_utils import season_start_year  # noqa: E402
 
-CURRENT_SCALE = 0.172  # game_score_to_net_rating_scale ya recalibrado (ver bayesian_calibration.py)
-# 4.53 victorias/temporada de ruido (ya medido, K=7.23 de la logística de
-# 1 partido) convertido a puntos de diferencial (1 punto = 2.48 victorias,
-# ver simulation.py) -- NUNCA restar el número en victorias directamente
-# de una dispersión en puntos (ver "TRAMPA DE UNIDADES" en el docstring).
+CURRENT_SCALE = 0.172  # game_score_to_net_rating_scale recalibrado (ver bayesian_calibration.py)
+# Ruido de temporada en victorias, convertido a puntos -- no restar victorias de puntos sin convertir.
 REAL_SEASON_LUCK_STD_WINS = 4.53
 WINS_PER_POINT_OF_DIFFERENTIAL = 2.48
 REAL_SEASON_LUCK_STD_POINTS = REAL_SEASON_LUCK_STD_WINS / WINS_PER_POINT_OF_DIFFERENTIAL
@@ -103,12 +65,7 @@ RESULTS_FILENAME = "experiment_aging_curve_shrinkage_grid.csv"
 def build_grid_features(
     config: Dict[str, Any], grid: List[Tuple[int, float]],
 ) -> pd.DataFrame:
-    """
-    Una fila por (caso equipo-temporada, combinación del grid), con el
-    Game Score de equipo crudo resultante -- filtra el historial de cada
-    jugador UNA vez, evalúa todas las combinaciones sobre esos datos ya
-    en memoria (ver docstring del módulo).
-    """
+    """Una fila por (caso equipo-temporada, combinación del grid) con el Game Score de equipo resultante."""
     paths = get_paths(config)
     cases = resolve_backtest_sweep_cases(config)
     if not cases:
@@ -173,12 +130,7 @@ def build_grid_features(
 
 
 def evaluate_grid(features: pd.DataFrame) -> pd.DataFrame:
-    """
-    Por cada combinación del grid: dispersión de talento (centrada por
-    temporada, sin el muestreo MC caro de la línea base oficial -- ver
-    docstring del módulo) convertida a unidades de puntos vía
-    CURRENT_SCALE, y correlación con el diferencial de puntos real.
-    """
+    """Por cada combinación: dispersión de talento (centrada por temporada) en puntos vía CURRENT_SCALE, y correlación con el diferencial real."""
     real_season_std_points = features.groupby("season")["DiffPointsPG"].std().mean()
     target_talent_std = float(np.sqrt(real_season_std_points ** 2 - REAL_SEASON_LUCK_STD_POINTS ** 2))
 
@@ -198,12 +150,7 @@ def evaluate_grid(features: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_loso(config: Dict[str, Any], grid: List[Tuple[int, float]], features: pd.DataFrame) -> pd.DataFrame:
-    """
-    Para cada temporada excluida: evalúa el grid SOLO con las otras 15 y
-    anota qué combinación queda más cerca del objetivo de dispersión --
-    si la elección salta de un lado a otro del grid según qué temporada
-    se esconda, no es una elección estable.
-    """
+    """Leave-one-season-out: evalúa el grid con las otras 15 temporadas y anota la combinación más cercana al objetivo, para chequear estabilidad."""
     seasons = sorted(features["season"].unique())
     rows = []
     for held_out in seasons:

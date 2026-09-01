@@ -52,8 +52,7 @@ def test_healthy_young_player_has_low_risk_score():
 
 
 def test_recent_absence_weighs_more_than_old_absence():
-    # Mismo total de partidos perdidos (42 de 82 en una temporada), pero en
-    # posiciones distintas de la ventana de 3 temporadas.
+    # mismo total de partidos perdidos, distinta posición en la ventana de 3 temporadas
     recent_injury = _make_seasons(
         [
             {"season": "2021-22", "age": 25, "gp": 82},
@@ -91,15 +90,13 @@ def test_age_score_saturates_and_does_not_penalize_extreme_age_further():
     extreme = compute_age_score(41)  # caso LeBron
 
     assert young < prime < veteran
-    # Más allá de peak_start_age (32 por defecto) el score se aplana: un
-    # jugador de 41 no debe puntuar más que uno de 36.
+    # más allá de peak_start_age (32) el score se aplana
     assert veteran == pytest.approx(extreme)
     assert extreme == pytest.approx(compute_age_score(60))  # no sigue subiendo
 
 
 def test_history_dominates_over_age_for_clean_veteran():
-    # Veterano de 41 años con historial reciente limpio (poco riesgo real)
-    # vs. jugador de 27 años con historial de lesiones pesado reciente.
+    # veterano de 41 con historial limpio vs. jugador de 27 con lesiones recientes
     clean_veteran = _make_seasons(
         [
             {"season": "2021-22", "age": 39, "gp": 78},
@@ -153,10 +150,8 @@ def test_default_season_length_is_82():
 
 
 def test_traded_mid_season_not_double_counted():
-    # nba_api incluye una fila 'TOT' además de una fila por equipo cuando
-    # un jugador es traspasado a mitad de temporada. Sin el dedupe, esto
-    # infla la ventana de N temporadas e ignora los partidos del primer
-    # equipo (GP quedaría solo del último equipo, no del total real).
+    # regression: nba_api añade una fila 'TOT' junto a la de cada equipo tras un traspaso;
+    # sin dedupe se infla la ventana de temporadas
     traded_season = pd.DataFrame(
         [
             {"SEASON_ID": "2021-22", "PLAYER_AGE": 27, "GP": 50, "TEAM_ABBREVIATION": "TOT"},
@@ -168,7 +163,6 @@ def test_traded_mid_season_not_double_counted():
     )
     result = compute_risk_score(traded_season)
 
-    # Con dedupe: 3 temporadas reales (2021-22 TOT=50/82, 2022-23=0/82, 2023-24=0/82).
     expected_load = pytest.approx(((1 - 50 / 82) + 0 + 0) / 3)
     assert result["historical_load_score"] == expected_load
 

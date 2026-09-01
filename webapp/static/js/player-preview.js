@@ -1,20 +1,8 @@
 // player-preview.js -- tarjeta de vista previa al pasar el ratón/foco
-// sobre un jugador (o un EQUIPO -- ver teamLeaderboardChart() en
-// leaderboard.js, Entrenador del Año) en leaderboard.js o court.js:
-// foto/insignia + nombre + subtítulo + un set de stats con su
-// `caption` (p.ej. "Temporada proyectada 2026-27"). Este módulo es
-// puramente de presentación -- qué foto, qué stats mostrar y de dónde
-// salen (proyectadas, reales, o una comparación de las dos, como en
-// MIP) lo decide siempre el caller (pasa el nodo de foto ya construido
-// -- playerPhoto() o teamBadge(), ver ui.js -- en vez de un id/nombre
-// que este módulo tendría que interpretar), nunca se mezcla aquí.
-// Sustituye al #chart-tooltip genérico (texto plano, una línea) para
-// este caso concreto: una entidad tiene más que enseñar que un solo
-// número.
-//
-// Un único nodo reutilizado (mismo patrón que #chart-tooltip) en vez de
-// crear/destruir un popover por cada hover -- más barato y evita fugas
-// de listeners.
+// sobre un jugador o equipo (leaderboard.js, court.js): foto/insignia +
+// nombre + subtítulo + stats + caption. Puramente de presentación -- el
+// caller decide qué mostrar y pasa el nodo de foto ya construido.
+// Un único nodo reutilizado (mismo patrón que #chart-tooltip).
 
 import { el } from "./ui.js";
 
@@ -30,25 +18,16 @@ function previewNode() {
 }
 
 /**
- * `event`: el MouseEvent/FocusEvent que disparó la vista previa (para
- * posicionarla). `photo`: nodo ya construido (playerPhoto()/teamBadge(),
- * ver ui.js) -- este módulo no sabe si es un jugador o un equipo.
- * `name`: nombre a mostrar en negrita. `subtitle`: línea pequeña debajo
- * (abreviatura de equipo para un jugador, conferencia para un equipo).
- * `stats`: [{label, value}] -- ya formateadas por el caller (distintas
- * por premio, ver LEADERBOARD_CONFIG en awards.js). Un `value` puede ser
- * una comparación ya formateada como texto (p.ej. "27.9 → 22.5", MIP:
- * temporada real anterior -> proyectada) -- este módulo no sabe ni le
- * importa qué representa cada stat, solo la pinta. `caption`: string ya
- * formado por el caller (p.ej. "Temporada proyectada 2026-27" o, para
- * MIP, "Real 2025-26 → Proyectada 2026-27"), o null para omitirlo.
+ * `event`: dispara la vista previa (para posicionarla). `photo`: nodo ya
+ * construido (playerPhoto()/teamBadge()). `name`/`subtitle`: cabecera.
+ * `stats`: [{label, value}] ya formateadas por el caller -- `value`
+ * puede ser una comparación como texto (p.ej. "27.9 → 22.5" en MIP).
+ * `caption`: string ya formado por el caller, o null para omitirlo.
  */
 export function showPlayerPreview(event, { photo, name, subtitle, caption, stats = [] }) {
   const node = previewNode();
-  // Node.replaceChildren() es el método NATIVO del DOM -- a diferencia
-  // de el() (ui.js), NO ignora los `null`: los convierte en un nodo de
-  // texto literal "null" (se manifestaba en MIP, que no siempre lleva
-  // caption). Por eso se filtran aquí antes de pasarlos.
+  // replaceChildren() nativo NO ignora `null` como el() (ui.js) -- los
+  // convierte en el texto literal "null", así que se filtran antes.
   const children = [
     el("div", { class: "player-preview-header" }, [
       photo,
@@ -82,9 +61,8 @@ export function hidePlayerPreview() {
   if (node) node.classList.remove("visible");
 }
 
-/** Coloca la tarjeta cerca del cursor/elemento con foco, sin salirse
- * del viewport -- se mide DESPUÉS de pintar (requestAnimationFrame)
- * porque el tamaño depende del contenido (nombre largo, nº de stats). */
+/** Coloca la tarjeta cerca del cursor sin salirse del viewport -- se mide
+ * DESPUÉS de pintar (requestAnimationFrame) porque el tamaño depende del contenido. */
 function positionPreview(node, event) {
   const margin = 14;
   const anchorX = event.clientX ?? event.target.getBoundingClientRect().left;
