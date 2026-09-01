@@ -1,16 +1,35 @@
 import { api } from "../api.js";
-import { card, el, dataTable, emptyState, pillToggle, skeleton } from "../ui.js";
+import { card, el, dataTable, emptyState, pillToggle, multiToggle, skeleton } from "../ui.js";
 import { openPlayerModal } from "../player-modal.js";
 import { getScenario, scenarioBar } from "../scenario.js";
 
 /** Rellena un <select> con "(todos)" + los valores distintos presentes
- * en los datos -- nunca una lista fija, así que un país/posición nuevo
- * en el CSV aparece solo, sin tocar este archivo. */
+ * en los datos -- nunca una lista fija, así que un valor nuevo en el CSV
+ * aparece solo, sin tocar este archivo. */
 function fillFilterOptions(select, label, values) {
   select.replaceChildren(
     el("option", { value: "" }, `${label} (todos)`),
     ...values.map((v) => el("option", { value: v }, v))
   );
+}
+
+const POSITION_GROUPS = [
+  { value: "G", label: "G" },
+  { value: "F", label: "F" },
+  { value: "C", label: "C" },
+];
+
+/** `position` en los datos es texto libre de CommonPlayerInfo ("F-G",
+ * "Guard-Forward", "Center"...) -- no hay PG/SG/SF/PF en la fuente, solo
+ * G/F/C. Se reduce cada tramo separado por "-" a su primera letra, así
+ * "F-G" cuenta como F Y como G para el filtro (un jugador así debe
+ * aparecer al marcar cualquiera de los dos). */
+function positionTokens(rawPosition) {
+  if (!rawPosition) return [];
+  return rawPosition
+    .split("-")
+    .map((part) => part.trim()[0]?.toUpperCase())
+    .filter(Boolean);
 }
 
 export async function render(container) {
@@ -20,22 +39,25 @@ export async function render(container) {
   let mode = "per_game";
   let allPlayers = [];
   let glossary = {};
+  let selectedPositions = new Set();
 
+  const conferenceSelect = el("select", {});
   const teamSelect = el("select", {});
-  const positionSelect = el("select", {});
   const countrySelect = el("select", {});
+  const positionBox = el("div");
   const tableBox = el("div", { style: "margin-top: 16px;" });
   const modeBox = el("div");
 
   function applyFilters() {
+    const conference = conferenceSelect.value;
     const team = teamSelect.value;
-    const position = positionSelect.value;
     const country = countrySelect.value;
     const rows = allPlayers.filter(
       (p) =>
+        (!conference || p.conference === conference) &&
         (!team || p.team_abbreviation === team) &&
-        (!position || p.position === position) &&
-        (!country || p.country === country)
+        (!country || p.country === country) &&
+        (selectedPositions.size === 0 || positionTokens(p.position).some((t) => selectedPositions.has(t)))
     );
     tableBox.replaceChildren(
       rows.length ? dataTable(rows, glossary, {
@@ -57,13 +79,20 @@ export async function render(container) {
     allPlayers = data.players;
     glossary = data.glossary;
     const uniqueSorted = (key) => [...new Set(allPlayers.map((p) => p[key]).filter(Boolean))].sort();
+    fillFilterOptions(conferenceSelect, "Conferencia", uniqueSorted("conference"));
     fillFilterOptions(teamSelect, "Equipo", uniqueSorted("team_abbreviation"));
-    fillFilterOptions(positionSelect, "Posición", uniqueSorted("position"));
     fillFilterOptions(countrySelect, "País", uniqueSorted("country"));
     applyFilters();
   }
 
-  [teamSelect, positionSelect, countrySelect].forEach((s) => (s.onchange = applyFilters));
+  [conferenceSelect, teamSelect, countrySelect].forEach((s) => (s.onchange = applyFilters));
+
+  positionBox.replaceChildren(
+    multiToggle(POSITION_GROUPS, selectedPositions, (value) => {
+      selectedPositions = value;
+      applyFilters();
+    })
+  );
 
   modeBox.replaceChildren(
     pillToggle(
@@ -86,10 +115,10 @@ export async function render(container) {
       el(
         "p",
         { class: "caption" },
-        "Los jugadores proyectados de los 30 equipos. Filtra por equipo, posición o país, y haz clic en cualquier cabecera para ordenar. Doble clic en un jugador para ver su detalle."
+        "Los jugadores proyectados de los 30 equipos. Filtra por conferencia, equipo, posición (varias a la vez) o país, y haz clic en cualquier cabecera para ordenar. Doble clic en un jugador para ver su detalle."
       ),
       el("div", { class: "card-header-row" }, [
-        el("div", { class: "filter-bar" }, [teamSelect, positionSelect, countrySelect]),
+        el("div", { class: "filter-bar" }, [conferenceSelect, teamSelect, positionBox, countrySelect]),
         modeBox,
       ]),
       tableBox,
