@@ -38,8 +38,8 @@ MECÁNICA POR TEMPORADA SIMULADA
 2. **Contribución por partido** -- Game Score por-36 de cada jugador
    (de aging_curve.py) escalado a sus minutos proyectados, con:
    - **prima de "estrella"** opcional y DESACTIVADA por defecto
-     (`apply_star_bonus`, ver su docstring y la sección "INVESTIGACIÓN"
-     más abajo -- se probó y se descartó como comportamiento por
+     (`apply_star_bonus`, ver su docstring y la sección "PRIMA DE
+     ESTRELLA" más abajo -- se descartó como comportamiento por
      defecto, queda como palanca de experimentación).
    - penalización de fatiga en back-to-backs, proporcional a su
      `fatigue_score` (de fatigue_accumulation.py).
@@ -55,213 +55,158 @@ MECÁNICA POR TEMPORADA SIMULADA
    -- no hay datos suficientes en este proyecto para calibrarlas con
    una regresión propia.
 
-INVESTIGACIÓN: EQUIPOS CON ESTRELLAS PERO BANQUILLO MEDIOCRE, ¿SUBVALORADOS?
+PRIMA DE "ESTRELLA" (apply_star_bonus) -- POR QUÉ ESTÁ DESACTIVADA POR DEFECTO
 ------------------------------------------------------------------------------
-Investigado a raíz de que los Knicks (campeones vigentes según el
-usuario) proyectaban por debajo de la media de la liga mientras equipos
-"en reconstrucción" como Chicago o New Orleans proyectaban arriba.
-Diagnóstico con datos reales: Brunson (19.4 GS/36) y Towns (19.0) SÍ se
-proyectan como élite -- más altos que cualquier jugador individual de
-Chicago -- pero el resto de la rotación de los Knicks (Anunoby, Bridges,
-Hart, Shamet: 9.6-13.4) es más floja que la rotación completa de Chicago
-(14-18, sin estrellas pero pareja). Se probó `apply_star_bonus()`: los
-`star_bonus_top_n` jugadores de mayor valor de temporada de CADA equipo
-reciben una prima multiplicativa (`star_bonus_multiplier`) sobre su Game
-Score/36 -- la idea de que una estrella eleva las victorias de forma no
-lineal (atención defensiva, creación de tiro para otros, cierre de
-partidos) es real y está en la literatura de análisis deportivo.
+`apply_star_bonus()` multiplica el Game Score/36 de los `star_bonus_top_n`
+jugadores de mayor valor de temporada de CADA equipo por
+`star_bonus_multiplier`, para capturar que una estrella eleva las
+victorias de forma no lineal (atención defensiva, creación de tiro para
+otros, cierre de partidos) -- un efecto real y documentado en la
+literatura de análisis deportivo. Se deja implementada y testeada como
+palanca de experimentación en `config["monte_carlo"]`, pero DESACTIVADA
+por defecto (`star_bonus_top_n=0`) por dos motivos, validados contra
+datos reales:
 
-DOS PROBLEMAS AL PROBARLO CON DATOS REALES, POR LOS QUE SE DEJÓ
-DESACTIVADA POR DEFECTO (`star_bonus_top_n=0`):
+1. No aísla el efecto que se quiere capturar: todo equipo tiene su
+   propio "mejor jugador", así que la prima proporcional se aplica de
+   forma pareja y apenas cambia la diferencia relativa entre un equipo
+   "estrella + banquillo flojo" y uno "sin estrella + banquillo parejo".
+2. Empeora la calibración del backtesting contra los comparables
+   históricos de superequipos (Heat 2010-11, Warriors 2016-17, Nets
+   2020-21, Suns 2022-23): estos casos ya caen por debajo del percentil
+   10 sin la prima (ver "fricción de vestuario no capturada por datos de
+   caja" en el README), y activarla los empuja más abajo todavía --
+   porque apilar estrellas en la realidad suele rendir POR DEBAJO de la
+   suma lineal de talento ("fricción de superequipo"), y una prima que
+   hace las estrellas más valiosas va en la dirección contraria a esa
+   evidencia.
 
-1. **No resuelve el caso que la motivó.** Chicago y New Orleans TAMBIÉN
-   tienen su propio "mejor jugador" (Giddey 18.4, Zion 23.5) que recibe
-   la misma prima proporcional -- el hueco Knicks-vs-Chicago apenas se
-   mueve (con top2/x1.15: 94.68→99.40 vs 100.01→104.31, la diferencia
-   pasa de 5.33 a 4.91). Boostear al mejor jugador de CADA equipo no
-   favorece de forma diferencial a los equipos "estrella + banquillo
-   flojo" frente a los de "sin estrella + banquillo parejo".
-2. **Empeora el backtesting** contra los propios comparables históricos
-   de este proyecto (Heat 2010-11, Warriors 2016-17, Nets 2020-21, Suns
-   2022-23) -- que son, precisamente, equipos de estrellas apiladas.
-   `actual_percentile` ya era bajo SIN la prima (todos estos casos caen
-   por debajo del percentil 10, ver sección de Backtesting en README:
-   "fricción de vestuario no capturada por datos de caja"), y con la
-   prima activa cae más todavía (ej. Suns 2022-23: percentil 0.05 → 0.03,
-   Heat 2010-11: 7.67 → 2.83). Es decir: los datos de ESTE MISMO proyecto
-   ya muestran que apilar estrellas suele rendir POR DEBAJO de la suma
-   lineal de talento (el fenómeno real de "fricción de superequipo") --
-   añadir una prima que hace las estrellas más valiosas todavía va en la
-   dirección CONTRARIA a esa evidencia ya validada.
-
-CONCLUSIÓN: el resultado "Knicks bajo, Chicago/Pelicans alto" no se
-identificó como un bug -- es lo que salen los números reales más
-recientes de cada jugador (los titulares complementarios de los Knicks
-tuvieron una temporada más floja en tasa por-36 que la rotación completa
-de Chicago/Pelicans) combinado con una limitación ya documentada del
-proyecto (suma lineal de Game Score, sin capturar defensa real ni
-encaje de plantilla más allá de `lineup_synergy.py`). `apply_star_bonus()`
-se deja implementada y testeada, pero DESACTIVADA por defecto -- útil
-como palanca de experimentación (`config["monte_carlo"]`), no como
-arreglo por defecto, porque no se sostiene contra los propios datos de
-validación del proyecto.
-
-BUG REAL: LÍNEA BASE GENÉRICA INFLABA LAS VICTORIAS DEL EQUIPO PROPIO
+CALIBRACIÓN DE LA LÍNEA BASE DE LIGA (league_average_game_score_per36)
 ------------------------------------------------------------------------
-Encontrado al comparar, para el MISMO roster (ya arreglado el mismatch
-de league_simulation.py -- ver "BUG REAL" en su docstring), las
-victorias medias de "Mi equipo" (motor de este módulo: 50.4) contra las
-de "Liga y Playoffs" (motor de league_simulation.py: 37.7) -- una
-diferencia de 13 victorias con exactamente los mismos jugadores/minutos.
-Causa: este módulo compara el Game Score del equipo propio contra una
-línea base GENÉRICA fija (`league_average_game_score_per36=10.0`, el
-promedio de Hollinger sobre TODO jugador de la liga, incluida la
-"basura" de banquillo que casi no juega -- equipo "promedio" ~66.7 de
-Game Score total), mientras que league_simulation.py compara contra el
-Game Score REAL de los otros 29 equipos (rotaciones reales de ~10
-jugadores, media empírica ~97-98 -- mucho más alta, porque excluye a los
-jugadores que casi no juegan). Comparar contra un rival ficticio mucho
-más flojo que los rivales reales infla las victorias proyectadas de
-CUALQUIER equipo propio, no solo de este caso.
+El Game Score de equipo no es un diferencial de puntos por sí solo: hay
+que restarle la línea base de un equipo "promedio" antes de convertirlo
+a net rating. El valor genérico (10.0, promedio de Hollinger sobre TODO
+jugador de la liga, incluida la basura de banquillo que casi no juega)
+subestima seriamente el nivel real de una rotación NBA (~10 jugadores
+que sí acumulan minutos relevantes rinde más cerca de 97-98 de Game
+Score total que de los ~66.7 que da el valor genérico) -- compararse
+contra un rival ficticio así de flojo infla las victorias proyectadas de
+cualquier equipo propio.
 
-ARREGLADO con `compute_league_average_game_score_per36()`: si
-`league_player_projections.csv` existe (se generó `--league`),
-`build_simulation_dataset()` recalibra automáticamente la línea base
-desde el promedio REAL de los 30 equipos en vez del valor genérico de
-Hollinger -- a menos que el usuario haya fijado su propio valor a mano
-en `config["monte_carlo"]`, que se respeta. Sin datos de liga completa
-(pipeline sin `--league`), se mantiene el valor genérico como fallback
--- sigue siendo una aproximación razonable cuando no hay nada mejor.
+`compute_league_average_game_score_per36()` corrige esto recalibrando la
+línea base desde los 30 equipos REALES ya proyectados
+(`league_player_projections.csv`, generado con `--league`), en vez del
+valor genérico -- salvo que el usuario haya fijado su propio valor a
+mano en `config["monte_carlo"]`, que se respeta. Sin datos de liga
+completa, se mantiene el valor genérico como fallback razonable.
 
-SOBRECORRECCIÓN en la primera versión de este fix, encontrada al
-probarlo: calibrar con la contribución "de pico" (game_score_per36 *
-minutos, sin más) de los 30 equipos dio una línea base de ~97.4 -- y las
-victorias del equipo propio se DESPLOMARON a 19.7 (peor que antes de
-arreglar nada). Motivo: `sample_injury_absences()` sí resta partidos
-perdidos según `risk_score` en la simulación real del equipo propio,
-pero la línea base "de pico" no reflejaba esa misma degradación para
-los 30 equipos -- comparar un equipo YA penalizado por lesiones contra
-una línea base que asume salud perfecta en TODA la liga penaliza de
-más, sobre todo a rosters con jugadores de riesgo alto (LeBron viejo,
-Embiid propenso a lesión, exactamente el caso que motivó este fix).
-Corregido descontando cada contribución por `(1 - risk_score)` -- ver
-docstring de `compute_league_average_game_score_per36()` para por qué
-ese descuento es exacto en expectativa, no una aproximación arbitraria.
-Con el descuento, la línea base calibrada baja a ~70.2 (cerca del valor
-genérico de 66.7) y las victorias del equipo propio quedan en ~46.7 --
-mucho más cerca de las 37.7 de "Liga y Playoffs" que las 50.4
-originales (gap de 12.7 victorias reducido a ~9).
+Dos ajustes hacen que esa recalibración sea exacta y no una
+aproximación:
+- Se descuenta cada contribución de jugador por `(1 - risk_score)`, la
+  fracción de partidos que se espera que esté disponible (media exacta
+  de la binomial negativa de `sample_injury_absences`). Sin este
+  descuento, la línea base compara un equipo propio YA penalizado por
+  lesiones contra 30 equipos que asumen salud perfecta, lo que penaliza
+  de más a rosters con jugadores de riesgo alto.
+- Se suma la media de ajuste de sinergia de los 30 equipos
+  (`load_league_mean_synergy`), porque ese ajuste que `run_monte_carlo`
+  añade al net rating es sistemáticamente positivo -- si la línea base
+  no lo incorpora, el equipo propio lo cobra "gratis" contra una
+  referencia que no lo tiene.
 
-GAP RESIDUAL, honesto: ~9 victorias de diferencia SIGUEN sin cerrarse
-del todo, y no se puede cerrar sin unificar los dos motores por
-completo (fuera de alcance) -- "Mi equipo" sigue comparando contra un
-rival PROXY (un escalar de WinPCT muestreado de la temporada anterior,
-convertido a puntos vía `opponent_strength_scale`), mientras que "Liga
-y Playoffs" compara contra el Game Score REAL y específico de cada uno
-de los 29 rivales simulados esa temporada -- una medida más granular y
-correlacionada que un proxy escalar. Es una diferencia de diseño
-documentada desde el principio en los docstrings de ambos módulos, no
-algo que este fix pretenda eliminar del todo.
+`backtesting.py` NO usa esta recalibración por equipo: no existe un
+`league_player_projections.csv` por temporada histórica (requeriría
+proyectar una liga completa por cada temporada del sweep, fuera de
+alcance). En su lugar usa la línea base por-era de
+`aging_curve.compute_league_game_score_baseline()` (ver más abajo),
+calculada directamente de los game logs históricos.
 
-NO se aplica a `backtesting.py`: los comparables históricos son de
-temporadas pasadas para las que no existe un `league_player_projections.csv`
-equivalente (sería una liga completa por cada temporada histórica,
-fuera del alcance actual) -- queda con la línea base genérica,
-documentado como limitación conocida. (ACTUALIZACIÓN: sí se resolvió
-después, con el backtest sweep de 450 casos -- ver el bug de inflación
-de era justo abajo.)
-
-BUG REAL: INFLACIÓN DE ERA (el sesgo dominante del modelo)
+CALIBRACIÓN DE ERA (aging_curve.compute_league_game_score_baseline)
 ------------------------------------------------------------------------
-Encontrado al correr el backtest sweep de 450 casos (30 equipos x 15
-temporadas, 2010-11 a 2024-25) -- el dataset que por fin permitió medir
-la calibración con rigor en vez de con 4 casos elegidos a mano. Los
-resultados iniciales fueron malísimos y con un patrón inconfundible:
-
-    % de casos dentro del rango P10-P90:  36.7%  (deberia ser ~80%)
-    percentil real MEDIANO:                4.5   (deberia ser ~50)
-    error medio (real - predicho):       -13.2 victorias
-
-Pero lo revelador fue el desglose por temporada: el modelo predecía una
-MEDIA de 49.8 victorias por equipo en 2010-11 y de 66.0 en 2024-25.
-Ambas son imposibles: en una liga real de 30 equipos cada victoria es la
-derrota de otro, así que la media SIEMPRE es exactamente 41 en 82
-partidos. El modelo violaba la restricción de suma cero, y la violación
-CRECÍA monotónicamente con el tiempo (+5.8 en 2012-13 -> +25.0 en
-2024-25).
-
-CAUSA: el nivel de Game Score de la NBA no es estable en el tiempo. Subió
-de ~10.7 por-36 en 2010-11 a ~13.4 en 2024-25 (más ritmo de juego y
-revolución del triple). La línea base era FIJA (10.0 = "jugador promedio
-de Hollinger"), así que un equipo MEDIO de 2024-25 aparecía +22 puntos de
-Game Score por encima de la referencia -- mérito de su época, no suyo. La
+El nivel de Game Score de la NBA no es estable en el tiempo: subió de
+~10.7 por-36 en 2010-11 a ~13.4 en 2024-25 (más ritmo de juego y
+revolución del triple). Una línea base fija (10.0) hace que un equipo
+medio de una temporada reciente aparezca muy por encima de la
+referencia por mérito de su época, no suyo -- en el backtest sweep de
+450 casos (30 equipos x 15 temporadas, 2010-11 a 2024-25) la
 correlación entre "inflación de Game Score de la era" y "exceso de
-victorias predichas" es **0.926**: el sesgo estaba casi enteramente
-explicado por esto.
+victorias predichas" es 0.926, es decir, este era el sesgo dominante del
+modelo antes de corregirse (violaba incluso la restricción de suma cero
+de una liga de 30 equipos: la media de victorias predichas por temporada
+subía monotónicamente con los años en vez de quedarse fija en 41).
 
-ARREGLADO con `aging_curve.compute_league_game_score_baseline()`: cada
-equipo se compara contra la media de SU PROPIA temporada, no contra una
-constante. `backtesting.run_backtest_case()` acepta
+Cada equipo debe compararse contra la media de SU PROPIA temporada, no
+contra una constante: `backtesting.run_backtest_case()` acepta
 `league_baseline_per36` y `build_backtest_sweep_dataset()` lo calcula por
 temporada desde los ~350 jugadores/temporada con >=500 minutos del sweep
-(que sí son una muestra representativa de la liga; los 4 comparables
-narrativos NO lo son -- son 60 jugadores de 4 superequipos --, por eso
-ese camino sigue usando el valor genérico).
+(muestra representativa de la liga; los 4 comparables narrativos no lo
+son -- son 60 jugadores de 4 superequipos --, por eso ese camino sigue
+usando el valor genérico).
 
-BUG REAL: MINUTOS DEL ROSTER SIN NORMALIZAR EN EL BACKTEST
+NORMALIZACIÓN DE MINUTOS DE ROTACIÓN (normalize_rotation_minutes)
 ------------------------------------------------------------------------
-Tercer bug del mismo análisis, y el MISMO que ya se había arreglado en
-`league_simulation.project_team_roster` -- pero `backtesting.py` nunca lo
-recibió. Sumaba el Game Score de TODO el roster (14-18 jugadores,
-283-345 min/partido) en vez de los 240 reales, inflando la fuerza de cada
-equipo un 18-43%. Arreglado extrayendo la lógica a
-`normalize_rotation_minutes()` (en este módulo), ahora COMPARTIDA por
-`backtesting.py` y `league_simulation.py` para que no pueda volver a
-divergir -- que un bug idéntico viviera arreglado en un módulo y sin
-arreglar en otro es exactamente lo que evita compartir la función.
+La suma de minutos/partido reales de un roster completo de temporada NO
+suma los 240 reales de un partido (5 posiciones x 48 min): a lo largo de
+82 partidos rotan 14-20 jugadores, así que suma 280-345. Sumar el Game
+Score de todo el roster sin normalizar infla la fuerza del equipo un
+18-43% frente a un rival medido sobre 240 minutos, y penaliza
+especialmente a equipos con mucho movimiento de plantilla (lesiones,
+tanking, two-way), que son los que más jugadores acumulan.
+`normalize_rotation_minutes()` escala solo los `rotation_size` jugadores
+con más minutos para que sumen exactamente 240, dejando al resto en 0 --
+restringir la normalización a la rotación (en vez de escalar todo el
+roster) evita diluir a las estrellas. Función compartida entre
+`backtesting.py` y `league_simulation.py` para que la lógica no pueda
+divergir entre los dos motores (ver también
+`league_simulation.project_team_roster`).
 
-BUG REAL: ESCALA GAME SCORE -> DIFERENCIAL (~3.5x de sobreestimación)
+ESCALA GAME SCORE -> DIFERENCIAL (game_score_to_net_rating_scale)
 ------------------------------------------------------------------------
-`game_score_to_net_rating_scale` valía 1.0 con el comentario "1 punto de
-Game Score sobre la línea base ~= 1 punto de diferencial" -- una
-suposición que NUNCA se había verificado contra datos. Regresando el
-diferencial de puntos REAL (de los game logs con PLUS_MINUS de los 450
-casos) contra el Game Score de equipo proyectado, normalizado y relativo
-a la media de su temporada, la pendiente empírica es **0.29**, no 1.0. El
-modelo amplificaba las diferencias entre equipos ~3.5x, lo que además
-explica la sobreconfianza de las distribuciones (net ratings simulados de
-±20-30 puntos, cuando en la NBA real el rango es aproximadamente ±12).
+Regresando el diferencial de puntos real (game logs con PLUS_MINUS del
+backtest sweep) contra el Game Score de equipo proyectado, relativo a la
+media de su propia temporada, la pendiente empírica es muy inferior a
+1.0 -- un valor de 1.0 ("1 punto de Game Score = 1 punto de diferencial")
+amplificaba las diferencias entre equipos varias veces, lo que también
+explicaba la sobreconfianza de las distribuciones simuladas (net ratings
+de ±20-30 puntos, cuando el rango real de la NBA es de aproximadamente
+±12). El valor actual (0.1617) es la última recalibración, hecha al
+integrar la métrica de impacto compuesta (advanced_impact.py, ver su
+docstring): cada revisión de esa métrica (nuevas señales avanzadas
+integradas) cambia la dispersión del composite y por tanto la escala
+que lo convierte a puntos de diferencial. Validado con
+leave-one-season-out para evitar sobreajuste a los 480 casos completos;
+la pendiente recalibrada sale estable pliegue a pliegue.
 
-RESULTADO DE LAS TRES CORRECCIONES (mismos 450 casos):
+Efecto acumulado de recalibrar la línea base de liga, la normalización
+de minutos y esta escala (mismos 450 casos del sweep original):
     % dentro de P10-P90:   36.7% -> 55.3%   (ideal ~80%)
     percentil MEDIANO:       4.5 -> 30.2    (ideal ~50)
     error medio:           -13.2 -> -3.5 victorias
     error absoluto medio:   15.0 -> 7.75 victorias
     correlación:           0.538 -> 0.690
-Y el sesgo de era desapareció: el exceso de victorias pasó de crecer
-(+5.8 en 2012-13 a +25.0 en 2024-25) a quedarse plano (+1.6 a +4.6).
+El sesgo de era desapareció con esto: el exceso de victorias dejó de
+crecer con los años y se quedó plano.
 
-REFERENCIAS EMPÍRICAS del mismo análisis, útiles para calibrar a futuro:
+REFERENCIAS EMPÍRICAS útiles para calibrar a futuro:
 - 1 punto de diferencial real = 2.48 victorias en 82 partidos
   (r=0.966 entre diferencial y % de victorias -- el techo teórico de
   cualquier modelo que ya conozca el resultado de la temporada).
-- El "baseline tonto" honesto (usar el diferencial de la temporada
-  ANTERIOR para predecir la siguiente) da r=0.619 y MAE=7.39 victorias.
-  Cualquier modelo de proyección que no supere eso no está aportando.
-  El modelo ya lo supera en correlación (0.690) y queda a la par en error
-  absoluto (7.75) -- antes de estas correcciones era peor en ambas.
-- Escala logística REAL de un partido individual: K = 7.23 puntos de
-  diferencial (ajustada sobre los partidos como visitante, para aislar
-  la ventaja de campo). Es decir, +4 puntos de diferencial ~= 63.5% de
+- El baseline ingenuo (usar el diferencial de la temporada anterior para
+  predecir la siguiente) da r=0.619 y MAE=7.39 victorias -- cualquier
+  modelo de proyección que no lo supere no está aportando. Este modelo
+  lo supera en correlación (0.690) y queda a la par en error absoluto
+  (7.75).
+- Escala logística real de un partido individual: K = 7.23 puntos de
+  diferencial (ajustada sobre partidos como visitante, para aislar la
+  ventaja de campo). Es decir, +4 puntos de diferencial ~= 63.5% de
   probabilidad de ganar un partido.
 
-BUG REAL: FALTABA LA VENTAJA DE CAMPO
+VENTAJA DE CAMPO
 ------------------------------------------------------------------------
-El modelo no modelaba la ventaja de campo EN NINGÚN SITIO. Medida sobre
-los game logs reales de las 15 temporadas del sweep:
+Medida sobre los game logs reales de las 15 temporadas del sweep:
     temporada regular: +2.41 pts en casa (57.4% de victorias locales)
     playoffs:          +3.98 pts en casa (60.3% de victorias locales)
-Añadida en `sample_schedule_context` (mitad de partidos en casa, mitad
+Aplicada en `sample_schedule_context` (mitad de partidos en casa, mitad
 fuera -- exactamente 41 y 41, no un sorteo) + `compute_game_net_rating_estimate`
 para la temporada regular, y en `league_simulation.simulate_series` con
 el formato real 2-2-1-1-1 (el mejor seed es local en los partidos 1, 2,
@@ -269,12 +214,13 @@ el formato real 2-2-1-1-1 (el mejor seed es local en los partidos 1, 2,
 
 LIMITACIÓN CONOCIDA Y MEDIDA: SEÑAL/RUIDO DEL SEEDING
 ------------------------------------------------------------------------
-Encontrada al validar contra la distribución real de seeds campeones (en
-15 temporadas reales, el 60% de los campeones fueron seed 1 y NINGUNO
-salió de un seed peor que el 3). El simulador reparte títulos a seeds 4+
-un ~25% de las veces. La causa NO es que los partidos sean demasiado
+Validado contra la distribución real de seeds campeones (en 15
+temporadas reales, el 60% de los campeones fueron seed 1 y ninguno salió
+de un seed peor que el 3), el simulador reparte títulos a seeds 4+ un
+~25% de las veces. La causa no es que los partidos sean demasiado
 aleatorios -- medido, son incluso más deterministas que la realidad
-(escala efectiva 4.25 pts vs 7.23 real). La causa es el seeding:
+(escala efectiva 4.25 pts vs 7.23 real). La causa es la relación
+señal/ruido del seeding:
 
                     talento (dif. entre equipos)   ruido (por temporada)   señal/ruido
     REAL                   11.27 victorias               4.53                 2.49
@@ -283,23 +229,22 @@ aleatorios -- medido, son incluso más deterministas que la realidad
 El modelo comprime las diferencias de talento a la mitad y casi duplica
 el ruido, así que en una temporada simulada cualquiera el seeding es casi
 un sorteo -- y un seed 6 que en realidad es un top-3 gana el título sin
-que eso sea "una sorpresa".
+que eso sea "una sorpresa" para el modelo.
 
 Las dos mitades tienen causas distintas y ninguna se arregla tocando un
 parámetro:
-- El talento comprimido es CORRECTO para predecir (la proyección regresa
+- El talento comprimido es correcto para predecir (la proyección regresa
   a la media, que es lo que minimiza el error -- MAE 7.75). El problema
-  es usar esa estimación regresada COMO SI fuera el talento verdadero al
-  simular: eso es confundir la distribución predictiva con la simulación
-  "plug-in". Arreglarlo bien exige separar incertidumbre de estimación de
-  ruido de temporada, un cambio arquitectónico.
-- El ruido excesivo por temporada sí se podría bajar, pero estrecharía
-  las bandas P10-P90 y EMPEORARÍA la métrica de calibración del
-  backtesting (55.3% de casos reales dentro de P10-P90, ideal ~80%), que
-  ya se queda corta.
+  es usar esa estimación regresada como si fuera el talento verdadero al
+  simular: eso confunde la distribución predictiva con la simulación
+  "plug-in". Arreglarlo bien exige separar incertidumbre de estimación
+  de ruido de temporada, un cambio arquitectónico.
+- El ruido excesivo por temporada se podría bajar, pero estrecharía las
+  bandas P10-P90 y empeoraría la calibración del backtesting (55.3% de
+  casos reales dentro de P10-P90, ideal ~80%), que ya se queda corta.
 Se deja documentado y medido en vez de forzar los parámetros para que el
-resultado "se vea bien" -- que es exactamente el error que este proyecto
-ya cometió una vez (ver la sección de Backtesting del README).
+resultado "se vea bien" a costa de la calibración real (ver la sección
+de Backtesting del README).
 """
 
 from __future__ import annotations
@@ -331,53 +276,27 @@ DEFAULT_MONTE_CARLO_CONFIG: Dict[str, float] = {
     # fallback cuando no hay datos reales de liga completa disponibles --
     # build_simulation_dataset() lo RECALIBRA automáticamente desde
     # league_player_projections.csv cuando existe (ver
-    # compute_league_average_game_score_per36() más abajo y la sección
-    # "BUG REAL" en el docstring del módulo) -- un equipo "promedio" de
-    # rotación real (solo los ~10 jugadores que de verdad juegan minutos
-    # relevantes, no todo jugador de la liga) rinde bastante más que 10
-    # de Game Score/36.
+    # compute_league_average_game_score_per36() más abajo y "CALIBRACIÓN
+    # DE LA LÍNEA BASE DE LIGA" en el docstring del módulo) -- un equipo
+    # "promedio" de rotación real (solo los ~10 jugadores que de verdad
+    # juegan minutos relevantes, no todo jugador de la liga) rinde
+    # bastante más que 10 de Game Score/36.
     "league_average_game_score_per36": 10.0,
-    # CALIBRADO EMPÍRICAMENTE sobre los 450 casos del backtest sweep (30
-    # equipos x 15 temporadas): regresión del diferencial de puntos REAL
-    # contra el Game Score de equipo proyectado (relativo a la media de su
-    # propia temporada) da una pendiente de ~0.18, no 1.0. El valor
-    # anterior (1.0, "1 punto de Game Score = 1 punto de diferencial") era
-    # una suposición nunca verificada y sobreestimaba la ventaja de un
-    # buen equipo por un factor de ~5.5 -- ver "BUG REAL: ESCALA
-    # GAME SCORE -> DIFERENCIAL" en el docstring del módulo.
-    # RE-CALIBRADO a 0.21 al integrar la métrica de impacto compuesta
-    # (src/advanced_impact.py): el ajuste por NET_RATING ensancha la
-    # dispersión del talento de equipo, así que cada punto de la métrica
-    # vale menos diferencial que cuando era Game Score puro (0.2946
-    # medido para el Game Score solo sobre los mismos 480 casos --
-    # confirmación independiente del 0.29 anterior). Con
-    # `advanced_impact: {enabled: false}` habría que volver a 0.29.
-    #
-    # RE-CALIBRADO otra vez a 0.172 (scripts/experiments/bayesian_calibration.py,
-    # experimento explícitamente fuera de src/ -- ver su docstring): un
-    # modelo bayesiano jerárquico sobre los mismos 480 casos, con
-    # partial pooling del slope por temporada, da una media posterior de
-    # 0.172 (94% HDI [0.157, 0.188], que deja fuera al 0.21 anterior por
-    # un margen claro). Validado con leave-one-season-out (16 ajustes,
-    # cada temporada predicha SIN haberla visto): el slope recalibrado
-    # sale entre 0.169 y 0.175 en los 16 casos -- estable, no un
-    # sobreajuste a los 480 casos completos -- y gana en R² fuera de
-    # muestra a la constante anterior en 13 de 16 temporadas (R² global
-    # 0.488 -> 0.512, error medio 2.70 -> 2.65 puntos/partido). La
-    # jerarquía por temporada no aportó lo que se esperaba (las 16
-    # pendientes salen casi idénticas entre sí -- el ajuste de era que ya
-    # aplica `league_baseline_by_season` parece absorber toda esa
-    # variación), así que el resultado se queda en una única constante
-    # mejor calibrada, no en un slope por temporada.
-    #
-    # RE-CALIBRADO otra vez a 0.1617 al integrar PCT_PLUSMINUS (defensa
-    # por tracking) en advanced_impact.py -- ver "TERCERA MÉTRICA
-    # INTEGRADA" en su docstring. El composite cambia (más dispersión al
-    # sumar una tercera señal), así que la escala que lo convierte a
-    # puntos también cambia. Validado LOSO igual que la vez anterior: la
-    # escala recalibrada sale estable en los 16 pliegues (0.159-0.165),
-    # escala final sobre los 480 casos completos: 0.1617. R² fuera de
-    # muestra 0.512 -> 0.528, MAE 2.65 -> 2.61 puntos/partido.
+    # Pendiente empírica que convierte Game Score de equipo (relativo a la
+    # media de su propia temporada) en puntos de diferencial -- ver
+    # "ESCALA GAME SCORE -> DIFERENCIAL" en el docstring del módulo para
+    # la calibración original contra los 450 casos del backtest sweep.
+    # Recalibrado en `scripts/experiments/bayesian_calibration.py`
+    # (modelo bayesiano jerárquico, partial pooling del slope por
+    # temporada, validado con leave-one-season-out para evitar
+    # sobreajuste) y de nuevo al integrar PCT_PLUSMINUS en
+    # advanced_impact.py (la dispersión del composite cambia cada vez que
+    # se le añade una señal, así que esta escala debe recalibrarse con
+    # él). Valor actual: 0.1617, sobre los 480 casos completos del sweep
+    # extendido, con LOSO estable en 0.159-0.165 pliegue a pliegue (R²
+    # fuera de muestra 0.528, MAE 2.61 puntos/partido). Con
+    # `advanced_impact: {enabled: false}` la escala correcta es la
+    # calibrada para Game Score puro (~0.29, ver docstring del módulo).
     "game_score_to_net_rating_scale": 0.1617,
     "opponent_strength_scale": 20.0,  # cuánto resta/suma un rival top/flojo (WinPCT 1.0 vs 0.0) al diferencial
     "outcome_variance_scale": 12.0,  # dispersión típica de resultado de un partido NBA individual
@@ -388,15 +307,15 @@ DEFAULT_MONTE_CARLO_CONFIG: Dict[str, float] = {
     #   playoffs:          +3.98 pts en casa (60.3% de victorias locales)
     # Son puntos de DIFERENCIAL, así que entran directamente al net rating
     # (mismas unidades), no hace falta escalarlos por
-    # game_score_to_net_rating_scale. Ver "BUG REAL: FALTABA LA VENTAJA DE
-    # CAMPO" en el docstring del módulo.
+    # game_score_to_net_rating_scale. Ver "VENTAJA DE CAMPO" en el
+    # docstring del módulo.
     "home_court_advantage": 2.41,
     "playoff_home_court_advantage": 3.98,
-    # DESACTIVADA POR DEFECTO -- ver "BUG REAL" más abajo en este docstring
-    # para por qué se probó y por qué NO se activó por defecto (empeora el
-    # backtesting contra las superestrellas históricas sin corregir de
-    # forma significativa el problema que motivó probarla). Sigue expuesta
-    # como config opcional para quien quiera experimentar.
+    # DESACTIVADA POR DEFECTO -- ver "PRIMA DE ESTRELLA" en el docstring
+    # del módulo para por qué se probó y por qué no se activó por defecto
+    # (no aísla el efecto buscado y empeora el backtesting contra las
+    # superestrellas históricas). Sigue expuesta como config opcional
+    # para quien quiera experimentar.
     "star_bonus_top_n": 0,  # nº de jugadores (por valor de temporada) que reciben la prima -- ver apply_star_bonus
     "star_bonus_multiplier": 1.0,  # multiplicador de Game Score/36 efectivo para esos jugadores
     # DESACTIVADA POR DEFECTO (0.0) -- ver "INCERTIDUMBRE DE CALIDAD DE
@@ -417,18 +336,16 @@ def apply_star_bonus(
     src/awards_projection.py usa para MVP) por `star_bonus_multiplier`.
 
     DESACTIVADA POR DEFECTO (`star_bonus_top_n=0` en
-    DEFAULT_MONTE_CARLO_CONFIG) -- ver "INVESTIGACIÓN" en el docstring del
-    módulo. Se probó como posible arreglo para equipos "estrellas + banca
-    floja" infravalorados frente a equipos "sin estrella + banca pareja",
-    pero (a) no resuelve el caso que la motivó -- todos los equipos tienen
-    SU propio mejor jugador, así que la prima proporcional apenas cambia
-    la diferencia relativa -- y (b) empeora el backtesting contra los
-    comparables históricos de este proyecto, que son precisamente equipos
-    de estrellas apiladas que en la vida real rindieron POR DEBAJO de la
-    suma de su talento ("fricción de superequipo", ya documentada en el
-    README). Queda implementada y testeada como palanca de
-    experimentación opcional en `config["monte_carlo"]`, no como
-    comportamiento por defecto.
+    DEFAULT_MONTE_CARLO_CONFIG) -- ver "PRIMA DE ESTRELLA" en el docstring
+    del módulo. No aísla bien el efecto que busca capturar (equipos
+    "estrella + banca floja" frente a "sin estrella + banca pareja") --
+    todos los equipos tienen su propio mejor jugador, así que la prima
+    proporcional apenas cambia la diferencia relativa -- y empeora el
+    backtesting contra los comparables históricos de superequipos, que en
+    la vida real rindieron por debajo de la suma de su talento ("fricción
+    de superequipo", ver README). Queda implementada y testeada como
+    palanca de experimentación opcional en `config["monte_carlo"]`, no
+    como comportamiento por defecto.
     """
     top_n = int(mc_config.get("star_bonus_top_n", 0))
     multiplier = mc_config.get("star_bonus_multiplier", 1.0)
@@ -455,22 +372,19 @@ def normalize_rotation_minutes(
     que existe de verdad en un partido). Los jugadores fuera de esa
     rotación quedan en 0.
 
-    POR QUÉ (mismo bug encontrado dos veces, en dos módulos distintos):
-    la suma de minutos/partido reales de un roster COMPLETO no suma 240 --
-    a lo largo de 82 partidos rotan 14-20 jugadores, así que suma 280-345.
-    Sumar el Game Score de todos ellos infla la fuerza del equipo un
-    18-43% frente a un rival medido sobre 240 minutos, y penaliza
-    especialmente a los equipos con mucho movimiento de plantilla
-    (lesiones, tanking, two-way) que son los que más jugadores acumulan.
-    Restringir la normalización a la rotación (en vez de escalar todo el
-    roster) evita el efecto colateral de diluir a las estrellas -- ver el
-    historial completo en el docstring de
+    POR QUÉ: la suma de minutos/partido reales de un roster COMPLETO no
+    suma 240 -- a lo largo de 82 partidos rotan 14-20 jugadores, así que
+    suma 280-345. Sumar el Game Score de todos ellos infla la fuerza del
+    equipo un 18-43% frente a un rival medido sobre 240 minutos, y
+    penaliza especialmente a los equipos con mucho movimiento de
+    plantilla (lesiones, tanking, two-way) que son los que más jugadores
+    acumulan. Restringir la normalización a la rotación (en vez de
+    escalar todo el roster) evita el efecto colateral de diluir a las
+    estrellas -- ver más detalle en el docstring de
     league_simulation.project_team_roster.
 
-    Extraído aquí tras encontrar el MISMO bug en `backtesting.py`, que
-    sumaba el roster entero sin normalizar mientras
-    `league_simulation.py` ya lo tenía arreglado. Función compartida para
-    que no pueda volver a divergir.
+    Función compartida entre `backtesting.py` y `league_simulation.py`
+    para que esta lógica no pueda divergir entre los dos motores.
     """
     if not raw_minutes_by_player:
         return {}
@@ -514,36 +428,34 @@ def compute_league_average_game_score_per36(
     ya proyectados (league_player_projections.csv, generado por
     league_simulation.py) en vez de usar el valor genérico de Hollinger
     (10.0 -- el promedio sobre TODO jugador de la liga, incluida la
-    "basura" de banquillo que casi no juega). Ver "BUG REAL" en el
-    docstring del módulo para el hallazgo que motivó esto: comparar el
-    equipo propio contra esa línea base genérica (~66.7 de Game Score
-    total) en vez de contra el nivel real de una rotación de 10 jugadores
-    (~97-98 de media, empíricamente, porque solo cuenta minutos de
-    rotación real, no cualquier minuto de la liga) infla las victorias
-    proyectadas del equipo propio frente a lo que la liga real de 30
-    equipos dice que debería sacar ese mismo roster.
+    "basura" de banquillo que casi no juega). Ver "CALIBRACIÓN DE LA
+    LÍNEA BASE DE LIGA" en el docstring del módulo: comparar el equipo
+    propio contra la línea base genérica (~66.7 de Game Score total) en
+    vez de contra el nivel real de una rotación de 10 jugadores (~97-98
+    de media, porque solo cuenta minutos de rotación real, no cualquier
+    minuto de la liga) infla las victorias proyectadas del equipo propio
+    frente a lo que la liga real de 30 equipos dice que debería sacar ese
+    mismo roster.
 
     `player_projections` debe tener las columnas team_abbreviation,
     game_score_per36, minutes_projection (esquema de
     league_player_projections.csv). Devuelve la tasa por-36 equivalente
     al Game Score total medio de esos 30 equipos.
 
-    OJO CON LA PRIMERA VERSIÓN DE ESTE FIX (sobrecorrección real,
-    encontrada al probarlo): usar la contribución "de pico" (sin ajustar
-    por disponibilidad) sobreestima la línea base, porque
-    `sample_injury_absences()` sí resta partidos perdidos según
-    `risk_score` en la simulación real -- comparar un equipo YA
-    ajustado por lesiones (el propio) contra una línea base que asume
-    salud perfecta en TODOS los 30 equipos penaliza de más,
-    especialmente a rosters con jugadores de riesgo alto (LeBron viejo,
-    Embiid propenso a lesión). Ver "BUG REAL" en el docstring del
-    módulo. Por eso aquí se descuenta cada contribución por
-    `(1 - risk_score)` -- la fracción de partidos que el modelo de
-    lesiones espera que ese jugador esté disponible en promedio (la
-    binomial negativa de `sample_injury_absences` tiene media
-    `risk_score * games_per_season`, así que este descuento es exacto
-    en expectativa, no una aproximación arbitraria). Si no hay columna
-    `risk_score` (proyección sin ese dato), no se aplica descuento.
+    El descuento por `(1 - risk_score)` en cada contribución es
+    necesario para que la comparación sea justa: `sample_injury_absences()`
+    sí resta partidos perdidos según `risk_score` en la simulación real
+    del equipo propio, así que la línea base de liga debe reflejar la
+    misma degradación por lesiones -- de lo contrario compara un equipo
+    YA ajustado por lesiones contra 30 equipos que asumen salud perfecta,
+    lo que penaliza de más a rosters con jugadores de riesgo alto (p.ej.
+    veteranos con historial de lesión). `(1 - risk_score)` es la fracción
+    de partidos que el modelo de lesiones espera que ese jugador esté
+    disponible en promedio (la binomial negativa de
+    `sample_injury_absences` tiene media `risk_score * games_per_season`,
+    así que este descuento es exacto en expectativa, no una aproximación
+    arbitraria). Si no hay columna `risk_score` (proyección sin ese
+    dato), no se aplica descuento.
     """
     contribution = player_projections["game_score_per36"] * player_projections["minutes_projection"] / 36.0
     if "risk_score" in player_projections.columns:
@@ -552,14 +464,15 @@ def compute_league_average_game_score_per36(
     team_totals = player_projections.assign(_contribution=contribution).groupby("team_abbreviation")["_contribution"].sum()
     average_team_total = float(team_totals.mean())
 
-    # SEGUNDO término no centrado, además de las lesiones de arriba: el
-    # ajuste de sinergia que run_monte_carlo suma al net rating es SIEMPRE
-    # POSITIVO (medido: +4.4 a +11.9 sobre los 30 equipos). Si la línea
-    # base no lo lleva incorporado, el equipo propio cobra ese bonus
-    # "gratis" contra una referencia que no lo tiene. Mismo bug que en
-    # backtesting.expected_team_game_score_equivalent, donde valía +5.0 de
-    # net rating para el equipo promedio. Se divide por la escala porque
-    # la simulación lo suma DESPUÉS de convertir a diferencial.
+    # Segundo término, además del descuento por lesiones de arriba: el
+    # ajuste de sinergia que run_monte_carlo suma al net rating es
+    # sistemáticamente positivo (medido: +4.4 a +11.9 sobre los 30
+    # equipos). Si la línea base no lo lleva incorporado, el equipo
+    # propio cobra ese bonus "gratis" contra una referencia que no lo
+    # tiene -- mismo ajuste que aplica
+    # backtesting.expected_team_game_score_equivalent. Se divide por la
+    # escala porque la simulación lo suma DESPUÉS de convertir a
+    # diferencial.
     if league_mean_synergy_net_rating:
         average_team_total += league_mean_synergy_net_rating / game_score_to_net_rating_scale
 
@@ -1012,8 +925,9 @@ def compute_simulation_results(
 
     # Recalibra la línea base de "equipo promedio" desde los 30 equipos
     # reales si están disponibles (ver compute_league_average_game_score_per36
-    # y "BUG REAL" en el docstring del módulo) -- salvo que el usuario haya
-    # fijado su propio valor a mano en config["monte_carlo"], que se respeta.
+    # y "CALIBRACIÓN DE LA LÍNEA BASE DE LIGA" en el docstring del
+    # módulo) -- salvo que el usuario haya fijado su propio valor a mano
+    # en config["monte_carlo"], que se respeta.
     league_projections_path = paths["processed"] / "league_player_projections.csv"
     if "league_average_game_score_per36" not in config.get("monte_carlo", {}) and league_projections_path.exists():
         league_projections = pd.read_csv(league_projections_path)

@@ -3,14 +3,13 @@ team_quality_uncertainty.py
 
 EXPERIMENTO, no forma parte del pipeline de producción. Calibra
 `monte_carlo.team_quality_uncertainty_std` (ver
-simulation.sample_team_quality_noise, añadido en esta misma sesión,
-desactivado por defecto con std=0.0) contra el backtest sweep de 480
-casos reales.
+simulation.sample_team_quality_noise, desactivado por defecto con
+std=0.0) contra el backtest sweep de 480 casos reales.
 
-QUÉ PROBLEMA ATACA (y cuál NO): el usuario reportó dos síntomas --
-(1) poca diferencia de victorias medias entre equipos en la predicción
-26-27, y (2) 42% de los 480 casos del backtest caen en el 20% más
-extremo de percentiles (debería ser ~20%). `aging_curve_shrinkage.py` ya
+QUÉ PROBLEMA ATACA (y cuál NO): dos síntomas observados -- (1) poca
+diferencia de victorias medias entre equipos en la predicción 26-27, y
+(2) 42% de los 480 casos del backtest caen en el 20% más extremo de
+percentiles (debería rondar el 20%). `aging_curve_shrinkage.py` ya
 descartó con evidencia que (1) se deba al encogimiento de la proyección
 de talento -- barrido completo del grid, dispersión prácticamente
 idéntica en todo el rango. `team_quality_uncertainty_std` es DE MEDIA
@@ -30,9 +29,9 @@ agregada sobre 480 casos) ya tiene muestra grande a nivel población
 aunque cada P10/P90 individual sea algo más ruidoso con menos
 temporadas por caso. Usa la línea base de era ya calculada
 (`league_game_score_baseline.csv`, de la última corrida de
-`build_backtest_sweep_dataset`) en vez de recalcularla -- ligeramente
-desactualizada tras la recalibración de `game_score_to_net_rating_scale`
-en esta misma sesión, pero de sobra para elegir un orden de magnitud de
+`build_backtest_sweep_dataset`) en vez de recalcularla -- puede quedar
+ligeramente desactualizada si `game_score_to_net_rating_scale` se
+recalibró después, pero es de sobra para elegir un orden de magnitud de
 `std`, que es lo que pide este experimento.
 
 Uso:

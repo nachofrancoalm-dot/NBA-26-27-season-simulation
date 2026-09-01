@@ -9,14 +9,14 @@ las estrellas) y qué trayectoria de seeds ha tenido cada franquicia.
 POR QUÉ ES *DESCRIPTIVO* Y NO PREDICTIVO
 --------------------------------------------
 Con 15 campeones (2010-11..2024-25) cualquier "perfil de campeón" que se
-extraiga tiene una muestra de 15. Este proyecto ya se llevó un susto
-exactamente con eso: durante un tiempo el README defendió que los
-superequipos rinden por debajo de su proyección por "fricción de
-vestuario", basándose en 4 casos -- y al ampliar el backtesting a 450
-casos resultó ser mayoritariamente un artefacto de calibración (ver la
-sección de Backtesting del README). Así que estas funciones se usan para
-CONTEXTUALIZAR y para VALIDAR el simulador (¿mi modelo produce campeones
-desde los mismos seeds que la realidad?), NO como features de predicción.
+extraiga tiene una muestra de 15 -- insuficiente para entrenar nada. La
+hipótesis de "fricción de vestuario" en superequipos, por ejemplo, parecía
+sólida con 4 casos y se disolvió en artefacto de calibración al ampliar
+el backtesting a 450 (ver la sección de Backtesting del README): con
+muestras así de pequeñas cualquier patrón puede ser ruido. Estas
+funciones se usan para CONTEXTUALIZAR y para VALIDAR el simulador (¿mi
+modelo produce campeones desde los mismos seeds que la realidad?), NO
+como features de predicción.
 
 La validación sí es estadísticamente sólida en un punto concreto: en 15
 temporadas NINGÚN campeón salió de un seed peor que el 3 (60% fueron seed

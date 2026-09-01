@@ -17,13 +17,12 @@ perfiles estadísticos proyectados por `aging_curve.py` (uso, creación de
 juego, espaciado, presencia interior), no de partidos reales jugados
 juntos.
 
-TAMPOCO usa `role_expected` de team_config.yaml a propósito: la intención
-original del archivo (comentario que el propio `resolve_player_ids.py
---fill-config` termina borrando al reescribir el YAML, pero que seguía
-siendo la intención de diseño) es que ese campo es descriptivo, no una
-entrada de cálculo. Los "roles" que usa este módulo salen de las cuatro
-métricas estadísticas de abajo, derivadas de datos reales de nba_api, no
-de una etiqueta de texto escrita a mano.
+TAMPOCO usa `role_expected` de team_config.yaml a propósito: ese campo es
+descriptivo (para que un humano lea el YAML), no una entrada de cálculo
+-- de hecho `resolve_player_ids.py --fill-config` lo borra al reescribir
+el archivo. Los "roles" que usa este módulo salen de las cuatro métricas
+estadísticas de abajo, derivadas de datos reales de nba_api, no de una
+etiqueta de texto escrita a mano.
 
 FUNDAMENTO PARA LOS DOS EFECTOS MODELADOS
 --------------------------------------------

@@ -377,9 +377,8 @@ def test_compute_awards_summary_league_scope_computes_coy(config):
     # ATL mejoró +30 (55-25) frente a BOS que empeoró -15 (30-45).
     assert result["coy"].iloc[0]["team_abbreviation"] == "ATL"
 
-    # team_record (a petición del usuario, para comparar candidatos):
-    # ATL ganó 55 de 82 -> "55-27". Se propaga por player_id, no por
-    # posición en la tabla.
+    # team_record (para comparar candidatos entre sí): ATL ganó 55 de 82
+    # -> "55-27". Se propaga por player_id, no por posición en la tabla.
     star_a = result["mvp"][result["mvp"]["player_id"] == 1].iloc[0]
     assert star_a["team_record"] == "55-27"
 
@@ -651,9 +650,9 @@ def test_select_roster_view_falls_back_row_by_row_when_some_players_lack_risk_sc
 
 # ---------------------------------------------------------------------------
 # Totales de temporada (PTS/REB/AST...) escalados por disponibilidad --
-# bug real reportado por el usuario: cambiar de escenario "con" / "sin
-# lesiones" solo movía GP/MPG, los totales y el PPG derivado se quedaban
-# igual en ambos escenarios.
+# regresión: cambiar de escenario "con" / "sin lesiones" solo movía
+# GP/MPG, los totales y el PPG derivado se quedaban igual en ambos
+# escenarios.
 # ---------------------------------------------------------------------------
 
 

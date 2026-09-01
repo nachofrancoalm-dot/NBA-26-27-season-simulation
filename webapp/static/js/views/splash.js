@@ -12,7 +12,7 @@
 // no hay lógica de datos nueva, solo composición visual. Se omite
 // /api/awards a propósito (el más lento de la app, ~4s) -- esta pantalla
 // debe sentirse instantánea. La foto del hero (staticHeroImage(), ver
-// player-hero.js) es un archivo local elegido a mano por el usuario
+// player-hero.js) es un archivo local curado a mano
 // (webapp/static/img/embiid.png), no datos del roster -- ya NO hace
 // falta pedir /api/roster aquí solo para eso.
 //

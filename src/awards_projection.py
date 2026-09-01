@@ -50,7 +50,7 @@ DEFAULT_MIN_MPG_MIP = 15.0
 # Umbral REAL de la NBA (desde 2023-24, "Player Participation Policy")
 # para optar a premios de FIN DE TEMPORADA (quintetos All-NBA/All-
 # Defensive, MVP/DPOY/etc.) -- no aplica al All-Star, que se vota a mitad
-# de temporada sin requisito de partidos. A petición del usuario.
+# de temporada sin requisito de partidos.
 DEFAULT_MIN_GAMES_SEASON_AWARDS = 65
 
 # Cupos por quinteto, formato clásico 2 bases/escoltas + 2 aleros/ala-
@@ -79,9 +79,9 @@ def _avg_mpg(df: pd.DataFrame, games_per_season: int) -> pd.Series:
     return df["projected_total_minutes"] / games_per_season
 
 
-# Stats por-partido para comparar candidatos de un vistazo, a petición
-# del usuario -- YA vienen calculadas en `player_df` (PER_GAME_STATS +
-# FG%/3P% de dashboard/data_loader.py y del builder equivalente de
+# Stats por-partido para comparar candidatos de un vistazo -- YA vienen
+# calculadas en `player_df` (PER_GAME_STATS + FG%/3P% de
+# dashboard/data_loader.py y del builder equivalente de
 # league_simulation.py), así que aquí solo hace falta incluirlas en la
 # selección de columnas de cada función, no recalcularlas.
 OFFENSIVE_COMPARISON_STATS = ["PPG", "RPG", "APG", "SPG", "BPG", "FG%", "3P%"]
@@ -122,7 +122,7 @@ def compute_mvp_candidates(
     `team_record`: dict/Series player_id -> récord "W-L" del equipo (solo
     para mostrar, no afecta al ranking -- ver `_attach_team_record`).
     Incluye además OFFENSIVE_COMPARISON_STATS (PPG/RPG/APG/SPG/BPG/FG%/3P%)
-    para comparar candidatos de un vistazo, a petición del usuario.
+    para comparar candidatos de un vistazo.
     """
     df = player_df.copy()
     df["mpg"] = _avg_mpg(df, games_per_season)
@@ -164,12 +164,10 @@ def compute_dpoy_candidates(
 
     Incluye DEFENSIVE_COMPARISON_STATS (RPG/SPG/BPG + PFPG, faltas por
     partido -- el único término NEGATIVO de la fórmula) MÁS
-    OFFENSIVE_COMPARISON_STATS completo (PPG/APG/tiro incluidos) -- en un
-    primer diseño se omitía PPG/APG/tiro aquí porque "DPOY es un premio
-    defensivo, no aportan al RANKING", pero el ranking (dpoy_score) sigue
-    siendo puramente defensivo; estas columnas son solo para que la vista
-    previa al pasar el ratón en webapp/ muestre el mismo set de stats que
-    el resto de premios (a petición explícita del usuario).
+    OFFENSIVE_COMPARISON_STATS completo (PPG/APG/tiro incluidos). El
+    ranking (dpoy_score) sigue siendo puramente defensivo; estas columnas
+    de más son solo para que la vista previa al pasar el ratón en
+    webapp/ muestre el mismo set de stats que el resto de premios.
     """
     df = player_df.copy()
     df["mpg"] = _avg_mpg(df, games_per_season)
@@ -363,29 +361,28 @@ def compute_latest_real_season_stats(career_stats_df: pd.DataFrame) -> pd.DataFr
     de cada jugador (una fila por jugador) -- para que el popup de MIP
     (webapp/) pueda comparar la temporada PROYECTADA (mergeada aparte,
     desde player_df, ver dashboard.data_loader.compute_awards_summary)
-    contra la temporada real inmediatamente anterior, a petición del
-    usuario. DISTINTO de `previous_game_score_per36` de
-    compute_mip_candidates: esa usa la PENÚLTIMA temporada real (para
-    calcular cuánto mejoró un jugador de un año real a otro); esto usa
-    la ÚLTIMA real, la que precede a la proyección.
+    contra la temporada real inmediatamente anterior. DISTINTO de
+    `previous_game_score_per36` de compute_mip_candidates: esa usa la
+    PENÚLTIMA temporada real (para calcular cuánto mejoró un jugador de
+    un año real a otro); esto usa la ÚLTIMA real, la que precede a la
+    proyección.
     """
     if career_stats_df.empty:
         return pd.DataFrame(columns=["player_id"] + PREV_SEASON_STATS_COLUMNS)
 
-    # dedupe_traded_seasons() agrupa por SEASON_ID -- BUG REAL encontrado
-    # al probar esto contra los 577 jugadores reales de la liga: llamarla
-    # sobre el DataFrame multi-jugador completo compara temporadas de
-    # jugadores DISTINTOS entre sí (si CUALQUIER jugador de la liga fue
-    # traspasado en la temporada X, "has_tot" sale True para la
-    # temporada X de TODOS los jugadores, y a quienes no fueron
-    # traspasados esa temporada se les descarta su única fila de esa
-    # temporada por no ser 'TOT') -- para Kawhi Leonard esto acababa
-    # dejando su temporada de ROOKIE (2011-12) como "la más reciente"
-    # porque casi todas sus demás temporadas reales se descartaban por
-    # trades de OTROS jugadores. Hay que aplicarla POR JUGADOR (mismo
+    # dedupe_traded_seasons() agrupa por SEASON_ID, así que debe aplicarse
+    # POR JUGADOR, nunca sobre el DataFrame multi-jugador completo:
+    # llamarla sobre la liga entera compara temporadas de jugadores
+    # DISTINTOS entre sí (si CUALQUIER jugador de la liga fue traspasado
+    # en la temporada X, "has_tot" sale True para la temporada X de TODOS
+    # los jugadores, y a quienes no fueron traspasados esa temporada se
+    # les descarta su única fila de esa temporada por no ser 'TOT') -- con
+    # ~577 jugadores reales eso puede dejar la temporada de ROOKIE de un
+    # veterano marcada como "la más reciente" porque casi todas sus demás
+    # temporadas se descartan por trades de otros jugadores. Mismo
     # criterio que ya usa compute_mip_candidates, que itera con
     # `.groupby("PLAYER_ID")` antes de llamar a compute_per36_stats, que
-    # a su vez llama a dedupe_traded_seasons ya sobre un solo jugador).
+    # a su vez llama a dedupe_traded_seasons ya sobre un solo jugador.
     df = pd.concat(
         [dedupe_traded_seasons(group) for _, group in career_stats_df.groupby("PLAYER_ID")], ignore_index=True
     )
@@ -629,9 +626,8 @@ def add_commissioner_picks_for_nationality_quota(
     """
     Si `quota` (de check_all_star_nationality_quota) señala que la
     selección natural no cumple el mínimo, añade jugadores de la
-    nacionalidad que falta hasta cubrirlo -- A PETICIÓN EXPLÍCITA DEL
-    USUARIO, que quiso simular esta parte en vez de dejarla solo como
-    aviso.
+    nacionalidad que falta hasta cubrirlo, en vez de dejarlo solo como
+    un aviso.
 
     QUÉ ES ESTO REALMENTE: en la vida real, el comisionado de la NBA
     (Adam Silver) elige a su criterio quién se añade -- una decisión
@@ -741,12 +737,12 @@ def compute_all_nba_teams(
 
     ELEGIBILIDAD: partidos jugados ESPERADOS >= `min_games_played` (65
     por defecto, la política real de la NBA desde 2023-24) -- ver
-    `_expected_games_played`. A petición explícita del usuario.
+    `_expected_games_played`.
 
-    Incluye OFFENSIVE_COMPARISON_STATS + team_record (a petición del
-    usuario, para la vista previa al pasar el ratón en webapp/) -- mismas
-    columnas que MVP/ROY/6MOY, así que el quinteto es comparable de un
-    vistazo con cualquier otro premio.
+    Incluye OFFENSIVE_COMPARISON_STATS + team_record (para la vista
+    previa al pasar el ratón en webapp/) -- mismas columnas que
+    MVP/ROY/6MOY, así que el quinteto es comparable de un vistazo con
+    cualquier otro premio.
     """
     df = player_df.copy()
     df["games_played_expected"] = _expected_games_played(df, games_per_season)
@@ -783,10 +779,9 @@ def compute_all_defensive_teams(
     ELEGIBILIDAD: partidos jugados ESPERADOS >= `min_games_played` (65
     por defecto) -- ver `_expected_games_played`.
 
-    Incluye OFFENSIVE_COMPARISON_STATS + team_record (a petición del
-    usuario, para la vista previa al pasar el ratón en webapp/) -- mismas
-    columnas que el resto de premios, aunque el ranking en sí siga siendo
-    puramente defensivo.
+    Incluye OFFENSIVE_COMPARISON_STATS + team_record (para la vista
+    previa al pasar el ratón en webapp/) -- mismas columnas que el resto
+    de premios, aunque el ranking en sí siga siendo puramente defensivo.
     """
     df = player_df.copy()
     df["games_played_expected"] = _expected_games_played(df, games_per_season)

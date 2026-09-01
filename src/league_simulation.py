@@ -27,31 +27,28 @@ Score de AMBOS equipos reales directamente. La línea base se cancela:
     diferencial      = (team_game_score_A - team_game_score_B) * game_score_to_net_rating_scale
     prob_victoria_A  = 1 / (1 + exp(-diferencial / outcome_variance_scale))
 
-BUG REAL ARREGLADO AQUÍ (mismo patrón que ya pasó con la normalización
-de minutos): este módulo NO aplicaba `game_score_to_net_rating_scale` --
-metía la diferencia de Game Score en bruto en la logística, o sea seguía
-asumiendo "1 punto de Game Score = 1 punto de diferencial", justo la
-suposición que el backtest sweep midió y refutó (0.21). El fix se aplicó
-en su día solo a simulation.py y nunca se propagó aquí. Consecuencia: la
-liga trataba las diferencias entre equipos ~4.8x más fuerte de lo
-calibrado, y ese era el motivo real de que la MISMA franquicia diera
-números distintos en "Mi equipo" y en "Liga NBA" -- lo que se había
-documentado como "diferencia de diseño entre motores" era, en su mayor
-parte, este bug. `outcome_variance_scale` significa ahora lo mismo en los
-dos motores: puntos de DIFERENCIAL, no de Game Score.
+IMPORTANTE: la diferencia de Game Score entre equipos se debe convertir
+a puntos de diferencial con `game_score_to_net_rating_scale` (calibrada
+en simulation.py, ver su docstring) antes de entrar en la logística --
+usar la diferencia de Game Score en bruto equivale a asumir "1 punto de
+Game Score = 1 punto de diferencial", una escala ~4.8x más fuerte de lo
+calibrado contra datos reales. Esta escala debe mantenerse en sync con
+simulation.py: si diverge, la MISMA franquicia da números de victorias
+distintos en "Mi equipo" y en "Liga NBA" sin que sea una diferencia de
+diseño real entre los dos motores. `outcome_variance_scale` significa lo
+mismo en los dos motores: puntos de DIFERENCIAL, no de Game Score.
 
 SIMPLIFICACIONES EN PLAYOFFS (documentadas, no ocultas)
 ------------------------------------------------------------
 - Bracket FIJO (1v8, 2v7, 3v6, 4v5 y así sucesivamente), sin re-seeding
   entre rondas -- la NBA real sí resiembra; se simplifica aquí.
 - Disponibilidad en playoffs: SÍ se sortea (Bernoulli por partido con la
-  misma `risk_score` de la temporada regular). Antes se asumía roster a
-  plena salud "porque el beneficio sería marginal" -- resultó ser un bug
-  grave que hacía a los equipos de estrellas frágiles más favoritos al
-  título que al mejor equipo de temporada regular; ver el docstring de
-  `_sample_team_game_score`. Lo que NO se replica es el tramo CONTIGUO de
-  lesión de `sample_injury_absences` (en series de 4-7 partidos la
-  diferencia entre racha y sorteo por partido es pequeña).
+  misma `risk_score` de la temporada regular) -- simular a plena salud
+  favorecería indebidamente a equipos de estrellas frágiles justo en el
+  tramo que más importa; ver el docstring de `_sample_team_game_score`.
+  Lo que NO se replica es el tramo CONTIGUO de lesión de
+  `sample_injury_absences` (en series de 4-7 partidos la diferencia
+  entre racha y sorteo por partido es pequeña).
 - Sin back-to-backs en playoffs (el calendario de playoffs no está tan
   comprimido como la temporada regular).
 - Desgaste de fatiga de fin de temporada aplicado de forma constante
@@ -187,25 +184,21 @@ def project_team_roster(
     ajustó), aquí los minutos parten de los minutos/partido REALES de la
     temporada más reciente de cada jugador (continuidad de rol).
 
-    DOS problemas reales encontrados, en dos iteraciones de este fix:
+    POR QUÉ NO SE USA LA SUMA DE MINUTOS "EN BRUTO" DIRECTAMENTE:
 
-    1. La suma de esos minutos "en bruto" por TODO el roster (15-22
+    1. La suma de minutos/partido reales de TODO el roster (15-22
        jugadores, incluyendo a cualquiera que jugó un solo partido por
-       una lesión ajena) no tiene por qué sumar 240 (5 posiciones x 48
-       min, lo único que existe de verdad en un partido) -- de hecho casi
-       nunca lo hace, porque a lo largo de 82 partidos rotan más de 5-8
-       jugadores. Un roster con mucho movimiento de plantilla (lesiones,
-       tanking, muchos jugadores de two-way/G-League llamados) suma
-       mucho más que uno estable -- Utah llegó a sumar 449 "en bruto"
-       (22 jugadores, varios con muy pocos partidos jugados) mientras
-       Los Angeles Lakers sumaban 318 con un roster más corto.
-    2. La primera versión de este fix escalaba TODO el roster para que
-       sumara exactamente 240 -- pero eso penaliza injustamente a las
-       ESTRELLAS de un roster con mucho movimiento de plantilla: Luka
-       Dončić pasó de sus ~35.8 min/partido reales a 26.98 tras esa
-       normalización, solo porque sus compañeros de banquillo (varios
-       con pocos partidos, de rotación de temporada) inflaban el total
-       del equipo. Un jugador de banquillo con pocos minutos reales por
+       una lesión ajena) no suma 240 (5 posiciones x 48 min, lo único que
+       existe de verdad en un partido) -- a lo largo de 82 partidos rotan
+       más de 5-8 jugadores, así que la suma real es bastante más alta,
+       y crece más cuanto más movimiento de plantilla tiene el equipo
+       (lesiones, tanking, llamados de two-way/G-League).
+    2. Escalar TODO el roster para que sume exactamente 240 penaliza
+       injustamente a las estrellas de un roster con mucho movimiento de
+       plantilla: los minutos reales de un jugador de rotación bajan
+       artificialmente porque sus compañeros de banquillo (varios con
+       pocos partidos) inflan el total del equipo que hay que repartir
+       entre 240. Un jugador de banquillo con pocos minutos reales por
        *movimiento de plantilla* no debería diluir los minutos de la
        estrella real del equipo.
 
@@ -215,19 +208,15 @@ def project_team_roster(
     (suplentes de fondo de plantilla, two-way, llamados puntuales) se
     trata como 0 minutos -- no afectan de forma relevante a la fuerza de
     un equipo en una aproximación de este tipo, y diluir la rotación real
-    con ellos es precisamente lo que causaba el problema.
+    con ellos es precisamente lo que causa el problema de arriba.
 
-    TERCER problema real, encontrado por el usuario (caso Dereck Lively
-    II, DAL: 0 MPG proyectados pese a Game Score/36=19.8, propio de
-    titular): los minutos "en bruto" del ranking anterior venían de la
-    ÚLTIMA temporada únicamente -- un jugador de rotación real con una
-    temporada corta por lesión caía por debajo del corte de
-    `rotation_size` aunque sus temporadas previas mostraran un rol
-    claramente de rotación. Arreglado usando
+    El ranking que decide quién entra en esa rotación usa
     `aging_curve.compute_reliability_weighted_minutes_per_game()` (mismo
-    criterio recencia+fiabilidad que `compute_recency_weighted_baseline`,
-    el fix ya aplicado a la línea base por-36 para el caso Tatum) en vez
-    de una sola fila -- validado contra el backtest sweep de 480 casos.
+    criterio recencia+fiabilidad que `compute_recency_weighted_baseline`)
+    en vez de solo la última temporada: un jugador de rotación real con
+    una temporada corta por lesión reciente no debe caer del corte de
+    `rotation_size` cuando sus temporadas previas muestran claramente un
+    rol de rotación -- validado contra el backtest sweep de 480 casos.
     """
     player_ids = roster_slice["PLAYER_ID"].astype(int).tolist()
     player_names = roster_slice.set_index(roster_slice["PLAYER_ID"].astype(int))["PLAYER"].to_dict()
@@ -241,16 +230,13 @@ def project_team_roster(
     )
     target_year = season_start_year(config["team"]["season"])
     rotation_size = config.get("league_simulation", {}).get("rotation_size", DEFAULT_ROTATION_SIZE)
-    # BUG REAL: este módulo llamaba a project_player_season() sin pasar
-    # n_seasons/half_life_seasons, así que usaba SIEMPRE los defaults del
-    # módulo (aging_curve.DEFAULT_*), ignorando config["aging_curve"] por
-    # completo -- solo build_aging_projection_dataset() (roster propio) lo
-    # leía. Hoy no cambia ningún número (el YAML coincide con los defaults
-    # por casualidad), pero dejaba el bloque "aging_curve" del config
-    # muerto para los 30 equipos reales de Liga NBA -- justo lo que
-    # bloqueaba calibrar el encogimiento hacia la media que causa la
-    # compresión de victorias entre equipos (ver
-    # scripts/experiments/aging_curve_shrinkage.py).
+    # IMPORTANTE: project_player_season() debe recibir n_seasons/half_life_seasons
+    # explícitos aquí -- sin ellos cae a los defaults del módulo
+    # (aging_curve.DEFAULT_*) e ignora config["aging_curve"] por completo
+    # para los 30 equipos reales de Liga NBA, aunque build_aging_projection_dataset()
+    # (roster propio) sí lo respete. Necesario para poder calibrar el
+    # encogimiento hacia la media que afecta la compresión de victorias
+    # entre equipos (ver scripts/experiments/aging_curve_shrinkage.py).
     aging_cfg = config.get("aging_curve", {})
     aging_n_seasons = aging_cfg.get("n_seasons_lookback", DEFAULT_N_SEASONS_LOOKBACK)
     aging_half_life = aging_cfg.get("recency_half_life_seasons", DEFAULT_RECENCY_HALF_LIFE_SEASONS)
@@ -337,8 +323,8 @@ def project_team_roster(
         # simulation.compute_league_average_game_score_per36 para su línea
         # base. Si la simulación usara la métrica ajustada y el CSV la
         # cruda, "Mi equipo" se compararía contra una referencia medida en
-        # otra escala -- exactamente la clase de desajuste entre motores
-        # que este proyecto ya arrastró dos veces.
+        # otra escala -- mantener ambas en sync es lo que evita ese
+        # desajuste entre motores.
         projection["game_score_per36_box"] = projection["game_score_per36"]
         projection["game_score_per36"] = adjust_with_context(
             projection["game_score_per36"], player_id, config["team"]["season"], advanced_context
@@ -992,34 +978,20 @@ def _sample_team_game_score(proj: Dict[str, Any], rng: np.random.Generator, mc_c
     equipo top-heavy se vería penalizado justo en la parte de la
     temporada donde más importa.
 
-    BUG REAL ARREGLADO -- DISPONIBILIDAD EN PLAYOFFS: esta función asumía
-    el roster a PLENA SALUD en playoffs (era una "simplificación
-    documentada": extender el modelo de lesiones a partidos de playoff
-    "añadiría complejidad por un beneficio marginal limitado"). No era
-    marginal: producía un resultado abiertamente contradictorio. Un
-    equipo construido sobre estrellas frágiles era castigado los 82
-    partidos de temporada regular y luego llegaba a playoffs
-    milagrosamente sano. Caso real encontrado por el usuario -- PHI vs
-    SAS con los datos de 2026-27:
-
-        equipo   GS a plena salud   GS esperado con lesiones   victorias
-        PHI            111.0                  76.7               45.5
-        SAS            106.0                  87.0               56.4
-
-    Es decir: SAS ganaba 11 victorias MÁS que PHI en temporada regular
-    (porque PHI pierde el 31% de su producción por lesiones, con Embiid
-    en riesgo 0.65) y aun así PHI tenía **23.7%** de título contra
-    **10.8%** de SAS, por jugar los playoffs a plena salud. Un equipo con
-    peor temporada regular no puede ser más favorito al título solo
-    porque el modelo le perdona las lesiones en el momento decisivo.
-
-    Arreglado sorteando disponibilidad por partido con la misma
+    IMPORTANTE: la disponibilidad SÍ se sortea en playoffs, con la misma
     `risk_score` que usa la temporada regular (Bernoulli por partido: la
     semántica de risk_score es "fracción esperada de partidos perdidos",
-    así que aplicarla por partido conserva esa media). NO se replica el
-    tramo contiguo de `sample_injury_absences` -- en una serie de 4-7
-    partidos la diferencia entre "racha" y "sorteo por partido" es
-    pequeña, y el sesgo grave (salud perfecta gratis) ya queda corregido.
+    así que aplicarla por partido conserva esa media). Simular playoffs a
+    plena salud produce un sesgo grave: un equipo construido sobre
+    estrellas frágiles queda castigado los 82 partidos de temporada
+    regular por lesiones y luego llega a playoffs milagrosamente sano,
+    lo que puede hacerlo más favorito al título que un equipo con mejor
+    récord real de temporada regular -- un equipo no puede ser más
+    favorito al título solo porque el modelo le perdona las lesiones en
+    el momento decisivo. NO se replica el tramo contiguo de
+    `sample_injury_absences` -- en una serie de 4-7 partidos la
+    diferencia entre "racha" y "sorteo por partido" es pequeña frente al
+    beneficio de no asumir salud perfecta.
     """
     effective_game_score_per36 = apply_star_bonus(proj["game_score_per36"], proj["minutes_projection"], mc_config)
     base = effective_game_score_per36 * (proj["minutes_projection"] / 36.0)
@@ -1262,17 +1234,16 @@ def project_own_team_for_league(config: Dict[str, Any]) -> Dict[str, Any]:
     que project_team_roster(), para poder sustituir su entrada dentro de
     los 30 equipos de load_and_project_all_teams().
 
-    BUG REAL encontrado por el usuario: antes de esto, "Liga y Playoffs"
-    trataba TODOS los 30 equipos por igual, incluido el propio -- volvía
-    a descargar el roster REAL actual de esa franquicia
-    (league_rosters.csv, vía CommonTeamRoster) y recalculaba minutos
-    automáticamente (rotación top-10 por minutos reales, normalizada a
-    240), ignorando por completo el roster hipotético de
-    team_config.yaml. Resultado: la misma franquicia (p. ej. PHI)
-    aparecía con victorias medias distintas en "Mi equipo" (50.4) que en
-    "Liga NBA" (42.994) -- ni siquiera el roster de jugadores coincidía
-    (el roster real de PHI puede no incluir a los mismos fichajes
-    hipotéticos que configuró el usuario). Esta función reutiliza los
+    IMPORTANTE: sin esta función, "Liga y Playoffs" trataría TODOS los 30
+    equipos por igual, incluido el propio -- descargaría el roster REAL
+    actual de esa franquicia (league_rosters.csv, vía CommonTeamRoster) y
+    recalcularía minutos automáticamente (rotación top-10 por minutos
+    reales, normalizada a 240), ignorando el roster hipotético de
+    team_config.yaml por completo. Eso haría que la misma franquicia
+    apareciera con números de victorias distintos en "Mi equipo" y en
+    "Liga NBA", y que ni siquiera el roster de jugadores coincidiera (el
+    roster real de una franquicia puede no incluir a los fichajes
+    hipotéticos configurados por el usuario). Esta función reutiliza los
     MISMOS CSV ya calculados que usa la pestaña "Mi equipo"
     (aging_curve_projection.csv, injury_risk.csv, fatigue_risk.csv) --
     así el equipo del usuario aparece con exactamente los mismos números
@@ -1723,14 +1694,14 @@ def build_league_simulation_dataset(
         wins_this_season = {tid: int(wins_by_team_arrays[tid][i]) for tid in team_ids}
         result = simulate_playoffs_once(wins_this_season, team_conference, team_projections, playoff_rng, mc_cfg)
 
-        # BUG REAL ARREGLADO: las tres métricas de ronda estaban
-        # desplazadas una ronda, y dos eran idénticas por construcción.
-        # `conf_semis_winners` son los que GANARON las semifinales (o sea,
-        # los que llegaron a las FINALES de conferencia), no los que
-        # llegaron a semis -- esos son `round1_winners`. Y
-        # `conference_champion` se contaba a la vez como "llegó a finales
-        # de conferencia" y como "llegó a las Finales de la NBA", así que
-        # conf_finals_pct y finals_pct salían iguales en los 30 equipos.
+        # IMPORTANTE: no confundir estas tres métricas de ronda -- cada
+        # una cuenta un hito distinto. `conf_semis_winners` son los que
+        # GANARON las semifinales (llegaron a las FINALES de conferencia),
+        # no los que simplemente llegaron a semis -- esos son
+        # `round1_winners`. `conference_champion` cuenta como "llegó a
+        # finales de conferencia" (lo ganó) Y como "llegó a las Finales de
+        # la NBA" (el mismo equipo, dos hitos distintos) -- si se
+        # confunden, conf_finals_pct y finals_pct salen idénticos.
         for tid in result["east_8"] + result["west_8"]:
             made_playoffs[tid] += 1
         for tid in result["east_result"]["round1_winners"] + result["west_result"]["round1_winners"]:

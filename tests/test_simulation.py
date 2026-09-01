@@ -480,7 +480,7 @@ def test_build_simulation_dataset_respects_explicit_monte_carlo_override(tmp_pat
 
     build_simulation_dataset(config)
 
-    # El usuario fijó su propio valor a mano -- no se recalibra aunque
+    # Un valor fijado a mano en config no se recalibra aunque
     # league_player_projections.csv exista.
     assert calls == []
 

@@ -1,14 +1,14 @@
 """
 lineup_synergy_signal.py
 
-EXPERIMENTO, no forma parte del pipeline de producción. Responde la
-pregunta del usuario: src/lineup_synergy.py modela solo dos efectos
-(usage_clash, playmaking_spacing_synergy), con pesos (0.05 y 0.02,
-DEFAULT_USAGE_CLASH_WEIGHT / DEFAULT_PLAYMAKING_SPACING_WEIGHT) puestos a
-mano y NUNCA validados contra datos reales -- este script comprueba si
-esos dos efectos, calculados con las tasas por-36 REALES de cada
-jugador, predicen algo real sobre el NET_RATING real de la pareja cuando
-sí compartió cancha (`leaguedashlineups`, ver
+EXPERIMENTO, no forma parte del pipeline de producción. src/lineup_synergy.py
+modela solo dos efectos (usage_clash, playmaking_spacing_synergy), con
+pesos (0.05 y 0.02, DEFAULT_USAGE_CLASH_WEIGHT /
+DEFAULT_PLAYMAKING_SPACING_WEIGHT) puestos a mano y nunca validados
+contra datos reales -- este script comprueba si esos dos efectos,
+calculados con las tasas por-36 REALES de cada jugador, predicen algo
+real sobre el NET_RATING real de la pareja cuando sí compartió cancha
+(`leaguedashlineups`, ver
 data_pipeline.fetch_league_2man_lineup_stats/build_league_2man_lineup_dataset).
 
 Caso concreto que motivó esto: Embiid + Maxey (roster hipotético,
@@ -29,9 +29,8 @@ perfil y el resultado es la comparación correcta aquí (no hay
 tautología: el perfil por-36 de cada jugador no incorpora NET_RATING de
 pareja en absoluto, son columnas de caja completamente distintas).
 
-SEGUNDA FASE (a petición del usuario, tras el resultado negativo de los
-dos efectos originales): candidatos NUEVOS de sinergia, con datos de
-tracking (`leaguedashptstats` vía
+SEGUNDA FASE (tras el resultado negativo de los dos efectos originales):
+candidatos NUEVOS de sinergia, con datos de tracking (`leaguedashptstats` vía
 data_pipeline.fetch_league_tracking_stats/build_league_tracking_stats_dataset,
 ver LINEUP_SYNERGY_TRACKING_MEASURE_TYPES) en vez de solo estadísticas de
 caja:
@@ -46,11 +45,11 @@ caja:
     LIMITACIÓN: nba_api no expone frecuencia real de bloqueo-y-continuación
     (eso es Second Spectrum con matchups, no público) -- esto es un proxy,
     no la cosa en sí.
-`build_tracking_style_features()` no cubre "atacante + buen defensor" (el
-usuario lo sugirió también) -- es un tipo de sinergia distinto
-(complementariedad ofensiva/defensiva, no "los dos tienen el rasgo X") y
-necesitaría su propia definición; queda fuera de esta primera pasada,
-documentado como candidato futuro, no implementado.
+`build_tracking_style_features()` no cubre "atacante + buen defensor" --
+es un tipo de sinergia distinto (complementariedad ofensiva/defensiva,
+no "los dos tienen el rasgo X") y necesitaría su propia definición;
+queda fuera de esta primera pasada, documentado como candidato futuro,
+no implementado.
 
 Uso:
     python scripts/experiments/lineup_synergy_signal.py

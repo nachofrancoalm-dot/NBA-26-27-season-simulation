@@ -1,16 +1,16 @@
 """
 contract_year_effect.py
 
-EXPERIMENTO, no forma parte del pipeline de producción. Responde la
-pregunta del usuario: ¿merece la pena incorporar información
-salarial/contractual (año de contrato / agencia libre inminente) al
-motor de proyección, bajo la hipótesis de que un jugador en el último
-año de su contrato ("contract year"/"walk year") produce más de lo
-esperado para asegurarse una buena extensión?
+EXPERIMENTO, no forma parte del pipeline de producción. Evalúa si
+merece la pena incorporar información salarial/contractual (año de
+contrato / agencia libre inminente) al motor de proyección, bajo la
+hipótesis de que un jugador en el último año de su contrato ("contract
+year"/"walk year") produce más de lo esperado para asegurarse una
+buena extensión.
 
 Fuentes de datos (ninguna forma parte del pipeline de nba_api ya
 existente -- nba_api no expone salarios ni contratos; ambas descargadas
-a mano por el usuario desde Kaggle, ver data/raw/contract_data/):
+manualmente desde Kaggle, ver data/raw/contract_data/):
   - "NBA Player Stats and Salaries_2010-2025.csv"
     (kaggle.com/datasets/ratin21/nba-player-stats-and-salaries-2010-2025):
     una fila por jugador-temporada (2010-2025), con salario y

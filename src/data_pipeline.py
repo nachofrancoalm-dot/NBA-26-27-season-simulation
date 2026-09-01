@@ -270,12 +270,12 @@ def fetch_league_hustle_stats(
     Misma ingesta barata que fetch_league_advanced_player_stats -- UNA
     llamada por temporada, liga entera.
 
-    Motivación: investigar si aportan señal de "defensa/juego en equipo
-    sin balón" que ni Game Score (puramente ofensivo, ver
-    aging_curve.py) ni NET_RATING/PIE (ver advanced_impact.py) capturan
-    -- ver scripts/experiments/hustle_stats_signal.py para la
-    investigación en sí; esta función SOLO ingiere, no decide si el dato
-    aporta.
+    Cubre la señal de "defensa/juego en equipo sin balón" que ni Game
+    Score (puramente ofensivo, ver aging_curve.py) ni NET_RATING/PIE
+    (ver advanced_impact.py) capturan -- ver
+    scripts/experiments/hustle_stats_signal.py para el análisis de si esa
+    señal termina siendo predictiva; esta función solo ingiere el dato,
+    no evalúa su utilidad.
 
     LIMITACIÓN DE DISPONIBILIDAD real (no un bug): la NBA solo trackea
     hustle stats desde la temporada 2015-16 (SportVU/Second Spectrum).
@@ -307,10 +307,10 @@ def fetch_league_pt_defend_stats(
     negativo significa que el rival tira PEOR de lo normal defendido por
     este jugador, la señal de impacto defensivo más directa que expone
     nba_api (más que los hustle stats de fetch_league_hustle_stats, que
-    miden actividad/esfuerzo, no si ese esfuerzo de verdad impide
-    anotar -- ver scripts/experiments/hustle_stats_signal.py, resultado
-    negativo, y scripts/experiments/pt_defend_signal.py para esta
-    investigación).
+    miden actividad/esfuerzo, no si ese esfuerzo de verdad impide anotar
+    -- ese análisis salió negativo en scripts/experiments/hustle_stats_signal.py;
+    ver scripts/experiments/pt_defend_signal.py para el equivalente con
+    esta métrica).
 
     UNA llamada por temporada, liga entera -- misma ingesta barata que
     fetch_league_advanced_player_stats/fetch_league_hustle_stats.
@@ -1026,11 +1026,11 @@ def fetch_league_2man_lineup_stats(
     """
     Net rating REAL de cada pareja de jugadores que compartió cancha esa
     temporada (`leaguedashlineups`, group_quantity=2, measure_type
-    Advanced) -- para scripts/experiments/lineup_synergy_signal.py: la
-    investigación de si los dos efectos de src/lineup_synergy.py
-    (usage_clash, playmaking_spacing_synergy) predicen algo real sobre
-    net rating de pareja, o si los pesos actuales (nunca calibrados
-    contra datos) están adivinando. UNA llamada por temporada, liga
+    Advanced) -- alimenta scripts/experiments/lineup_synergy_signal.py,
+    que contrasta los dos efectos de src/lineup_synergy.py (usage_clash,
+    playmaking_spacing_synergy) contra datos reales de pareja: sus pesos
+    nunca se calibraron empíricamente, así que esto es lo que permite
+    comprobar si de verdad predicen algo. UNA llamada por temporada, liga
     entera -- mismo patrón barato que fetch_league_hustle_stats/
     fetch_league_pt_defend_stats. `GROUP_ID` viene como
     "-player_id_a-player_id_b-" (guiones incluidos); el experimento se
@@ -1080,8 +1080,8 @@ def build_league_2man_lineup_dataset(config: Dict[str, Any], force_refresh: bool
 # Cuatro categorías de seguimiento (`leaguedashptstats`) usadas para
 # probar candidatos NUEVOS de sinergia de pareja en
 # scripts/experiments/lineup_synergy_signal.py, más allá de
-# usage_clash/playmaking_spacing_synergy (que salieron sin apoyo
-# empírico -- ver CLAUDE.md): volumen de tiro creado por uno mismo
+# usage_clash/playmaking_spacing_synergy (ninguno de los dos tiene apoyo
+# empírico): volumen de tiro creado por uno mismo
 # (PullUpShot) vs. recibido/catch-and-shoot (CatchShoot) -- pareja
 # "tirador con balón + tirador sin balón"; penetraciones (Drives) de un
 # manejador vs. presencia interior de un grande -- proxy de pick-and-roll

@@ -333,10 +333,10 @@ def test_series_winner_gives_home_court_to_the_better_seed_not_list_order():
 
 
 def test_simulate_playoffs_once_with_15_teams_per_conference_like_real_nba():
-    # Caso real: 15 equipos por conferencia (30 en total), no 10 -- los
-    # seeds 11-15 deben quedar eliminados antes del play-in. Regresión de
-    # un bug real: resolve_play_in exige exactamente 10 seeds y
-    # simulate_playoffs_once le pasaba las 15 sin recortar.
+    # 15 equipos por conferencia (30 en total), no 10 -- los seeds 11-15
+    # deben quedar eliminados antes del play-in. Regresión: resolve_play_in
+    # exige exactamente 10 seeds y simulate_playoffs_once le pasaba las 15
+    # sin recortar.
     east_ids = list(range(1, 16))
     west_ids = list(range(16, 31))
     team_conference = {tid: "East" for tid in east_ids}
@@ -356,13 +356,13 @@ def test_simulate_playoffs_once_with_15_teams_per_conference_like_real_nba():
 
 
 def test_project_team_roster_normalizes_total_minutes_to_240():
-    # Regresión de un hallazgo real: sin normalizar, un roster con
-    # rotación históricamente profunda (varios jugadores con muchos
-    # minutos/partido reales el año pasado) podía sumar muy por encima de
-    # los 240 minutos que existen de verdad en un partido (5 posiciones x
-    # 48 min), inflando artificialmente su Game Score de equipo frente a
-    # rosters con rotaciones más cortas -- Utah llegó a sumar 449 minutos
-    # "en bruto" y lideraba las probabilidades de título injustamente.
+    # Regresión: sin normalizar, un roster con rotación históricamente
+    # profunda (varios jugadores con muchos minutos/partido reales el año
+    # pasado) podía sumar muy por encima de los 240 minutos que existen de
+    # verdad en un partido (5 posiciones x 48 min), inflando artificialmente
+    # su Game Score de equipo frente a rosters con rotaciones más cortas --
+    # Utah llegó a sumar 449 minutos "en bruto" y lideraba las
+    # probabilidades de título injustamente.
     roster = pd.DataFrame(
         [{"PLAYER_ID": 1, "PLAYER": "Heavy Minutes A"}, {"PLAYER_ID": 2, "PLAYER": "Heavy Minutes B"}]
     )
@@ -449,9 +449,9 @@ def _minutes_only_roster(rows):
 
 
 def test_project_team_roster_does_not_dilute_star_minutes_with_bench_churn():
-    # Regresión de un hallazgo real (revisión manual del usuario): la
-    # primera versión de la normalización a 240 escalaba TODO el roster
-    # por igual, y una estrella real (Luka Dončić, ~35.8 min/partido
+    # Regresión: la primera versión de la normalización a 240 escalaba
+    # TODO el roster por igual, y una estrella real (Luka Dončić, ~35.8
+    # min/partido
     # reales en los Lakers) terminaba con 26.98 -- diluida por muchos
     # suplentes de fondo de plantilla que solo jugaron unos pocos
     # partidos por movimiento de plantilla (lesiones, llamados de
@@ -499,8 +499,8 @@ def test_project_team_roster_does_not_dilute_star_minutes_with_bench_churn():
 
 
 def test_project_team_roster_does_not_zero_out_a_rotation_player_with_a_short_recent_season():
-    # Regresión de un hallazgo real (reportado por el usuario): Dereck
-    # Lively II (DAL) salía con 0 minutos proyectados en Liga NBA pese a
+    # Regresión: Dereck Lively II (DAL) salía con 0 minutos proyectados en
+    # Liga NBA pese a
     # ser titular real -- su última temporada fue corta por una lesión
     # (7 partidos, 16.4 MPG), y el ranking de rotación usaba SOLO esa
     # fila, así que caía fuera del top-N pese a sus dos temporadas

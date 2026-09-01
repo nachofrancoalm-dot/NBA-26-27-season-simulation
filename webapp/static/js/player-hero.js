@@ -73,15 +73,13 @@ export function playerHeroCard(playerId, playerName, { extraClass = "", size = 1
 }
 
 /** Hero de la pantalla de entrada (splash): recorte de cuerpo entero
- * elegido a mano por el usuario (`webapp/static/img/`), no la foto
- * circular del roster que usa playerHeroCard() -- este archivo SÍ vive
- * en el repo (a diferencia de escudos/headshots, que se hotlinkean en
- * vivo y nunca se guardan, ver el resto de este proyecto), así que si el
- * repo se sube a GitHub en público, confirmar con el usuario si esta
- * imagen debe commitearse o quedarse fuera vía .gitignore -- es una foto
- * real de un jugador real, la misma consideración de derechos de imagen
- * que ya se aplicó al decidir NO usar una foto de stock sin licencia
- * para el hero original.
+ * curado a mano (`webapp/static/img/`), no la foto circular del roster
+ * que usa playerHeroCard() -- este archivo SÍ vive en el repo (a
+ * diferencia de escudos/headshots, que se hotlinkean en vivo y nunca se
+ * guardan, ver el resto de este proyecto). Es una foto real de un
+ * jugador real, así que antes de commitear un reemplazo hay que
+ * verificar los derechos de imagen -- mismo criterio que ya llevó a
+ * descartar una foto de stock sin licencia para el hero original.
  *
  * Sin balón animado a propósito: la foto ya muestra al jugador con un
  * balón real en la mano -- añadir uno de dibujo al lado se vería

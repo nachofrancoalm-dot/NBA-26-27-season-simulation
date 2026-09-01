@@ -3,12 +3,10 @@ data_loader.py
 
 Funciones puras de carga/combinación de los CSV en data/processed/ --
 la capa de datos que consume webapp/ (cada router de webapp/routers/
-importa de aquí en vez de leer CSV por su cuenta). Vivió originalmente
-junto a un dashboard de Streamlit (dashboard/app.py, retirado del
-proyecto -- webapp/ es ahora la única interfaz) precisamente porque ya
-estaba separado de esa capa de renderizado: la lógica de qué datos se
-muestran es testeable (ver tests/test_dashboard_data_loader.py) con
-independencia de cómo se pinte.
+importa de aquí en vez de leer CSV por su cuenta). Separada de la capa
+de renderizado a propósito: la lógica de qué datos se muestran es
+testeable (ver tests/test_dashboard_data_loader.py) con independencia
+de cómo se pinte.
 
 Ninguna función aquí llama a la API -- todo lee CSV ya generados por el
 pipeline (data_pipeline.py, aging_curve.py, injury_model.py,
@@ -17,7 +15,7 @@ league_simulation.py). Si un CSV no existe todavía, se devuelve None --
 el caller (webapp/) decide cómo avisar al usuario, esta capa no lanza
 excepciones por archivos faltantes.
 
-CUATRO EXCEPCIONES a "solo lee CSV": run_single_bracket_simulation() sí
+Cuatro excepciones a "solo lee CSV": run_single_bracket_simulation() sí
 ejecuta código en vivo (una simulación de bracket de playoffs) -- es
 rápido (proyecta 30 equipos desde CSV ya cacheados, sin red) y el botón
 de la pestaña "Liga y Playoffs" lo necesita para mostrar un bracket
@@ -29,7 +27,7 @@ sobre CSV ya cacheados. run_single_league_season_simulation() es lo
 mismo pero para los 30 equipos de Liga NBA -- calendario, resultado de
 cada partido y boxscore ilustrativo por jugador, para el botón "Simular
 calendario de la temporada" (a diferencia del bracket y del resto de la
-liga, SÍ persiste CSV propios -- league_single_season_game_log.csv /
+liga, sí persiste CSV propios -- league_single_season_game_log.csv /
 league_single_season_player_box_scores.csv -- porque son caros de
 regenerar en cada request). compute_awards_summary() no
 llama a la API ni simula nada nuevo, pero sí importa lógica de negocio
@@ -269,46 +267,44 @@ def _apply_simulated_games_and_minutes(
 
     MPG = `minutes_projection` tal cual, el input curado del roster --
     los minutos que se asumen los partidos en que el jugador SÍ juega.
-    A propósito NO se descuenta por risk_score (antes se mostraba
-    minutes_projection × (1 − risk_score), la carga efectiva a lo largo
-    de TODA la temporada contando 0 en partidos perdidos -- cambiado
-    porque en pantalla, para un jugador de alto riesgo como Embiid,
-    salía una cifra como "9 MPG" que parecía un error: nadie juega 9
-    minutos cuando sale a cancha, ese número mezclaba "minutos por
-    partido" con "carga de temporada" en una sola cifra confusa. El
-    usuario prefirió separar los dos conceptos: MPG = ritmo cuando
-    juega, GP = para cuántos partidos se espera que esté disponible).
+    A propósito NO se descuenta por risk_score. Una versión anterior
+    mostraba minutes_projection × (1 − risk_score) (la carga efectiva a
+    lo largo de TODA la temporada, contando 0 en partidos perdidos), pero
+    para un jugador de alto riesgo como Embiid eso producía algo como "9
+    MPG", que se lee como un error -- nadie juega 9 minutos cuando sale a
+    cancha. Esa cifra mezclaba "minutos por partido" con "carga de
+    temporada" en un solo número confuso. MPG = ritmo cuando juega,
+    GP = para cuántos partidos se espera que esté disponible; conceptos
+    separados a propósito.
 
     También escala los TOTALES de temporada (columnas `TOTAL_STATS`:
     PTS_projected, REB_projected...) por el mismo factor de
-    disponibilidad `(1 - risk_score)` -- BUG REAL reportado por el
-    usuario: al cambiar el escenario de liga "con" / "sin lesiones" solo
-    se movían GP y MPG, los puntos/rebotes/asistencias totales quedaban
-    igual, como si jugar menos partidos no costara nada de producción.
-    Las columnas PER_GAME_STATS (PPG/RPG/...) se dejan SIN escalar a
-    propósito -- representan el ritmo del jugador cuando SÍ juega (igual
-    que un PPG real de la NBA no baja porque un jugador se pierda
-    partidos), y de hecho la relación Total = PPG × GP se mantiene
-    exacta con este diseño (PTS_projected × disponibilidad =
-    PTS_projected/games_per_season × (games_per_season ×
+    disponibilidad `(1 - risk_score)`. Sin esto, cambiar el escenario de
+    liga "con" / "sin lesiones" solo movía GP y MPG -- los totales de
+    puntos/rebotes/asistencias quedaban igual, como si jugar menos
+    partidos no costara nada de producción. Las columnas PER_GAME_STATS
+    (PPG/RPG/...) se dejan SIN escalar a propósito -- representan el
+    ritmo del jugador cuando SÍ juega (igual que un PPG real de la NBA no
+    baja porque un jugador se pierda partidos), y la relación
+    Total = PPG × GP se mantiene exacta con este diseño (PTS_projected ×
+    disponibilidad = PTS_projected/games_per_season × (games_per_season ×
     disponibilidad) = PPG constante × GP simulado). Mismo factor exacto
     que ya usa `webapp/routers/players.py::_projected_season_row` para
     la fila de proyección del popup de jugador -- no una fórmula nueva.
 
-    LIMITACIÓN CONOCIDA (no arreglada a propósito, preguntado al
-    usuario): PPG/RPG/APG es un punto fijo (ritmo per-36 × minutes_projection,
-    NINGUNA de las dos depende de risk_score), así que es
-    matemáticamente IDÉNTICO en los escenarios "con" y "sin lesiones" --
-    no hay ruido partido a partido simulado a nivel de jugador en esta
-    tabla. Esto ignora un efecto real: jugar los 82 partidos sin
-    descanso (escenario "sin lesiones") acumula fatiga y podría reducir
-    el ritmo real, mientras que un jugador que se pierde partidos por
-    lesión llega más descansado a los que sí juega. El proyecto ya mide
-    ese desgaste (`fatigue_score`, ver fatigue_accumulation.py) pero hoy
-    solo alimenta el resultado ganar/perder a nivel de EQUIPO, nunca se
-    conecta a estos promedios individuales por partido -- conectarlo
-    exigiría decidir la magnitud del efecto y recalibrarlo, no es un
-    ajuste trivial.
+    Limitación conocida, no arreglada a propósito: PPG/RPG/APG es un
+    punto fijo (ritmo per-36 × minutes_projection, ninguna de las dos
+    depende de risk_score), así que es matemáticamente idéntico en los
+    escenarios "con" y "sin lesiones" -- no hay ruido partido a partido
+    simulado a nivel de jugador en esta tabla. Esto ignora un efecto
+    real: jugar los 82 partidos sin descanso (escenario "sin lesiones")
+    acumula fatiga y podría reducir el ritmo real, mientras que un
+    jugador que se pierde partidos por lesión llega más descansado a los
+    que sí juega. El proyecto ya mide ese desgaste (`fatigue_score`, ver
+    fatigue_accumulation.py) pero hoy solo alimenta el resultado
+    ganar/perder a nivel de EQUIPO, nunca se conecta a estos promedios
+    individuales por partido -- conectarlo exigiría decidir la magnitud
+    del efecto y recalibrarlo, no es un ajuste trivial.
     """
     if games_per_season is None or "risk_score" not in overview.columns:
         return overview
@@ -659,10 +655,10 @@ def compute_awards_summary(
             # keyed por player_id (no por índice posicional), que es lo
             # que esperan las funciones de awards_projection.
             team_win_pct = dict(zip(player_df["player_id"], player_df["team_abbreviation"].map(wins_by_team)))
-            # Récord "V-D" del equipo -- a petición del usuario, para
-            # comparar candidatos en las tablas de premios individuales.
-            # Redondeado: wins_mean es una media continua de la
-            # simulación, no un resultado real exacto.
+            # Récord "V-D" del equipo, para comparar candidatos en las
+            # tablas de premios individuales. Redondeado: wins_mean es
+            # una media continua de la simulación, no un resultado real
+            # exacto.
             record_by_team = {
                 abbrev: _win_loss_record(wins, games_per_season)
                 for abbrev, wins in regular.set_index("team_abbreviation")["wins_mean"].items()
@@ -705,8 +701,8 @@ def compute_awards_summary(
     all_star = ap.compute_all_star_selections(player_df, games_per_season, team_win_pct=team_win_pct, team_record=team_record)
     all_star_quota = ap.check_all_star_nationality_quota(all_star)
     # Selección FINAL, con los añadidos del comisionado si la cuota
-    # natural no llega al mínimo (a petición explícita del usuario) --
-    # ver el warning "commissioner_pick" que consume webapp/routers/awards.py.
+    # natural no llega al mínimo -- ver el warning "commissioner_pick"
+    # que consume webapp/routers/awards.py.
     all_star_final = ap.add_commissioner_picks_for_nationality_quota(
         player_df, all_star, all_star_quota, team_win_pct=team_win_pct
     )
@@ -724,8 +720,7 @@ def compute_awards_summary(
             mip["team_record"] = mip["player_id"].map(team_record)
         # PPG/RPG/APG/etc de la ÚLTIMA temporada REAL (distinto de los de
         # arriba, que son la proyección) -- para que el popup de MIP en
-        # webapp/ compare "de dónde viene" vs "hacia dónde va", a
-        # petición del usuario.
+        # webapp/ compare "de dónde viene" vs "hacia dónde va".
         mip = mip.merge(ap.compute_latest_real_season_stats(career), on="player_id", how="left")
 
     return {

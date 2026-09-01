@@ -12,9 +12,9 @@ cada temporada tiene su propio slope, pero esos slopes se encogen hacia
 una media común tanto más cuanto menos datos (30 equipos) tenga esa
 temporada -- así una temporada rara no puede desviar la calibración
 tanto como si se ajustara sola, pero tampoco se le fuerza el número
-global si la era es sistemáticamente distinta (ver ya documentado
-"BUG REAL: INFLACIÓN DE ERA" en simulation.py -- exactamente el tipo de
-variación por temporada que un slope único no puede capturar).
+global si la era es sistemáticamente distinta (ver la inflación de
+Net Rating por era ya documentada en simulation.py -- exactamente el
+tipo de variación por temporada que un slope único no puede capturar).
 
 Por qué esto y no una red neuronal: con 480 filas (30 equipos x 16
 temporadas) un modelo profundo sobreajusta. Un modelo bayesiano
@@ -183,20 +183,19 @@ def fit_hierarchical_model(features: pd.DataFrame, draws: int, tune: int, chains
 
     PARAMETRIZACIÓN NO CENTRADA (`alpha_offset`/`beta_offset` ~ Normal
     estándar, `alpha = alpha_mu + alpha_sigma * alpha_offset`, igual para
-    beta) en vez de `alpha ~ Normal(alpha_mu, alpha_sigma)` directo --
-    BUG REAL encontrado al correr esto por primera vez contra los 480
-    casos reales: con la parametrización centrada, 752 de 4000 muestras
-    (19%) fueron divergencias y alpha_mu salió con r_hat=1.23 (debería
-    ser ~1.00) -- el "embudo de Neal" clásico de modelos jerárquicos
-    cuando la varianza de grupo (alpha_sigma) quiere ser pequeña: por la
-    restricción de suma cero de compute_projected_league_baselines(),
-    cada alpha[temporada] SÍ debería salir cerca de 0, así que
-    alpha_sigma se ve empujado hacia valores pequeños donde el muestreador
-    centrado degenera geométricamente. La parametrización no centrada es
-    la solución estándar documentada (Betancourt, "A Conceptual
-    Introduction to Hamiltonian Monte Carlo") -- separa la escala de la
-    localización para que NUTS pueda explorar ambas con pasos de tamaño
-    razonable.
+    beta) en vez de `alpha ~ Normal(alpha_mu, alpha_sigma)` directo.
+    Con la parametrización centrada, el muestreo sobre los 480 casos
+    reales produce 752/4000 muestras divergentes (19%) y alpha_mu con
+    r_hat=1.23 (debería rondar 1.00) -- el "embudo de Neal" clásico de
+    modelos jerárquicos cuando la varianza de grupo (alpha_sigma) quiere
+    ser pequeña: por la restricción de suma cero de
+    compute_projected_league_baselines(), cada alpha[temporada] SÍ
+    debería salir cerca de 0, así que alpha_sigma se ve empujado hacia
+    valores pequeños donde el muestreador centrado degenera
+    geométricamente. La parametrización no centrada es la solución
+    estándar documentada (Betancourt, "A Conceptual Introduction to
+    Hamiltonian Monte Carlo") -- separa la escala de la localización
+    para que NUTS pueda explorar ambas con pasos de tamaño razonable.
     """
     import pymc as pm
 

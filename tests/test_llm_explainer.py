@@ -75,9 +75,9 @@ def test_build_context_snapshot_includes_real_numbers_when_csvs_exist(config):
 
 def test_build_context_snapshot_includes_league_wide_injury_risk_by_team(config):
     """
-    Regresión: el usuario preguntó "¿qué equipo ha tenido más lesiones?"
-    y el LLM no pudo responder porque solo veía el riesgo de lesión del
-    roster propio, no el de los 30 equipos reales de la liga.
+    Regresión: preguntas del tipo "¿qué equipo ha tenido más lesiones?"
+    no se podían responder porque el snapshot solo incluía el riesgo de
+    lesión del roster propio, no el de los 30 equipos reales de la liga.
     """
     processed = Path(config["paths"]["processed_data_dir"])
     pd.DataFrame(
@@ -142,8 +142,8 @@ def test_explain_question_grounds_the_prompt_with_the_snapshot(config, monkeypat
     assert answer == "Respuesta grounded."
     assert captured["api_key"] == "test-key"
     assert captured["model"] == "llama-3.3-70b-versatile"
-    # El snapshot va en el mensaje de system, no en el de usuario -- así el
-    # modelo queda "grounded" en los datos reales ya calculados.
+    # El snapshot va en el mensaje de system, no en el del usuario final --
+    # así el modelo queda "grounded" en los datos reales ya calculados.
     system_message = captured["messages"][0]
     assert system_message["role"] == "system"
     assert "Victorias medias: 52.5" in system_message["content"]

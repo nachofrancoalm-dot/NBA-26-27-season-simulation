@@ -43,18 +43,18 @@ function comparisonValue(prev, current) {
 }
 
 /** Set de stats UNIFICADO para todos los premios individuales y
- * quintetos, a petición explícita del usuario: PPG, RPG, APG, SPG, BPG,
- * FG%, 3P%, récord de equipo y el "valor" que de verdad ordena ESE
- * premio en concreto (mvp_score/dpoy_score/season_value/defensive_value
- * -- distinto nombre e incluso distinta fórmula según el premio, por
- * eso `valueKey`/`valueLabel` se pasan aparte en vez de asumir uno fijo).
+ * quintetos: PPG, RPG, APG, SPG, BPG, FG%, 3P%, récord de equipo y el
+ * "valor" que de verdad ordena ESE premio en concreto
+ * (mvp_score/dpoy_score/season_value/defensive_value -- distinto nombre
+ * e incluso distinta fórmula según el premio, por eso `valueKey`/
+ * `valueLabel` se pasan aparte en vez de asumir uno fijo).
  *
  * Sin `prevPrefix` (MVP/DPOY/ROY/6.º Hombre/quintetos): cada stat sale
  * de player_df, la temporada PROYECTADA -- nunca mezclada con datos
  * reales. Con `prevPrefix` ("prev_", solo MIP): cada stat se muestra
  * como comparación "real anterior → proyectada" (ver comparisonValue) --
- * MIP es el único premio donde el usuario pidió explícitamente ver de
- * dónde viene el jugador, no solo hacia dónde va.
+ * MIP es el único premio pensado para mostrar de dónde viene el
+ * jugador, no solo hacia dónde va.
  */
 function fullStats(record, { valueKey, valueLabel, prevPrefix } = {}) {
   const stat = (label, key) => {
@@ -133,9 +133,9 @@ function coyConfig() {
 }
 
 /** Ranking visual (foto + barra, ver leaderboard.js) para los premios
- * individuales con una columna de "valor" clara -- reemplaza la tabla
- * a petición del usuario ("más minimalista y visual"). `chartFn`:
- * leaderboardChart (jugadores) o teamLeaderboardChart (COY, equipos). */
+ * individuales con una columna de "valor" clara -- más minimalista y
+ * legible que una tabla plana. `chartFn`: leaderboardChart (jugadores)
+ * o teamLeaderboardChart (COY, equipos). */
 function awardBlock(emoji, title, records, teamIds, config, chartFn = leaderboardChart) {
   const body =
     records && records.length

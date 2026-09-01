@@ -2,56 +2,51 @@
 aging_curve_shrinkage.py
 
 EXPERIMENTO, no forma parte del pipeline de producción -- no lo importa
-ni lo llama ningún módulo de src/, dashboard/ ni webapp/. Explora si
+ni lo llama ningún módulo de src/, dashboard/ ni webapp/. Comprueba si
 `config["aging_curve"]` (n_seasons_lookback / recency_half_life_seasons,
 ver src/aging_curve.py::compute_recency_weighted_baseline) está
 sobre-encogiendo la proyección de cada jugador hacia su propia media de
-varias temporadas -- la causa más probable de un síntoma real que
-reportó el usuario: en la predicción de la temporada 26-27, el mejor y
-el peor equipo del Este solo se separan por ~11 victorias, y en el
-backtest sweep el 42% de los 480 casos caen en el 20% más extremo de
-percentiles (debería ser ~20%) -- ver la conversación que motivó este
-experimento.
+varias temporadas. Motivo: en la predicción de la temporada 26-27, el
+mejor y el peor equipo del Este solo se separan por ~11 victorias, y en
+el backtest sweep el 42% de los 480 casos caen en el 20% más extremo de
+percentiles (debería rondar el 20%) -- señal de que la dispersión de
+talento entre equipos está demasiado comprimida.
 
-MEDIDO ANTES DE ESTE EXPERIMENTO (ver bayesian_calibration.py y la
-propia conversación): el modelo reparte a los 30 equipos reales con
-aproximadamente LA MITAD de la dispersión real (std simulado de
-victorias medias ~6.8, std real ~12.25 victorias -- consistente en las
-16 temporadas del sweep, no una temporada suelta). Descontando el "ruido
-de temporada" real ya medido en este proyecto (K=7.23 en la logística de
-un partido individual -> std de temporada ~4.53 VICTORIAS), la
-dispersión de TALENTO real objetivo es:
+DIAGNÓSTICO PREVIO (ver bayesian_calibration.py): el modelo reparte a
+los 30 equipos reales con aproximadamente LA MITAD de la dispersión
+real (std simulado de victorias medias ~6.8, std real ~12.25 victorias
+-- consistente en las 16 temporadas del sweep, no una temporada
+suelta). Descontando el ruido de temporada ya medido en este proyecto
+(K=7.23 en la logística de un partido individual -> std de temporada
+~4.53 VICTORIAS), la dispersión de TALENTO real objetivo es:
     sqrt(12.25^2 - 4.53^2) ~= 11.38 victorias de temporada.
-Convertido a puntos de diferencial (1 punto = 2.48 victorias, ya
-documentado en simulation.py): 11.38 / 2.48 ~= 4.59 puntos -- y
-`std(DiffPointsPG real)` por temporada da ~4.94, con un "ruido de
-temporada" en puntos de 4.53/2.48~=1.83, que decompone a
-sqrt(4.94^2 - 1.83^2) ~= 4.59 -- misma cifra por las dos vías, sirve de
-chequeo de consistencia. TRAMPA DE UNIDADES real que se cometió al
-escribir este experimento por primera vez: restar directamente el ruido
-en VICTORIAS (4.53) de una dispersión en PUNTOS sin convertir -- el
-`REAL_SEASON_LUCK_STD_POINTS` de abajo ya viene convertido para evitarlo.
+Convertido a puntos de diferencial (1 punto = 2.48 victorias, ver
+simulation.py): 11.38 / 2.48 ~= 4.59 puntos. Chequeo de consistencia
+por la vía alternativa: `std(DiffPointsPG real)` por temporada da
+~4.94, con un ruido de temporada en puntos de 4.53/2.48~=1.83, que
+decompone a sqrt(4.94^2 - 1.83^2) ~= 4.59 -- mismo resultado por las
+dos vías. Nota de unidades: el ruido de 4.53 está en VICTORIAS y no se
+puede restar directamente de una dispersión en PUNTOS sin convertir
+primero -- `REAL_SEASON_LUCK_STD_POINTS` más abajo ya viene convertido.
 
-REQUISITO PREVIO (ya corregido en esta misma sesión, ver CLAUDE.md):
-`league_simulation.project_team_roster()` y
-`backtesting.project_historical_player()` ignoraban por completo
-`config["aging_curve"]` -- llamaban a `project_player_season()` sin
-pasarle n_seasons/half_life_seasons, así que usaban siempre los defaults
-del módulo. Sin ese fix, calibrar un valor nuevo en el YAML no habría
-cambiado NADA en Liga NBA ni en el backtesting.
+PRERREQUISITO: `league_simulation.project_team_roster()` y
+`backtesting.project_historical_player()` deben propagar
+`config["aging_curve"]` hasta `project_player_season()`
+(n_seasons/half_life_seasons); si llaman a la función sin esos
+argumentos, usan los defaults del módulo y calibrar un valor nuevo en
+el YAML no cambia nada en Liga NBA ni en el backtesting.
 
 DISEÑO DEL EXPERIMENTO
 ------------------------
 Para cada combinación candidata (n_seasons_lookback, half_life_seasons),
 sobre los 480 casos del backtest sweep:
 1. Proyecta cada jugador con `aging_curve.project_player_season()` TAL
-   CUAL (misma función que usa producción, nunca reimplementada) --
-   pero filtrando el historial de cada jugador UNA sola vez y evaluando
+   CUAL (misma función que usa producción, nunca reimplementada), pero
+   filtrando el historial de cada jugador UNA sola vez y evaluando
    todas las combinaciones del grid sobre esos datos ya en memoria (en
-   vez de repetir el filtrado de pandas por cada punto del grid) --
-   dato: sin este reordenamiento, la búsqueda de un grid modesto habría
-   tardado más de una hora; con él, un pase por los 480 casos evalúa
-   TODO el grid a la vez.
+   vez de repetir el filtrado de pandas por cada punto del grid). Esto
+   reduce un barrido de grid modesto de más de una hora a un solo pase
+   por los 480 casos.
 2. Sin muestreo Monte Carlo de lesión/fatiga/sinergia (a propósito):
    la pregunta de este experimento es solo "¿cuánto se separan los
    equipos en talento crudo?", no "¿cuánto talento efectivo sobrevive

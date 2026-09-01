@@ -47,8 +47,8 @@ export function showPlayerPreview(event, { photo, name, subtitle, caption, stats
   const node = previewNode();
   // Node.replaceChildren() es el método NATIVO del DOM -- a diferencia
   // de el() (ui.js), NO ignora los `null`: los convierte en un nodo de
-  // texto literal "null" (bug real encontrado al probar MIP, que no
-  // llevaba caption). Por eso se filtran aquí antes de pasarlos.
+  // texto literal "null" (se manifestaba en MIP, que no siempre lleva
+  // caption). Por eso se filtran aquí antes de pasarlos.
   const children = [
     el("div", { class: "player-preview-header" }, [
       photo,

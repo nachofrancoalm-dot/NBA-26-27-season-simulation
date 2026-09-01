@@ -197,15 +197,15 @@ def test_compute_roster_player_stats_gp_matches_expected_games_played_formula(sa
 
 
 def test_simulate_custom_roster_baseline_excludes_league_synergy(sandbox_config, monkeypatch):
-    """BUG REAL reportado por el usuario: el mismo roster sin editar daba
-    26 victorias en /sandbox/simulate y 42 en /sandbox/league. Causa:
-    run_monte_carlo recibe synergy_matrix=None aquí (limitación
-    documentada -- el sandbox no modela sinergia), pero la línea base de
-    "equipo promedio" SÍ llevaba incorporada la sinergia media de los 30
-    equipos reales (~+10.65 de net rating) -- comparando tu equipo (sin
-    sinergia) contra un rival que sí la tenía, cada partido. Mismo patrón
-    que el "BUG REAL: la línea base rompía la suma cero" ya arreglado una
-    vez en simulation.py -- aquí se comprueba que no vuelva."""
+    """Regresión: el mismo roster sin editar daba 26 victorias en
+    /sandbox/simulate y 42 en /sandbox/league. Causa: run_monte_carlo
+    recibe synergy_matrix=None aquí (limitación documentada -- el sandbox
+    no modela sinergia), pero la línea base de "equipo promedio" SÍ
+    llevaba incorporada la sinergia media de los 30 equipos reales
+    (~+10.65 de net rating) -- comparando tu equipo (sin sinergia) contra
+    un rival que sí la tenía, cada partido. Mismo patrón que la línea base
+    rompiendo la suma cero, ya arreglado una vez en simulation.py -- aquí
+    se comprueba que no vuelva."""
     captured = {}
 
     def fake_compute_league_average_game_score_per36(player_projections, league_mean_synergy_net_rating=0.0, **kwargs):

@@ -148,13 +148,13 @@ def project_historical_player(
     src/advanced_impact.py) en vez del Game Score puro. Opcional para que
     el backtest siga corriendo sin `league_advanced_player_stats.csv`.
 
-    `n_seasons_lookback`/`recency_half_life_seasons`: BUG REAL -- esta
-    función nunca pasaba estos parámetros a `project_player_season`, así
-    que ignoraba `config["aging_curve"]` por completo y usaba siempre los
-    defaults del módulo (mismo bug que en `league_simulation.py`, ver su
-    docstring). `None` (default) preserva el comportamiento de siempre --
-    `project_backtest_team()` es quien los rellena desde `config` cuando
-    los llama.
+    `n_seasons_lookback`/`recency_half_life_seasons`: IMPORTANTE pasarlos
+    explícitos aquí -- sin ellos, `project_player_season` cae a los
+    defaults del módulo e ignora `config["aging_curve"]` por completo
+    (mismo requisito que en `league_simulation.project_team_roster`, ver
+    su docstring). `None` (default) preserva ese comportamiento de
+    fallback; `project_backtest_team()` es quien los rellena desde
+    `config` cuando llama a esta función.
     """
     target_year = season_start_year(target_season)
     prior_regular = filter_seasons_before(player_regular_seasons, target_year)
@@ -322,10 +322,10 @@ def expected_team_game_score_equivalent(
     simulación le va a hacer: ausencias por lesión, desgaste de temporada,
     penalización de back-to-back y ajuste de sinergia.
 
-    POR QUÉ NO BASTA `projection["team_game_score"]` (BUG REAL, ver
-    CLAUDE.md): ese valor es el del equipo a PLENA SALUD y sin sinergia.
-    Usarlo como línea base rompía la restricción de suma cero por dos
-    términos que NO se anulan entre sí y que ninguno estaba centrado:
+    POR QUÉ NO BASTA `projection["team_game_score"]`: ese valor es el del
+    equipo a PLENA SALUD y sin sinergia. Usarlo como línea base rompe la
+    restricción de suma cero por dos términos que NO se anulan entre sí y
+    que ninguno queda centrado:
 
       - Las ausencias por lesión bajan el Game Score efectivo del equipo
         promedio de ~88.7 a ~66.6 (medido en 2024-25), o sea unos -4.6
@@ -335,12 +335,15 @@ def expected_team_game_score_equivalent(
         al net rating de todos los equipos por igual, así que desplaza a
         la liga entera hacia arriba.
 
-    Los dos venían cancelándose por casualidad con la escala antigua
-    (0.29): -6.4 + 9.7 = +3.3, que explica casi exactamente el error medio
-    residual de -3.5 victorias que quedó documentado como "sin explicar".
-    Al re-calibrar la escala a 0.21 el término negativo encogió y el sesgo
-    saltó a +5.0. Dos errores grandes de signo opuesto se veían como un
-    error pequeño.
+    Los dos términos pueden cancelarse por casualidad con una escala de
+    conversión concreta, ocultando el problema -- con la escala 0.29
+    daban -6.4 y +9.7, cuya suma (+3.3) coincidía casi exactamente con el
+    error medio residual de -3.5 victorias que en su momento quedó sin
+    explicar. Recalibrar `game_score_to_net_rating_scale` cambia cuánto
+    pesa cada término por separado, así que puede destapar un sesgo que
+    antes parecía pequeño solo por la cancelación fortuita -- de ahí que
+    esta función esté centrada explícitamente en vez de depender de que
+    los dos errores seguían cancelándose.
 
     El ajuste de sinergia se divide por `game_score_to_net_rating_scale`
     para expresarlo en unidades de Game Score, que son las de la línea
@@ -463,8 +466,8 @@ def run_backtest_case(
     TEMPORADA DEL CASO (ver aging_curve.compute_league_game_score_baseline).
     Si se pasa, sustituye a `league_average_game_score_per36` del config
     para este caso -- imprescindible para no premiar a los equipos
-    modernos solo por jugar en una era de más anotación (ver "BUG REAL:
-    INFLACIÓN DE ERA" en el docstring de simulation.py). Si es None se
+    modernos solo por jugar en una era de más anotación (ver
+    "CALIBRACIÓN DE ERA" en el docstring de simulation.py). Si es None se
     usa el valor del config, que es lo correcto solo si todos los casos
     son de la misma temporada.
     """
@@ -738,7 +741,7 @@ def build_backtest_sweep_dataset(config: Dict[str, Any]) -> pd.DataFrame:
     game_log = pd.read_csv(paths["processed"] / "backtest_sweep_advanced_game_logs.csv")
 
     # Línea base de liga POR TEMPORADA (ver aging_curve.compute_league_game_score_baseline
-    # y "BUG REAL: INFLACIÓN DE ERA" en simulation.py). El sweep cubre los
+    # y "CALIBRACIÓN DE ERA" en simulation.py). El sweep cubre los
     # 30 equipos, así que su muestra de jugadores SÍ es representativa de
     # la liga de cada temporada -- por eso se calcula aquí y no en el
     # backtest de 4 casos narrativos, cuya muestra son solo ~60 jugadores

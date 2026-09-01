@@ -14,8 +14,7 @@ para datos tabulares de este tamaño (decenas de miles de partidos, media
 docena de features) los árboles con boosting entrenados desde cero baten
 de forma consistente a redes neuronales/transfer learning, y no existe
 ningún modelo preentrenado cuyos pesos codifiquen algo transferible a
-este esquema de columnas concreto. Ver la discusión que motivó este
-experimento.
+este esquema de columnas concreto.
 
 DE DÓNDE SALEN LOS DATOS -- CERO INGESTA NUEVA
 ------------------------------------------------
@@ -87,12 +86,11 @@ excluida. Métricas fuera de muestra fold a fold: Brier score (foco en
 calibración de probabilidad, no solo acierto binario -- es lo que de
 verdad usa el simulador aguas abajo), log-loss y accuracy.
 
-CALIDAD DE DATOS -- QUÉ SE PROBÓ Y QUÉ CAMBIÓ DE VERDAD
+CALIDAD DE DATOS -- DOS HIPÓTESIS DE PREPARACIÓN PROBADAS
 -----------------------------------------------------------
 Antes de aceptar el resultado negativo de más abajo, se auditó si el
-problema era de CALIDAD/PREPARACIÓN de los datos en vez de falta de
-señal. Dos hipótesis, ambas medidas con el mismo LOSO -- una se
-descartó, la otra SÍ mejoró el modelo de forma real:
+problema era de calidad/preparación de los datos en vez de falta de
+señal. Dos hipótesis, ambas medidas con el mismo LOSO:
 
 1. Tope de margen de victoria (MOV cap). Los partidos con
    |net_rating_estimate| > 25 son ~8.5% del total, y algunos son
@@ -101,9 +99,9 @@ descartó, la otra SÍ mejoró el modelo de forma real:
    -- datos reales, no errores de captura). La intuición de sistemas de
    rating conocidos (Sagarin, ELO con tope de margen) es que estos
    blowouts sobrerrepresentan "garbage time" y conviene recortarlos.
-   PROBADO Y DESCARTADO: recortar el margen EMPEORA el Brier score de
-   forma monótona según se aprieta el tope (sin tope 0.2230 -> cap=20
-   0.2232 -> cap=15 0.2235 -> cap=10 0.2241). Para este problema
+   Resultado: recortar el margen EMPEORA el Brier score de forma
+   monótona según se aprieta el tope (sin tope 0.2230 -> cap=20 0.2232
+   -> cap=15 0.2235 -> cap=10 0.2241). Descartado: para este problema
    concreto, un margen de 50 puntos SÍ es información real sobre la
    diferencia de calidad entre los dos equipos, no ruido a filtrar.
 
@@ -115,12 +113,12 @@ descartó, la otra SÍ mejoró el modelo de forma real:
    (empeora ligerísimamente -- la señal ya se estabilizó). La media
    EXPANDIDA (todos los partidos previos de la temporada, sin ventana
    fija) da 0.2175 -- empata con la mejor ventana fija encontrada, sin
-   necesitar elegir un número mágico. CONFIRMADO Y APLICADO: es el
-   default actual de `build_team_game_features` (`rolling_window=None`).
-   Este SÍ era un problema real de preparación de datos: con ventana=10
+   necesitar elegir un número mágico. Adoptado como default de
+   `build_team_game_features` (`rolling_window=None`): con ventana=10
    (el valor inicial, elegido sin barrer alternativas) se estaba
    entrenando con una estimación de fuerza de equipo más ruidosa de lo
-   necesario.
+   necesario, así que este ajuste sí corregía un problema real de
+   preparación de datos.
 
 RESULTADOS (LOSO sobre las 16 temporadas del backtest sweep, 18.843
 partidos fuera de muestra, home win rate real 57.2%, con media expandida
@@ -160,15 +158,15 @@ no sobre `net_rating_diff` real de equipos NBA, así que no son
 comparables directamente sin una capa de traducción que no existe hoy.
 Se deja `simulation.py` SIN TOCAR.
 
-¿Y SI SE ENTRENA MÁS TIEMPO? -- COMPROBADO, EMPEORA
+¿MÁS ITERACIONES DE ENTRENAMIENTO AYUDAN? -- NO, EMPEORAN
 ------------------------------------------------------
-Medido ANTES de la mejora de ventana expandida de arriba (con
-ventana=10 fija) -- la conclusión cualitativa (más árboles sobreajustan,
-no ayudan) no depende de esa mejora, pero las cifras exactas de abajo
-son de la versión anterior de las features, no se han vuelto a medir
-tras el cambio a media expandida.
+Medido con la versión anterior de las features (ventana=10 fija, antes
+de adoptar la media expandida de arriba); la conclusión cualitativa (más
+árboles sobreajustan, no ayudan) no depende de ese cambio posterior,
+pero las cifras exactas de abajo no se han vuelto a medir tras pasar a
+media expandida.
 
-Pregunta obligada: ¿el techo de arriba es un techo de información o solo
+Pregunta relevante: ¿el techo de arriba es un techo de información o solo
 falta de entrenamiento? `HistGradientBoostingClassifier` no tiene
 "épocas" (eso es terminología de redes neuronales) -- el parámetro
 análogo es `max_iter` (número de árboles). Con la config por defecto

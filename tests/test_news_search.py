@@ -111,8 +111,8 @@ def test_clean_content_collapses_whitespace():
 
 
 def test_search_recent_news_cleans_real_world_noisy_result(monkeypatch):
-    # Ejemplo real reportado por el usuario -- tabla de roster mal
-    # extraida por Tavily, con banners publicitarios repetidos.
+    # Ejemplo real de tabla de roster mal extraida por Tavily, con
+    # banners publicitarios repetidos.
     noisy_content = (
         "|  |  |  |  |\n"
         " ---  --- |\n"

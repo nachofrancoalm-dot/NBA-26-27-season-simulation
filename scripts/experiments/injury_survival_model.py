@@ -9,11 +9,9 @@ componentes: historical_load=0.45, recency=0.35, age=0.20 -- pesos de
 literatura epidemiológica general, nunca ajustados a los datos de ESTE
 proyecto).
 
-RESULTADO: NEGATIVO, bien validado -- ver "CONCLUSIÓN" al final de este
-docstring. Documentado igual que scripts/experiments/aging_curve_shrinkage.py
-y hustle_stats_signal.py: no todas las investigaciones tienen que ganar,
-pero sí tienen que quedar registradas con el mismo rigor que las que sí
-aportaron algo.
+RESULTADO: negativo, bien validado -- ver "CONCLUSIÓN" al final de este
+docstring. No todas las hipótesis de esta línea de experimentos ganan,
+pero se documentan con el mismo rigor que las que sí aportan señal.
 
 MISMAS COVARIABLES DE PARTIDA, PESOS APRENDIDOS EN VEZ DE FIJADOS A MANO
 -------------------------------------------------------------------------
@@ -24,18 +22,17 @@ predice (mismo patrón de no-look-ahead que `backtesting.filter_seasons_before`)
 La pregunta que responde este experimento es específicamente: "¿son
 0.45/0.35/0.20 los pesos correctos, o los datos dicen otra cosa?".
 
-BUG DE COLINEALIDAD encontrado y corregido en el camino (MISMO patrón
-que PIE/NET_RATING en advanced_impact.py): `historical_load_prior`
-(media simple de partidos perdidos) y `recency_prior` (la misma media,
-ponderada por recencia) correlacionan **r=0.974** entre sí -- casi la
-misma señal calculada dos veces. El primer ajuste de Cox con las 3
-covariables originales daba un coeficiente NEGATIVO y estable para
-`historical_load_prior` (más historial de lesiones -> MENOS riesgo, al
-revés de lo esperado) en los 16 pliegues -- el mismo artefacto de
-colinealidad que ya hizo descartar PIE. Quitar `historical_load_prior`
-del modelo (dejando solo `recency_prior`, más motivada por la
-literatura) estabiliza los coeficientes sin cambiar el resultado de
-fondo.
+COLINEALIDAD ENTRE COVARIABLES (mismo patrón que PIE/NET_RATING en
+advanced_impact.py): `historical_load_prior` (media simple de partidos
+perdidos) y `recency_prior` (la misma media, ponderada por recencia)
+correlacionan **r=0.974** entre sí -- casi la misma señal calculada dos
+veces. El ajuste de Cox con las 3 covariables originales da un
+coeficiente NEGATIVO y estable para `historical_load_prior` (más
+historial de lesiones -> MENOS riesgo, al revés de lo esperado) en los
+16 pliegues -- el mismo artefacto de colinealidad que ya hizo descartar
+PIE. Quitar `historical_load_prior` del modelo (dejando solo
+`recency_prior`, más motivada por la literatura) estabiliza los
+coeficientes sin cambiar el resultado de fondo.
 
 CÓMO SE ENCAJA LA SUPERVIVENCIA EN DATOS QUE SOLO TIENEN GP AGREGADO
 -----------------------------------------------------------------------

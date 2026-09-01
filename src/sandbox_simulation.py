@@ -223,23 +223,21 @@ def simulate_custom_roster(
     )
     if not fixed_by_yaml_or_slider:
         league_projections = load_player_pool(config)
-        # BUG REAL ENCONTRADO (reportado por el usuario: el mismo roster
-        # sin editar daba 26 victorias aquí y 42 en /sandbox/league) --
-        # `run_monte_carlo` recibe `synergy_matrix=None` (limitación
-        # documentada del sandbox: sin sinergia de alineación), así que tu
-        # equipo NUNCA recibe el bonus de sinergia. Pero la línea base SÍ
-        # lo llevaba incorporado vía `league_mean_synergy_net_rating` (la
-        # sinergia media de los 30 equipos reales, ~+10.65 de net rating)
-        # -- exactamente el mismo bug de "suma cero rota por un término no
-        # centrado" que ya se encontró y arregló una vez en
-        # simulation.py/backtesting.py (ver su docstring), reintroducido
-        # aquí sin querer. Con la sinergia en un lado y no en el otro, tu
-        # equipo se comparaba contra un rival ~10 puntos de net rating más
-        # fuerte de lo que le tocaba, cada partido. Mientras el sandbox no
-        # module sinergia para tu equipo, la línea base tampoco debe
-        # llevarla -- 0.0 dej a los dos lados en igualdad de condiciones
-        # (confirmado: alinea el resultado con /sandbox/league, que
-        # tampoco aplica sinergia a NINGUNO de los 30 equipos).
+        # `run_monte_carlo` recibe `synergy_matrix=None` aquí (limitación
+        # documentada del sandbox: sin sinergia de alineación), así que
+        # este roster nunca recibe el bonus de sinergia. La línea base de
+        # liga, en cambio, sí puede llevarlo incorporado vía
+        # `league_mean_synergy_net_rating` (la sinergia media de los 30
+        # equipos reales, ~+10.65 de net rating) -- mismo bug de "suma
+        # cero rota por un término no centrado" que simulation.py/
+        # backtesting.py ya documentan y evitan (ver su docstring). Con la
+        # sinergia en un lado y no en el otro, el roster se compara contra
+        # un rival ~10 puntos de net rating más fuerte de lo que le toca,
+        # cada partido. Mientras el sandbox no module sinergia para este
+        # equipo, la línea base tampoco debe llevarla -- forzar 0.0 deja a
+        # los dos lados en igualdad de condiciones y alinea el resultado
+        # con /sandbox/league, que tampoco aplica sinergia a ninguno de
+        # los 30 equipos.
         mc_cfg["league_average_game_score_per36"] = compute_league_average_game_score_per36(
             league_projections,
             league_mean_synergy_net_rating=0.0,

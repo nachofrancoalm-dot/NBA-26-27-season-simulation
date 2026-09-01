@@ -103,10 +103,9 @@ export function pillToggle(options, current, onChange) {
  * el repo -- ver README) que cae de vuelta al texto si la imagen no
  * carga. El texto y la imagen son ALTERNATIVOS, nunca se apilan -- si
  * se dejan los dos en el DOM a la vez, el hueco que deja `object-fit:
- * contain` dentro del círculo deja asomar el texto por un lado (el bug
- * que se vio en Fase 2 como "logos con letras a la izquierda").
- * `teamBadge()` y la foto de jugador del popup son dos casos de este
- * mismo mecanismo. */
+ * contain` dentro del círculo deja asomar el texto por un lado (se ve
+ * como "logos con letras a la izquierda"). `teamBadge()` y la foto de
+ * jugador del popup son dos casos de este mismo mecanismo. */
 export function photoBadge(src, fallbackText, size = 40, extraClass = "") {
   const label = document.createTextNode(fallbackText || "?");
   const badge = el("div", { class: `team-badge ${extraClass}`.trim() }, [label]);

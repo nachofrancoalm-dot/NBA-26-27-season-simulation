@@ -74,7 +74,7 @@ reutilizar el caché del piloto):
     Log-loss     -- sin: 0.6242   con: 0.6192
     Accuracy     -- sin: 64.93%   con: 65.42%
 
-CONCLUSIÓN: POSITIVO, primera mejora real de toda esta línea de
+CONCLUSIÓN: positiva, primera mejora real de toda esta línea de
 experimentos (game_win_predictor.py, tope de MOV, más iteraciones de
 GBT -- todos negativos o neutros). La mejora del sweep completo (~1%
 relativo en Brier) es más MODESTA que la del piloto (~2.4%) -- esperable,
@@ -116,7 +116,7 @@ de inicio de temporada -- mismo criterio que el resto del proyecto):
     Log-loss    -- sin: 0.6219   oráculo: 0.6146   realista: 0.6182
     Accuracy    -- sin: 65.16%   oráculo: 65.70%   realista: 65.78%
 
-CONCLUSIÓN FINAL: POSITIVO Y DESPLEGABLE. La versión realista conserva
+CONCLUSIÓN FINAL: positiva y desplegable. La versión realista conserva
 ~55% de la mejora de Brier del oráculo (0.0017 de 0.0031) sin necesitar
 ningún dato en vivo -- y en accuracy incluso iguala/supera ligeramente
 al oráculo (65.78% vs. 65.70%, diferencia dentro del ruido). Es la

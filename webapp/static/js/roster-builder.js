@@ -13,11 +13,11 @@
 // vuelva a pulsar "Volver a los datos reales" en el banner de esas
 // pestañas. Antes había TAMBIÉN un botón "Simular este roster" que solo
 // corría el Monte Carlo de tu equipo contra un rival proxy genérico
-// (sandbox_simulation.py, sin el resto de la liga) -- quitado a
-// petición del usuario: sin comparar contra los otros 29 equipos reales,
-// ese número aportaba poco frente al de la liga completa. La tabla de
-// estadísticas individuales por jugador (antes solo se cargaba tras ESE
-// botón) ahora se carga tras simular la liga -- ver runLeagueSimulation.
+// (sandbox_simulation.py, sin el resto de la liga) -- quitado porque,
+// sin comparar contra los otros 29 equipos reales, ese número aportaba
+// poco frente al de la liga completa. La tabla de estadísticas
+// individuales por jugador (antes solo se cargaba tras ESE botón) ahora
+// se carga tras simular la liga -- ver runLeagueSimulation.
 
 import { api } from "./api.js";
 import { el, teamBadge, emptyState, dataTable, pillToggle } from "./ui.js";

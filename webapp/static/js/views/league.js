@@ -158,15 +158,14 @@ async function loadTeamDetail(container, abbreviation, myAbbreviation, hypotheti
   const metricsBox = el("div");
   const tableBox = el("div", { style: "margin-top: 16px;" });
 
-  // Bug real reportado por el usuario: al activar un roster hipotético,
-  // este explorador seguía llamando a /api/league/team/{abbreviation}
-  // (datos REALES) sin importar qué equipo se seleccionara -- así que
-  // elegir tu propio equipo mostraba su roster real de siempre, como si
-  // la sustitución hipotética nunca hubiera pasado. Standings/Playoffs/
-  // Premios sí se habían enganchado a hypothetical-league.js, este
-  // explorador se quedó fuera. Aquí SOLO se desvía cuando el equipo
-  // elegido es el tuyo -- los otros 29 siguen siendo reales, coherente
-  // con el resto de la vista.
+  // Con un roster hipotético activo, este explorador debe desviarse de
+  // /api/league/team/{abbreviation} (datos REALES) SOLO cuando el equipo
+  // elegido es el tuyo -- si no, elegir tu propio equipo mostraría su
+  // roster real de siempre, como si la sustitución hipotética nunca
+  // hubiera pasado (Standings/Playoffs/Premios ya están enganchados a
+  // hypothetical-league.js; este explorador necesita el mismo chequeo).
+  // Los otros 29 equipos siguen siendo reales, coherente con el resto de
+  // la vista.
   async function loadRoster() {
     let data;
     const isMyHypotheticalTeam = hypothetical && abbreviation === myAbbreviation;

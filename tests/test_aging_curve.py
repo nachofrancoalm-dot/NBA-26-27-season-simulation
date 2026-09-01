@@ -77,13 +77,13 @@ def test_recency_weighted_baseline_favors_recent_seasons():
 
 
 def test_recency_weighted_baseline_downweights_a_short_recent_season():
-    """Caso real: Jayson Tatum volvió de una lesión de Aquiles y jugó
-    solo 16 partidos (522 min) tras dos temporadas completas (~2600 min)
-    -- esa temporada corta NO debe pesar igual que una completa solo
-    por ser "la más reciente". Con solo peso de recencia (sin peso de
-    fiabilidad por minutos), la línea base caería mucho más cerca de la
-    temporada corta; con el peso de fiabilidad, debe quedarse más cerca
-    de las dos temporadas completas."""
+    """Usa las temporadas reales de Jayson Tatum (16 partidos / 522 min
+    tras volver de una lesión de Aquiles, precedidos por dos temporadas
+    completas de ~2600 min) para verificar que una temporada corta NO
+    pesa igual que una completa solo por ser "la más reciente". Con solo
+    peso de recencia (sin peso de fiabilidad por minutos), la línea base
+    caería mucho más cerca de la temporada corta; con el peso de
+    fiabilidad, debe quedarse más cerca de las dos temporadas completas."""
     seasons = _seasons(
         [
             {"season": "2023-24", "age": 25, "min": 2645, "pts": 2000},  # completa, PTS/36 ~ 27.2
@@ -93,9 +93,8 @@ def test_recency_weighted_baseline_downweights_a_short_recent_season():
     )
     baseline = compute_recency_weighted_baseline(seasons, n_seasons=3, half_life_seasons=1.5)
 
-    # Recencia pura (sin peso de fiabilidad) -- lo que hacía la función
-    # ANTES de este fix, para comparar contra el resultado real de
-    # arriba.
+    # Recencia pura (sin peso de fiabilidad), para comparar contra el
+    # resultado ponderado de arriba.
     per36 = compute_per36_stats(seasons)
     recent = per36.sort_values("SEASON_ID", ascending=False).reset_index(drop=True)
     seasons_ago = recent.index.to_numpy()
@@ -111,12 +110,13 @@ def test_recency_weighted_baseline_downweights_a_short_recent_season():
 
 
 def test_reliability_weighted_minutes_per_game_favors_full_seasons_over_a_short_recent_one():
-    """Caso real: Dereck Lively II (DAL) jugó temporadas completas de
-    ~23 MPG y una última temporada de solo 7 partidos (16.4 MPG) por una
-    fractura de pie -- el MPG ponderado debe quedar mucho más cerca de
-    su rol habitual (~23) que del promedio ingenuo de la última
-    temporada sola, para que no caiga fuera del top-N de rotación de
-    league_simulation.project_team_roster por una muestra corta."""
+    """Usa las temporadas reales de Dereck Lively II (DAL): temporadas
+    completas de ~23 MPG y una última temporada de solo 7 partidos
+    (16.4 MPG) por una fractura de pie. El MPG ponderado debe quedar
+    mucho más cerca de su rol habitual (~23) que del promedio ingenuo de
+    la última temporada sola, para que no caiga fuera del top-N de
+    rotación de league_simulation.project_team_roster por una muestra
+    corta."""
     seasons = _seasons(
         [
             {"season": "2023-24", "age": 19, "gp": 55, "min": 1294},
@@ -134,11 +134,12 @@ def test_reliability_weighted_minutes_per_game_favors_full_seasons_over_a_short_
 
 
 def test_reliability_weighted_minutes_per_game_does_not_inflate_a_genuine_role_reduction():
-    """Caso real (Caleb Martin, DAL) que un primer intento de este fix
-    rompía: una temporada actual con muestra GRANDE (58 partidos) a rol
-    de banquillo (14.8 MPG), tras ser titular hace 2 temporadas (~27
-    MPG). Con partidos suficientes, la temporada actual YA es fiable --
-    NO debe mezclarse con el pasado ni inflarse hacia el rol antiguo."""
+    """Usa las temporadas reales de Caleb Martin (DAL): temporada actual
+    con muestra GRANDE (58 partidos) a rol de banquillo (14.8 MPG), tras
+    ser titular hace 2 temporadas (~27 MPG). Con partidos suficientes, la
+    temporada actual YA es fiable -- NO debe mezclarse con el pasado ni
+    inflarse hacia el rol antiguo (una reducción de rol genuina no debe
+    tratarse como ruido de muestra corta)."""
     seasons = _seasons(
         [
             {"season": "2023-24", "age": 27, "gp": 64, "min": 1757},  # titular, ~27.5 MPG

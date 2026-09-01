@@ -8,14 +8,14 @@ data_pipeline.fetch_league_hustle_stats) aportan señal predictiva que ni
 Game Score (puramente ofensivo) ni NET_RATING/PIE (ver
 advanced_impact.py) capturan.
 
-MOTIVACIÓN: la investigación anterior (ver CLAUDE.md, "No es un bug de
-calibración") encontró que la dispersión comprimida de victorias entre
-equipos es exactamente lo que predice la teoría de regresión lineal
-dado el nivel de correlación actual (r=0.716, R²=0.513) entre Game
-Score+NET_RATING y el diferencial de puntos real -- NO se puede arreglar
-recalibrando más, hace falta una métrica que prediga MEJOR. Los hustle
-stats son la métrica de "defensa sin balón" más rica que expone nba_api
-y que este proyecto no había probado todavía.
+MOTIVACIÓN: el análisis de calibración (ver CLAUDE.md) muestra que la
+dispersión comprimida de victorias entre equipos es exactamente lo que
+predice la teoría de regresión lineal dado el nivel de correlación
+actual (r=0.716, R²=0.513) entre Game Score+NET_RATING y el diferencial
+de puntos real -- no es un problema de calibración, así que no se
+arregla recalibrando más; hace falta una métrica que prediga mejor. Los
+hustle stats son la métrica de "defensa sin balón" más rica que expone
+nba_api y que este proyecto no había probado todavía.
 
 LIMITACIÓN DE DATOS: la NBA solo trackea esto desde 2015-16 -- de las 16
 temporadas del backtest sweep, solo 11 tienen hustle stats (330 casos de

@@ -7,8 +7,7 @@ Liga y Playoffs / Premios individuales reflejen el escenario que acabas
 de montar, no solo el resultado agregado de tu equipo (eso ya lo hacía
 sandbox_simulation.simulate_custom_roster).
 
-DECISIÓN DE DISEÑO explícita (confirmada con el usuario antes de
-construir esto): los jugadores que "tomas prestados" de otros equipos
+DECISIÓN DE DISEÑO: los jugadores que "tomas prestados" de otros equipos
 reales para tu roster hipotético NO se quitan de sus equipos reales --
 esos 29 equipos se simulan exactamente igual que en la liga real. Es la
 forma más simple de responder "¿cómo le iría a ESTE roster contra la

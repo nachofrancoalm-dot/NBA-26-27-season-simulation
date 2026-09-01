@@ -594,9 +594,9 @@ def test_mvp_candidates_include_offensive_comparison_stats_and_team_record():
 
 def test_dpoy_candidates_include_full_comparison_stats():
     """El ranking (dpoy_score) sigue siendo puramente defensivo, pero las
-    columnas devueltas incluyen también PPG/APG/tiro -- a petición del
-    usuario, para que la vista previa al pasar el ratón en webapp/
-    muestre el mismo set de stats que el resto de premios."""
+    columnas devueltas incluyen también PPG/APG/tiro, para que la vista
+    previa al pasar el ratón en webapp/ muestre el mismo set de stats
+    que el resto de premios."""
     df = pd.DataFrame([_player_row_with_stats(1, "Defender", pf_projected=200.0)])
     result = compute_dpoy_candidates(df, GAMES_PER_SEASON, team_record={1: "50-32"}, top_n=5)
 

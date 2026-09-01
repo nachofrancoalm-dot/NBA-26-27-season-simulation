@@ -33,9 +33,9 @@ class RevalidatingStaticFiles(StaticFiles):
     """StaticFiles fuerza al navegador a revalidar (If-Modified-Since/ETag)
     en cada carga en vez de reutilizar la caché ciegamente. Sin esto, tras
     editar un .js/.css el navegador puede seguir sirviendo la versión
-    vieja desde caché heurística durante horas -- ya pasó en esta sesión
-    (el bracket de playoffs se veía con el layout viejo tras una edición
-    de CSS/JS porque el navegador no volvió a pedir el archivo). No usa
+    vieja desde caché heurística durante horas (visto en producción: el
+    bracket de playoffs se quedó con el layout viejo tras una edición de
+    CSS/JS porque el navegador no volvió a pedir el archivo). No usa
     no-store porque eso forzaría re-descargar el archivo entero cada vez
     -- no-cache sigue permitiendo una respuesta 304 barata cuando el
     archivo no cambió."""

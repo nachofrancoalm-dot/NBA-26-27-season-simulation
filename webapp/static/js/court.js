@@ -111,7 +111,7 @@ function fmt1(value) {
   return typeof value === "number" ? value.toFixed(1) : value;
 }
 
-/** Set de stats UNIFICADO con leaderboard.js (a petición del usuario):
+/** Set de stats UNIFICADO con leaderboard.js:
  * PPG/RPG/APG/SPG/BPG/FG%/3P%/récord de equipo + el "valor" que ordena
  * el quinteto (season_value en All-NBA, defensive_value en
  * All-Defensive -- awards_projection.compute_all_nba_teams/

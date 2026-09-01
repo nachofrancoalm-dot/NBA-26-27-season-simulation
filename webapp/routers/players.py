@@ -189,9 +189,9 @@ def _projected_season_row(row: Optional[pd.Series], config) -> Optional[dict[str
         team_abbreviation = config["team"].get("abbreviation")
 
     # GP refleja el riesgo de lesión real del jugador -- sin esto, todos
-    # los jugadores mostraban los games_per_season completos (82), como
-    # si nadie se fuera a lesionar nunca (bug real reportado). Misma
-    # fórmula EXACTA que ya usa select_roster_view() para la columna
+    # los jugadores mostrarían los games_per_season completos (82), como
+    # si nadie se fuera a lesionar nunca. Misma fórmula EXACTA que ya usa
+    # select_roster_view() para la columna
     # "GP" del resto de tablas (ver simulation.compute_expected_games_played):
     # la media de la binomial negativa que sortea sample_injury_absences,
     # no una aproximación aparte.

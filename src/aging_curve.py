@@ -154,14 +154,14 @@ def compute_league_game_score_baseline(
     Devuelve un DataFrame con columnas (season, league_game_score_per36,
     n_players).
 
-    POR QUÉ EXISTE (ver "BUG REAL: INFLACIÓN DE ERA" en el docstring de
-    simulation.py): el nivel de Game Score de la NBA NO es estable en el
+    POR QUÉ EXISTE: el nivel de Game Score de la NBA no es estable en el
     tiempo -- subió de ~10.7 por-36 en 2010-11 a ~13.4 en 2024-25 (más
-    ritmo de juego y revolución del triple). Comparar a un equipo de
-    2024-25 contra una línea base fija calibrada para "un jugador
-    promedio de Hollinger" (10.0) le regala ~22 puntos de Game Score de
-    ventaja que no son mérito suyo, sino de la época en la que juega.
-    Cada equipo debe compararse contra la media de SU PROPIA temporada.
+    ritmo de juego y revolución del triple; ver también el ajuste por
+    era en simulation.py). Comparar a un equipo de 2024-25 contra una
+    línea base fija calibrada para "un jugador promedio de Hollinger"
+    (10.0) le regala ~22 puntos de Game Score de ventaja que no son
+    mérito suyo, sino de la época en la que juega. Cada equipo debe
+    compararse contra la media de SU PROPIA temporada.
 
     `career_stats` debe tener el esquema de roster_career_stats.csv
     (PLAYER_ID, SEASON_ID, MIN + las columnas de caja). Para que la media
@@ -220,22 +220,15 @@ def compute_recency_weighted_baseline(
     ventana) de las últimas n_seasons. Devuelve un dict {stat_per36:
     valor} para cada estadística en GENERAL_STATS + SHOOTING_STATS.
 
-    EL PESO DE FIABILIDAD (investigado y añadido a petición del
-    usuario, caso real: Jayson Tatum). Antes esta función solo pesaba
-    por recencia -- una temporada de 16 partidos por vuelta de una
-    lesión de Aquiles pesaba EXACTAMENTE igual que una temporada
-    completa de 82 con tal de que ambas estuvieran "a la misma
-    distancia" en el tiempo, sin importar que una representara 20 veces
-    menos minutos de muestra que la otra. Medido sobre los datos reales
-    de Tatum (temporadas 2023-24: 2645 min, 2024-25: 2624 min, 2025-26:
-    solo 522 min/16 partidos, con FG% cayendo de ~0.45-0.47 a 0.411 en
-    ese tramo corto de adaptación): el Game Score/36 de línea base salía
-    19.74 con el tramo corto incluido a peso completo, frente a 20.90 si
-    se excluía por completo -- una diferencia real de -5.5%, no
-    despreciable. Y no es un caso aislado: la misma temporada,
-    Domantas Sabonis (19 partidos) y Keegan Murray (23) tienen el mismo
-    patrón -- veterano de rotación con una temporada reciente muy corta
-    por lesión.
+    EL PESO DE FIABILIDAD: pesar solo por recencia no basta -- una
+    temporada corta por lesión (p. ej. vuelta de una lesión de Aquiles a
+    mitad de año, 16 partidos) pesaría lo mismo que una temporada
+    completa de 82 con tal de estar "a la misma distancia" en el
+    tiempo, aunque represente 20 veces menos minutos de muestra. Esto no
+    es un caso aislado: cualquier veterano de rotación con una vuelta de
+    lesión reciente y pocos partidos jugados produce el mismo sesgo si
+    esa temporada corta entra a peso completo -- puede mover el Game
+    Score/36 de línea base varios puntos porcentuales.
 
     LA FÓRMULA: `peso_fiabilidad = MIN_de_esa_temporada / max(MIN de las
     n_seasons de la ventana)` -- normalizado DENTRO de la propia ventana
@@ -245,9 +238,7 @@ def compute_recency_weighted_baseline(
     resto -- y sigue funcionando igual de bien si TODAS las temporadas
     de la ventana son cortas). Con minutos iguales entre temporadas
     (el caso normal, sin lesiones), este peso vale 1.0 para todas y el
-    resultado es IDÉNTICO al comportamiento anterior -- por eso no hizo
-    falta tocar ningún test existente que use datos sintéticos con
-    minutos parejos.
+    resultado es idéntico a ponderar solo por recencia.
     """
     df = compute_per36_stats(player_seasons)
     recent = _most_recent_n_seasons(df, n_seasons)
@@ -298,33 +289,25 @@ def compute_reliability_weighted_minutes_per_game(
     hace una media ponderada por recencia Y por fiabilidad (GP de la
     temporada / max(GP) de la ventana) de las últimas `n_seasons`.
 
-    POR QUÉ, Y POR QUÉ NO SIEMPRE PROMEDIAR (dos casos reales opuestos
-    encontrados en Liga NBA al investigar esto):
+    POR QUÉ NO PROMEDIAR SIEMPRE: `league_simulation.project_team_roster`
+    decide qué `rotation_size` jugadores forman la rotación real de un
+    equipo a partir del MIN/GP proyectado. Si la muestra más reciente es
+    corta por una lesión reciente (pocos partidos, MPG bajo por manejo
+    de minutos en la vuelta), promediar con temporadas previas es
+    correcto: sin eso, un jugador de rol de titular puede caer fuera de
+    la rotación por una muestra de unos pocos partidos que no refleja su
+    rol real.
 
-    1. Dereck Lively II (DAL): 7 partidos/16.4 MPG en 2025-26 (vuelta de
-       una fractura de pie), tras 55 partidos/23.5 MPG y 36 partidos/23.1
-       MPG las dos temporadas anteriores. `league_simulation.project_team_roster`
-       decide qué `rotation_size` jugadores forman la rotación real de un
-       equipo a partir del MIN/GP de la ÚLTIMA temporada ÚNICAMENTE --
-       con eso, Lively caía FUERA de la rotación (0 minutos proyectados)
-       pese a tener un Game Score/36 de 19.8, propio de titular. Aquí SÍ
-       hace falta mirar atrás: su muestra de 7 partidos es demasiado
-       corta para fijar su rol.
-
-    2. Caleb Martin (DAL): 58 partidos/14.8 MPG en 2025-26 -- rol de
-       banquillo REAL y bien medido (58 partidos es una muestra grande),
-       tras ser titular en Miami hace 2 temporadas (~27 MPG). Un primer
-       intento de este fix que promediaba SIEMPRE las últimas N
-       temporadas (sin este umbral) inflaba a Martin hacia sus ~27 MPG de
-       hace 2 años y lo hacía desplazar a Daniel Gafford (GS/36=17.7, rol
-       de rotación real y actual) de la rotación de Dallas -- un cambio
-       de equipo/rol genuino, MAL confundido con una muestra corta. Con
-       58 partidos, su temporada actual YA es fiable tal cual, no hace
-       falta (ni conviene) mirar atrás.
-
-    La diferencia entre los dos casos es GP de la temporada más reciente
-    (7 vs. 58) -- de ahí el umbral, en vez de promediar siempre como en
-    el primer intento.
+    Pero promediar siempre (sin umbral) también falla en el caso
+    contrario: un jugador con una temporada actual larga y bien medida
+    (muchos partidos) que tuvo un rol distinto hace 1-2 temporadas (p.
+    ej. era titular en otro equipo) se ve arrastrado hacia ese rol
+    antiguo aunque su rol actual, ya con muestra grande, sea otro --
+    puede desplazar indebidamente a un compañero con un rol de rotación
+    real y vigente. Por eso el umbral usa GP de la temporada más
+    reciente: por encima de `min_reliable_games` esa temporada ya es
+    fiable por sí sola y no se mezcla con historial; por debajo, sí hace
+    falta mirar atrás.
     """
     df = dedupe_traded_seasons(player_seasons)
     recent = _most_recent_n_seasons(df, n_seasons)

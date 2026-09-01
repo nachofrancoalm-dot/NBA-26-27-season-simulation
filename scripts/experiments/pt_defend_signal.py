@@ -10,18 +10,17 @@ no capturan -- misma pregunta que hustle_stats_signal.py (que dio
 resultado NEGATIVO), pero con una métrica de impacto defensivo directo
 en vez de actividad/esfuerzo.
 
-BUG REAL en la primera versión de este experimento, encontrado antes de
-reportar el resultado: usaba el PCT_PLUSMINUS de la MISMA temporada que
-se predecía (R²=0.69, altísimo) -- violación de la regla de NO
-LOOK-AHEAD de este proyecto (ver backtesting.py y
+NOTA METODOLÓGICA: usar el PCT_PLUSMINUS de la MISMA temporada que se
+predice da R²=0.69, pero es una violación de la regla de no-look-ahead
+de este proyecto (ver backtesting.py y
 advanced_impact.adjusted_game_score_per36, que sí la respetan). Un
 equipo que defendió bien DURANTE una temporada correlaciona con su
 diferencial DURANTE esa misma temporada casi por definición -- no es una
-predicción, es casi tautológico. Reescrito para usar SOLO la temporada
-PREVIA de cada jugador (mismo patrón que
-advanced_impact.compute_recency_weighted_advanced): "¿la defensa por
-tracking del año pasado predice el resultado de este año?", la pregunta
-real que hay que responder.
+predicción, es casi tautológico, así que ese R² no es un resultado
+válido. El diseño correcto usa SOLO la temporada PREVIA de cada jugador
+(mismo patrón que advanced_impact.compute_recency_weighted_advanced):
+"¿la defensa por tracking del año pasado predice el resultado de este
+año?", la pregunta real que hay que responder.
 
 LIMITACIÓN DE DATOS: disponible desde 2013-14 (Second Spectrum) -- para
 usar la temporada PREVIA como predictor, el primer caso utilizable es

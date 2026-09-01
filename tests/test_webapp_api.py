@@ -346,9 +346,9 @@ def test_explainer_ask_503_without_api_key(client, monkeypatch):
 
 
 def test_explainer_ask_forwards_pasted_news_text(client, monkeypatch):
-    # news_text es opcional y solo llega si el usuario lo pega en el
-    # textarea del frontend -- este test confirma que el router lo
-    # reenvia a explain_question tal cual, sin tocarlo.
+    # news_text es opcional y solo llega si se pega texto en el textarea
+    # del frontend -- este test confirma que el router lo reenvia a
+    # explain_question tal cual, sin tocarlo.
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     captured = {}
 

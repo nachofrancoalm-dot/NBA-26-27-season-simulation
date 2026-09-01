@@ -13,8 +13,7 @@ El texto que devuelve se pasa como `news_text` a `explain_question()`
 tras una limpieza BEST-EFFORT (`_clean_content()` -- quita banners
 publicitarios repetidos, separadores de tabla markdown mal extraídos y
 pipes sueltos; los resultados de búsqueda reales suelen venir con este
-ruido, ver ejemplo real documentado en el PR/commit que añadió la
-limpieza) -- la búsqueda solo cambia CÓMO se rellena ese texto (antes:
+ruido) -- la búsqueda solo cambia CÓMO se rellena ese texto (antes:
 pegado a mano; ahora: además, un buscador), no qué se hace con él
 después. Sigue pasando por retrieve_relevant_news_snippets() /
 build_news_section() (fase 1): mismo TF-IDF, misma etiqueta
