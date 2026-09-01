@@ -34,7 +34,7 @@ from config_loader import PROJECT_ROOT, get_paths
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-MODEL_ID = "llama-3.3-70b-versatile"
+MODEL_ID = "openai/gpt-oss-120b"
 
 # Etiqueta de la seccion de noticias pegadas por el usuario -- nunca se
 # mezcla sin marcar con las secciones de datos validados del pipeline.
