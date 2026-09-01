@@ -154,12 +154,10 @@ function prettifyLabel(col) {
 
 /** Compara valores de celda: numérico si ambos son number, alfabético
  * (localeCompare es-ES) si no. null/undefined siempre al final. */
+/** Compara dos valores de celda YA sin nulos (el llamante en dataTable
+ * los saca antes, para que un valor ausente no cambie de sitio con la
+ * dirección del orden). */
 function compareCellValues(a, b) {
-  const aMissing = a == null;
-  const bMissing = b == null;
-  if (aMissing && bMissing) return 0;
-  if (aMissing) return 1;
-  if (bMissing) return -1;
   if (typeof a === "number" && typeof b === "number") return a - b;
   return String(a).localeCompare(String(b), "es", { numeric: true, sensitivity: "base" });
 }
@@ -213,7 +211,17 @@ export function dataTable(records, glossary = {}, options = {}) {
       sortColumn == null
         ? baseRows
         : [...baseRows].sort((a, b) => {
-            const cmp = compareCellValues(a[sortColumn], b[sortColumn]);
+            const av = a[sortColumn];
+            const bv = b[sortColumn];
+            // Los valores ausentes se quedan siempre al final, en asc y en
+            // desc -- si esto se negara junto al resto de la comparación en
+            // desc, subirían al principio (visto de verdad con la tabla de
+            // líderes de liga: jugadores sin minutos "ganando" el orden por
+            // rebotes al invertir).
+            if (av == null && bv == null) return 0;
+            if (av == null) return 1;
+            if (bv == null) return -1;
+            const cmp = compareCellValues(av, bv);
             return sortDirection === "desc" ? -cmp : cmp;
           });
     tbody.replaceChildren(...rows.map(buildRow));

@@ -8,6 +8,7 @@ import * as simulationView from "./views/simulation.js";
 import * as synergyView from "./views/synergy.js";
 import * as backtestView from "./views/backtest.js";
 import * as leagueView from "./views/league.js";
+import * as leadersView from "./views/leaders.js";
 import * as awardsView from "./views/awards.js";
 import * as championsView from "./views/champions.js";
 import * as explainerView from "./views/explainer.js";
@@ -21,6 +22,7 @@ const TEAM_SUBVIEWS = {
 
 const LEAGUE_SUBVIEWS = {
   liga: leagueView,
+  lideres: leadersView,
   premios: awardsView,
   campeones: championsView,
 };

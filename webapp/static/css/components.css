@@ -527,6 +527,22 @@ table.data-table {
   border-bottom-left-radius: 4px;
 }
 
+select {
+  background: var(--surface-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .chat-input-row {
   display: flex;
   gap: 8px;

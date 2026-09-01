@@ -46,6 +46,8 @@ def _read_csv_if_exists(path: Path) -> Optional[pd.DataFrame]:
 PER_GAME_STATS: Dict[str, str] = {
     "PPG": "PTS_projected",
     "RPG": "REB_projected",
+    "ORPG": "OREB_projected",
+    "DRPG": "DREB_projected",
     "APG": "AST_projected",
     "SPG": "STL_projected",
     "BPG": "BLK_projected",
@@ -57,6 +59,8 @@ PER_GAME_STATS: Dict[str, str] = {
 TOTAL_STATS: Dict[str, str] = {
     "PTS_projected": "PTS",
     "REB_projected": "REB",
+    "OREB_projected": "OREB",
+    "DREB_projected": "DREB",
     "AST_projected": "AST",
     "STL_projected": "STL",
     "BLK_projected": "BLK",
@@ -71,6 +75,13 @@ ROSTER_META_COLUMNS: List[str] = [
 LEAGUE_PLAYER_META_COLUMNS: List[str] = [
     "player_name", "team_abbreviation", "conference", "current_age", "target_age",
     "GP", "MPG", "minutes_projection", "game_score_per36", "risk_score", "fatigue_score",
+]
+# Meta-columnas de la tabla de líderes de liga -- superset de
+# LEAGUE_PLAYER_META_COLUMNS con position/country, que el explorador de
+# equipo no necesita pero los filtros de líderes sí.
+LEADERS_META_COLUMNS: List[str] = [
+    "player_name", "team_abbreviation", "conference", "position", "country",
+    "GP", "MPG", "game_score_per36",
 ]
 
 # Columnas crudas ("*_last_season") -> nombre de display. El NOMBRE sigue
@@ -87,6 +98,8 @@ GAMES_MINUTES_DISPLAY_COLUMNS: Dict[str, str] = {
 ROSTER_STAT_GLOSSARY: Dict[str, str] = {
     "PPG": "Puntos por partido (proyectados)",
     "RPG": "Rebotes por partido (proyectados)",
+    "ORPG": "Rebotes ofensivos por partido (proyectados)",
+    "DRPG": "Rebotes defensivos por partido (proyectados)",
     "APG": "Asistencias por partido (proyectadas)",
     "SPG": "Robos de balón por partido (proyectados)",
     "BPG": "Tapones por partido (proyectados)",
@@ -94,6 +107,8 @@ ROSTER_STAT_GLOSSARY: Dict[str, str] = {
     "3PM": "Triples anotados por partido (proyectados)",
     "PTS": "Puntos totales proyectados para la temporada completa",
     "REB": "Rebotes totales proyectados para la temporada completa",
+    "OREB": "Rebotes ofensivos totales proyectados para la temporada completa",
+    "DREB": "Rebotes defensivos totales proyectados para la temporada completa",
     "AST": "Asistencias totales proyectadas para la temporada completa",
     "STL": "Robos de balón totales proyectados para la temporada completa",
     "BLK": "Tapones totales proyectados para la temporada completa",
@@ -107,6 +122,8 @@ ROSTER_STAT_GLOSSARY: Dict[str, str] = {
     "target_age": "Edad proyectada para la temporada de team_config.yaml",
     "minutes_projection": "Minutos por partido asumidos (para el roster propio: dato de team_config.yaml; para el resto de la liga: minutos/partido reales de la temporada más reciente de cada jugador)",
     "conference": "Conferencia de la franquicia (Este/Oeste)",
+    "position": "Posición (CommonPlayerInfo) -- solo primera letra usada en el resto del proyecto (G/F/C)",
+    "country": "País de nacimiento del jugador (CommonPlayerInfo)",
     "GP": "Partidos jugados ESPERADOS en la temporada simulada -- games_per_season × (1 − risk_score), la media exacta del modelo de riesgo de lesión (simulation.compute_expected_games_played), no el dato histórico de la temporada pasada",
     "MPG": "Minutos por partido asumidos los partidos en que el jugador SÍ juega (minutes_projection, el input curado del roster) -- no se descuenta por riesgo de lesión, a diferencia de GP: representa el ritmo de juego, no la carga total de temporada",
 }

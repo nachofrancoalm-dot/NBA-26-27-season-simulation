@@ -17,6 +17,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 
 from dashboard.data_loader import (  # noqa: E402 -- importar primero inserta src/ en sys.path
+    LEADERS_META_COLUMNS,
     LEAGUE_GLOSSARY,
     LEAGUE_PLAYER_META_COLUMNS,
     ROSTER_STAT_GLOSSARY,
@@ -152,6 +153,36 @@ def get_team(
         response["players"] = df_to_records(view.sort_values("game_score_per36", ascending=False))
 
     return response
+
+
+@router.get("/leaders")
+def get_leaders(mode: str = Query("per_game", pattern="^(per_game|totals)$"), scenario: str = SCENARIO_QUERY):
+    """
+    Estadísticas de TODOS los jugadores de la liga en una sola tabla,
+    para el filtrado/ordenado en el frontend (equipo, posición, país,
+    ordenar por columna) -- select_roster_view() ya hace el trabajo
+    pesado (mismo camino que /team/{abbreviation}, sin filtrar por
+    equipo). El filtrado por equipo/posición/país es responsabilidad del
+    cliente (577 filas, barato) para que cambiar un filtro no dispare
+    una petición nueva.
+    """
+    config = load_config()
+    players = load_league_player_projections(config, scenario=scenario)
+    if players is None:
+        raise HTTPException(status_code=404, detail=LEAGUE_MISSING_DETAIL)
+
+    view = select_roster_view(
+        players,
+        mode=mode,
+        meta_columns=LEADERS_META_COLUMNS,
+        games_per_season=config["simulation"]["games_per_season"],
+    )
+    view = view.assign(player_id=players["player_id"].to_numpy())
+    view = view.assign(team_id=view["team_abbreviation"].map(ABBREVIATION_TO_TEAM_ID))
+    return {
+        "players": df_to_records(view.sort_values("game_score_per36", ascending=False)),
+        "glossary": ROSTER_STAT_GLOSSARY,
+    }
 
 
 @router.post("/bracket")
