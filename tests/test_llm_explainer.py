@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from llm_explainer import (  # noqa: E402
+    MODEL_ID,
     NEWS_SECTION_LABEL,
     build_context_snapshot,
     build_news_section,
@@ -131,7 +132,7 @@ def test_explain_question_grounds_the_prompt_with_the_snapshot(config, monkeypat
 
     assert answer == "Respuesta grounded."
     assert captured["api_key"] == "test-key"
-    assert captured["model"] == "llama-3.3-70b-versatile"
+    assert captured["model"] == MODEL_ID
     # El snapshot va en el mensaje de system, no en el del usuario.
     system_message = captured["messages"][0]
     assert system_message["role"] == "system"
