@@ -37,6 +37,7 @@ export const api = {
   leagueTeams: (scenario = "with_injuries") => request(`/league/teams?scenario=${scenario}`),
   leagueTeam: (abbreviation, mode, scenario = "with_injuries") =>
     request(`/league/team/${abbreviation}?mode=${mode}&scenario=${scenario}`),
+  leagueLeaders: (mode, scenario = "with_injuries") => request(`/league/leaders?mode=${mode}&scenario=${scenario}`),
   leagueBracket: (scenario = "with_injuries") => request(`/league/bracket?scenario=${scenario}`, { method: "POST" }),
   leagueSimulate: (scenario) => request(`/league/simulate?scenario=${scenario}`, { method: "POST" }),
 

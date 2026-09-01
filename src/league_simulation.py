@@ -1405,9 +1405,13 @@ def build_league_simulation_dataset(
                 }
             )
     player_projections_df = pd.DataFrame(player_projection_rows)
+    # Duplica dashboard.data_loader.PER_GAME_STATS -- no se importa directamente
+    # porque src/ está por debajo de dashboard/ en la capa de dependencias de
+    # este proyecto (dashboard/ importa de src/, no al revés). Mantener las dos
+    # copias sincronizadas si se añade una estadística nueva.
     for stat, total_col in {
-        "PPG": "PTS_projected", "RPG": "REB_projected", "APG": "AST_projected",
-        "SPG": "STL_projected", "BPG": "BLK_projected", "TOPG": "TOV_projected",
+        "PPG": "PTS_projected", "RPG": "REB_projected", "ORPG": "OREB_projected", "DRPG": "DREB_projected",
+        "APG": "AST_projected", "SPG": "STL_projected", "BPG": "BLK_projected", "TOPG": "TOV_projected",
         "3PM": "FG3M_projected",
     }.items():
         if total_col in player_projections_df.columns:

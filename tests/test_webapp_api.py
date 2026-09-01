@@ -284,6 +284,62 @@ def test_league_team_404_for_unknown_abbreviation(client, config):
     assert response.status_code == 404
 
 
+def test_league_leaders_returns_all_players_with_filter_columns(client, config):
+    processed_dir = tmp_path_from_config(config)
+    # PPG/RPG/ORPG/... vienen YA calculadas en el CSV real (ver
+    # league_simulation.build_league_simulation_dataset) -- select_roster_view
+    # no las deriva de los totales, así que el fixture las incluye directamente.
+    pd.DataFrame(
+        [
+            {
+                "player_id": 1, "player_name": "Big Man", "team_abbreviation": "AAA", "conference": "East",
+                "position": "C", "country": "USA", "current_age": 25, "game_score_per36": 20.0,
+                "minutes_projection": 32, "minutes_per_game_last_season": 32, "games_played_last_season": 70,
+                "risk_score": 0.2, "fatigue_score": 0.2,
+                "PTS_projected": 1500, "REB_projected": 900, "OREB_projected": 300, "DREB_projected": 600,
+                "AST_projected": 200, "STL_projected": 60, "BLK_projected": 150, "TOV_projected": 100,
+                "FG3M_projected": 10,
+                "PPG": 18.3, "RPG": 11.0, "ORPG": 300 / 82, "DRPG": 600 / 82,
+                "APG": 2.4, "SPG": 0.7, "BPG": 1.8, "TOPG": 1.2, "3PM": 0.1,
+            },
+            {
+                "player_id": 2, "player_name": "Sharpshooter", "team_abbreviation": "BBB", "conference": "West",
+                "position": "G", "country": "France", "current_age": 27, "game_score_per36": 15.0,
+                "minutes_projection": 30, "minutes_per_game_last_season": 30, "games_played_last_season": 75,
+                "risk_score": 0.1, "fatigue_score": 0.1,
+                "PTS_projected": 1800, "REB_projected": 250, "OREB_projected": 30, "DREB_projected": 220,
+                "AST_projected": 400, "STL_projected": 80, "BLK_projected": 20, "TOV_projected": 150,
+                "FG3M_projected": 200,
+                "PPG": 22.0, "RPG": 3.0, "ORPG": 30 / 82, "DRPG": 220 / 82,
+                "APG": 4.9, "SPG": 1.0, "BPG": 0.2, "TOPG": 1.8, "3PM": 2.4,
+            },
+        ]
+    ).to_csv(processed_dir / "league_player_projections.csv", index=False)
+
+    response = client.get("/api/league/leaders")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["players"]) == 2
+    row = next(p for p in body["players"] if p["player_name"] == "Big Man")
+    assert row["team_abbreviation"] == "AAA"
+    assert row["position"] == "C"
+    assert row["country"] == "USA"
+    # select_roster_view redondea a 1 decimal en modo "per_game".
+    assert row["ORPG"] == pytest.approx(300 / 82, abs=0.05)
+
+    totals = client.get("/api/league/leaders?mode=totals").json()
+    row_totals = next(p for p in totals["players"] if p["player_name"] == "Big Man")
+    # Los TOTALES se escalan por (1 - risk_score) -- ver
+    # _apply_simulated_games_and_minutes -- risk_score=0.2 aquí.
+    assert row_totals["OREB"] == 300 * 0.8
+    assert row_totals["DREB"] == 600 * 0.8
+
+
+def test_league_leaders_404_when_no_league_data(client, config):
+    response = client.get("/api/league/leaders")
+    assert response.status_code == 404
+
+
 def test_awards_404_when_no_projection_available(client):
     response = client.get("/api/awards")
     assert response.status_code == 404
