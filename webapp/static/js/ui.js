@@ -90,6 +90,32 @@ export function pillToggle(options, current, onChange) {
   return container;
 }
 
+/** Grupo de pills de selección MÚLTIPLE (a diferencia de pillToggle,
+ * exclusivo) -- cada botón conmuta su propio estado independientemente.
+ * `onChange` recibe el Set completo de valores activos en cada clic. */
+export function multiToggle(options, initialSelected, onChange) {
+  const selected = new Set(initialSelected);
+  const container = el("div", { class: "segmented" });
+  const buttons = options.map((opt) =>
+    el(
+      "button",
+      {
+        type: "button",
+        "aria-pressed": String(selected.has(opt.value)),
+        onclick: () => {
+          if (selected.has(opt.value)) selected.delete(opt.value);
+          else selected.add(opt.value);
+          buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(selected.has(options[i].value))));
+          onChange(new Set(selected));
+        },
+      },
+      opt.label
+    )
+  );
+  container.append(...buttons);
+  return container;
+}
+
 /** Insignia genérica: iniciales de respaldo + intento de imagen cargada
  * EN VIVO (nunca guardada en el repo -- ver README). Texto e imagen son
  * ALTERNATIVOS, nunca se apilan (si quedan los dos en el DOM se ve como
