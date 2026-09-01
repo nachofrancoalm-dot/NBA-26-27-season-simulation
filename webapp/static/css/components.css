@@ -1,30 +1,138 @@
-/* components.css -- cards, tablas, stat tiles, badges, gráficos, estados vacíos */
+/*
+  components.css — REDISEÑO
+
+  Todas las clases que emite el JS existente (ui.js, charts.js, court.js,
+  leaderboard.js, player-modal.js, league.js…) siguen aquí con el MISMO
+  nombre. Ninguna vista cambia; cambia el lenguaje visual:
+
+  - Radio 0 y cero sombras difusas. La jerarquía la hacen reglas de 2px
+    (sección) y 1px (fila), la alineación a la izquierda y el peso
+    tipográfico.
+  - .card deja de ser una caja flotante y pasa a ser un PANEL editorial:
+    sin fondo propio, separado por una regla superior y encabezado con
+    una barra de acento corta. Así una página con seis secciones deja de
+    leerse como seis tarjetas apiladas.
+  - Rojo = chrome de marca. Azul (--accent-*) = codificación de datos.
+    Nunca se cruzan.
+*/
+
+/* ====================================================================
+   1. Navegación (masthead + sub-navegación)
+   ==================================================================== */
+
+.tab-button {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 18px;
+  cursor: pointer;
+  border-radius: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  white-space: nowrap;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.tabs .tab-button:first-child {
+  padding-left: 0;
+}
+
+.tab-button:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.tab-button[aria-selected="true"] {
+  color: var(--text-primary);
+  border-bottom-color: var(--brand-red);
+}
+
+/* Etiqueta secundaria en inglés bajo la española: la app es bilingüe en
+   su chrome sin duplicar controles. */
+.nav-en {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.tab-button[aria-selected="true"] .nav-en {
+  color: var(--brand-red-bright);
+  opacity: 1;
+}
+
+.subtabs .tab-button {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  padding: 12px 16px;
+  border-bottom-width: 2px;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+}
+
+.subtabs .tab-button:first-child {
+  padding-left: 0;
+}
+
+.subtabs .tab-button .nav-en {
+  font-size: 9px;
+}
+
+/* ====================================================================
+   2. Panel de sección (.card)
+   ==================================================================== */
 
 .card {
-  background: var(--surface-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  padding: 20px;
-  margin-bottom: 20px;
+  background: none;
+  border: 0;
+  border-top: 2px solid var(--rule-strong);
+  border-radius: 0;
+  box-shadow: none;
+  padding: var(--space-6) 0 var(--space-8);
+  margin: 0;
+}
+
+/* Barra de acento corta sobre el título: la marca de sección del
+   sistema, no un borde lateral de tarjeta. */
+.card > h2:first-child::before,
+.card > .card-header-row:first-child h2::before {
+  content: "";
+  display: block;
+  width: 32px;
+  height: 3px;
+  background: var(--brand-red);
+  margin-bottom: 10px;
 }
 
 .card h2 {
-  font-size: 1.1rem;
-  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 var(--space-3);
+  color: var(--text-primary);
 }
 
-/* Fila de cabecera de card: título + control (toggle, botón...) a la
-   derecha. Sin flex-wrap, un título largo + un segmented control no caben
-   en el ancho de un móvil y el control se sale de la card (bug real visto
-   en Roster y en el explorador de equipo de Liga NBA a 390px). Envolver
-   dentro deja el control debajo del título en vez de desbordar. */
 .card-header-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 10px 12px;
+  gap: 10px var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
 .card-header-row h2 {
@@ -32,19 +140,29 @@
 }
 
 .card h3 {
-  font-size: 0.95rem;
-  margin: 24px 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: var(--space-8) 0 var(--space-3);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 
 .card > .caption,
 .caption {
   color: var(--text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 78ch;
+  margin: 0 0 var(--space-4);
+  text-wrap: pretty;
 }
 
-/* --- Team identity + badges (sin logos redistribuidos, ver README) --- */
+/* ====================================================================
+   3. Identidad y escudos
+   ==================================================================== */
 
 .team-identity {
   display: flex;
@@ -52,11 +170,6 @@
   gap: 10px;
 }
 
-/* El logo/nombre de la topbar es también el botón "volver a Inicio" --
-   patrón estándar de logo-en-cabecera=home. Solo el `<button>` de la
-   topbar lleva esta clase; el mismo bloque visual reutilizado dentro del
-   explorador de equipo de Liga NBA sigue siendo un div normal, no
-   clicable. */
 .team-identity-home {
   appearance: none;
   border: none;
@@ -65,26 +178,29 @@
   text-align: left;
   color: inherit;
   cursor: pointer;
-  padding: 4px;
-  margin: -4px;
-  border-radius: 8px;
+  padding: 4px 8px 4px 4px;
+  margin-left: -4px;
+  border-radius: 0;
 }
 
 .team-identity-home:hover {
-  background: var(--surface-card);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
 .team-badge {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #fff;
-  background: linear-gradient(135deg, var(--brand-blue), var(--brand-red));
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  background: var(--surface-card-alt);
+  border: 1px solid var(--border);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -93,64 +209,83 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #fff;
+  background: transparent;
+  padding: 2px;
 }
 
 .brand-mark {
-  height: 22px;
-  opacity: 0.85;
+  height: 18px;
+  opacity: 0.7;
+  filter: grayscale(1) brightness(2.4);
 }
 
-/* --- Stat tiles --- */
+/* ====================================================================
+   4. Celdas de dato (stat tiles)
+   ==================================================================== */
 
 .stat-tile {
-  background: var(--surface-card-alt);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
+  background: var(--surface-card);
+  border: 0;
+  border-radius: 0;
+  padding: 14px 16px 16px;
 }
 
 .stat-tile .label {
-  color: var(--text-secondary);
-  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  margin: 0 0 6px;
+  letter-spacing: 0.1em;
+  margin: 0 0 8px;
 }
 
 .stat-tile .value {
-  font-size: 1.6rem;
-  font-weight: 600;
-  font-variant-numeric: proportional-nums;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
 }
 
-/* --- Rail de equipos (explorador de Liga y Playoffs) --- */
+/* ====================================================================
+   5. Rail de equipos
+   ==================================================================== */
 
 .team-rail {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: 480px;
+  gap: 0;
+  max-height: 520px;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px;
+  border-radius: 0;
+  padding: 0;
+  background: var(--surface-card);
 }
 
 .team-rail-item {
   appearance: none;
-  border: none;
+  border: 0;
+  border-bottom: 1px solid var(--gridline);
   background: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 8px;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border-radius: 0;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   cursor: pointer;
   text-align: left;
+}
+
+.team-rail-item:last-child {
+  border-bottom: 0;
 }
 
 .team-rail-item:hover {
@@ -159,75 +294,81 @@
 }
 
 .team-rail-item[aria-current="true"] {
-  background: color-mix(in srgb, var(--brand-red) 18%, var(--surface-card-alt));
-  color: var(--text-primary);
-  font-weight: 600;
+  background: var(--brand-red);
+  color: #fff;
+  font-weight: 800;
 }
 
-/* --- Toggle (Totales / Por partido) --- */
+.team-rail-item[aria-current="true"] .team-badge {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ====================================================================
+   6. Control segmentado
+   ==================================================================== */
 
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .segmented button {
   appearance: none;
-  border: none;
-  background: var(--surface-card);
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 0.82rem;
-  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 8px 14px;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.segmented button:last-child {
+  border-right: 0;
+}
+
+.segmented button:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
 }
 
 .segmented button[aria-pressed="true"] {
-  background: var(--accent-450);
+  background: var(--brand-red);
   color: #fff;
 }
 
-/* --- Tables --- */
+/* ====================================================================
+   7. Tablas de datos
+   ==================================================================== */
 
-/* Tablas grandes (liga de 30 equipos, 450+ casos de backtest sweep...) se
-   quedaban con su altura completa, alargando la página hasta hacerla
-   inmanejable. Se limita a una ventana con scroll propio y cabecera
-   fija -- una tabla pequeña simplemente no llega a activar el scroll. */
 .table-wrap {
   overflow: auto;
-  max-height: 420px;
+  max-height: 460px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  /* Panel "hundido" más oscuro que la card que lo contiene -- separa
-     visualmente la tabla del resto de la sección en vez de fundirse con
-     el mismo tono de fondo. */
-  background: color-mix(in srgb, var(--surface-page) 45%, var(--surface-card));
+  border-radius: 0;
+  background: var(--surface-card);
 }
 
-/* Sombra de scroll horizontal (roster, standings, backtest sweep... --
-   cualquier tabla más ancha que su card). Tiene que vivir en un elemento
-   HERMANO de .table-wrap, no dentro de él: las filas de la tabla tienen
-   fondo opaco (zebra striping), así que cualquier fondo/sombra puesto
-   DETRÁS del contenido (como hijo de .table-wrap) queda tapado sin más --
-   ya se probó y no se veía. dataTable() en ui.js mide scrollWidth vs
-   clientWidth y hace toggle de estas dos capas según la posición de
-   scroll, así la sombra desaparece justo al llegar a cada extremo en vez
-   de sugerir contenido que ya no hay. Es la única pista de que hay más
-   columnas fuera de vista -- antes no había ningún indicio (bug real:
-   columnas cortadas en seco en el borde derecho de la card, ver captura a
-   1440px y, peor, el control "Totales/Por partido" saliéndose de la card
-   a 390px). */
 .table-scroll-region {
   position: relative;
 }
 
+/* Sombra de scroll horizontal: vive en un HERMANO de .table-wrap porque
+   las filas tienen fondo opaco y taparían cualquier capa interior. */
 .scroll-shadow {
   position: absolute;
   top: 1px;
   bottom: 1px;
-  width: 36px;
+  width: 40px;
   pointer-events: none;
   opacity: 0;
   z-index: 2;
@@ -236,22 +377,16 @@
   align-items: center;
 }
 
-/* Un degradado sutil por sí solo se perdía contra un tema ya oscuro (se
-   probó con negro al 40% -- casi invisible sobre --surface-card-alt).
-   Se sube la opacidad Y se añade una flecha, doble refuerzo de la misma
-   señal en vez de depender de un solo indicio débil de contraste. */
 .scroll-shadow-left {
   left: 1px;
   justify-content: flex-start;
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.65), transparent);
-  border-radius: 8px 0 0 8px;
+  background: linear-gradient(to right, var(--surface-page) 10%, transparent);
 }
 
 .scroll-shadow-right {
   right: 1px;
   justify-content: flex-end;
-  background: linear-gradient(to left, rgba(0, 0, 0, 0.65), transparent);
-  border-radius: 0 8px 8px 0;
+  background: linear-gradient(to left, var(--surface-page) 10%, transparent);
 }
 
 .scroll-shadow.visible {
@@ -262,9 +397,9 @@
   content: "";
   width: 7px;
   height: 7px;
-  margin: 0 8px;
-  border-top: 2px solid var(--text-secondary);
-  border-right: 2px solid var(--text-secondary);
+  margin: 0 9px;
+  border-top: 2px solid var(--brand-red-bright);
+  border-right: 2px solid var(--brand-red-bright);
 }
 
 .scroll-shadow-left::after {
@@ -278,288 +413,369 @@
 table.data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 12.5px;
 }
 
 .data-table th,
 .data-table td {
   text-align: left;
-  padding: 8px 10px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--gridline);
   white-space: nowrap;
 }
 
 .data-table td {
   font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* La primera columna es siempre la entidad (jugador, equipo, caso):
+   se lee como ancla de la fila, no como un dato más. */
+.data-table td:first-child {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .data-table th {
   position: sticky;
   top: 0;
   background: var(--surface-card-alt);
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.09em;
   z-index: 1;
-  /* Con .th-sort-btn dentro, el botón ocupa toda la celda y trae su
-     propio padding -- quitarlo aquí evita un doble padding que
-     descentraría el texto respecto a las celdas de datos. */
   padding: 0;
+  border-bottom: 2px solid var(--rule-strong);
 }
 
 .data-table th .info-icon {
   cursor: help;
   color: var(--text-muted);
   margin-left: 3px;
+  font-size: 11px;
 }
 
-/* Ordenar por columna: el <button> (no el <th>) es el elemento
-   interactivo -- alcanzable por Tab, con su propio foco visible, en vez
-   de intentar reinventar ese comportamiento sobre un <th> sin semántica
-   de control. Ocupa toda la celda para que el objetivo de clic/toque sea
-   grande, no solo el texto. */
 .th-sort-btn {
   appearance: none;
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   border: none;
   background: none;
   color: inherit;
   font: inherit;
   text-transform: inherit;
   letter-spacing: inherit;
-  padding: 8px 10px;
+  padding: 9px 12px;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .th-sort-btn:hover {
   color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
 .th-sort-btn:focus-visible {
-  outline: 2px solid var(--accent-450);
+  outline: 2px solid var(--brand-red-bright);
   outline-offset: -2px;
 }
 
 .th-sort-arrow {
-  font-size: 0.68rem;
-  color: var(--accent-450);
+  font-size: 0.62rem;
+  color: var(--brand-red-bright);
   min-width: 0.8em;
 }
 
-/* Zebra striping -- sin esto, filas contiguas eran casi indistinguibles
-   del fondo de la card (mismo tono), dificultando leer una fila de punta
-   a punta en tablas anchas. */
 .data-table tbody tr:nth-child(even) {
-  background: var(--surface-card-alt);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
-.data-table tbody tr:hover {
-  background: color-mix(in srgb, var(--accent-450) 14%, transparent);
+.data-table tbody tr:hover,
+.data-table tbody tr:nth-child(even):hover {
+  background: color-mix(in srgb, var(--accent-450) 16%, transparent);
 }
 
-/* Fila de proyección (temporada simulada) en la trayectoria del popup de
-   jugador -- se distingue del histórico real, nunca se confunde con un
-   dato ya ocurrido. */
-.data-table tbody tr.row-projection {
-  background: color-mix(in srgb, var(--brand-red) 16%, transparent);
-  font-weight: 600;
+.data-table tbody tr:hover td {
+  color: var(--text-primary);
+}
+
+/* Fila de proyección (temporada simulada) frente al histórico real. */
+.data-table tbody tr.row-projection,
+.data-table tbody tr.row-projection:nth-child(even) {
+  background: color-mix(in srgb, var(--brand-red) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--brand-red);
+}
+
+.data-table tbody tr.row-projection td {
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 .data-table tbody tr.row-projection:hover {
-  background: color-mix(in srgb, var(--brand-red) 24%, transparent);
+  background: color-mix(in srgb, var(--brand-red) 26%, transparent);
 }
 
-/* --- Glossary expander --- */
+/* ====================================================================
+   8. Glosario
+   ==================================================================== */
 
 .glossary {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-top: 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  margin-top: 0;
 }
 
 .glossary summary {
   cursor: pointer;
-  padding: 10px 14px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  padding: 10px 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  list-style-position: outside;
+}
+
+.glossary summary:hover {
+  color: var(--text-primary);
 }
 
 .glossary-body {
-  padding: 0 14px 14px;
-  font-size: 0.82rem;
+  padding: 0 0 14px;
+  font-size: 12.5px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.65;
+  columns: 2;
+  column-gap: var(--space-8);
+}
+
+.glossary-body p {
+  break-inside: avoid;
+  margin: 0 0 6px;
 }
 
 .glossary-body b {
   color: var(--text-primary);
+  font-weight: 700;
 }
 
-/* --- Banners de estado (success/warning) --- */
+@media (max-width: 800px) {
+  .glossary-body {
+    columns: 1;
+  }
+}
+
+/* ====================================================================
+   9. Banners de estado
+   ==================================================================== */
 
 .banner {
-  border-radius: 8px;
+  border-radius: 0;
   padding: 12px 14px;
-  font-size: 0.85rem;
+  font-size: 13px;
   line-height: 1.6;
-  margin: 10px 0;
-  border: 1px solid var(--border);
+  margin: var(--space-3) 0;
+  border: 0;
+  border-left: 3px solid var(--border);
+  background: var(--surface-card);
+  color: var(--text-secondary);
 }
 
 .banner.success {
-  background: color-mix(in srgb, var(--status-good) 12%, var(--surface-card));
-  border-color: color-mix(in srgb, var(--status-good) 40%, var(--border));
+  border-left-color: var(--status-good);
+  background: color-mix(in srgb, var(--status-good) 10%, var(--surface-card));
 }
 
 .banner.warning {
-  background: color-mix(in srgb, var(--status-warning) 12%, var(--surface-card));
-  border-color: color-mix(in srgb, var(--status-warning) 40%, var(--border));
+  border-left-color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 10%, var(--surface-card));
 }
 
-/* Botón secundario sobre una card normal (fondo --surface-card) -- un
-   tono más claro (--surface-card-alt) para no fundirse con la card que
-   lo contiene, a diferencia de .btn (rojo sólido, acción primaria) y
-   .btn-ghost (pensado para el degradado oscuro del hero). */
+/* ====================================================================
+   10. Botones
+   ==================================================================== */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--brand-red);
+  background: var(--brand-red);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 11px 18px;
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.btn:hover {
+  background: var(--brand-red-bright);
+  border-color: var(--brand-red-bright);
+}
+
+.btn:active {
+  background: var(--brand-red-dark);
+  border-color: var(--brand-red-dark);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .btn-ghost-dark {
   appearance: none;
   flex-shrink: 0;
   border: 1px solid var(--border);
-  background: var(--surface-card-alt);
+  background: transparent;
   color: var(--text-primary);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  padding: 7px 12px;
-  border-radius: 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 0;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.btn-ghost-dark:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .btn-ghost-dark:hover {
-  border-color: color-mix(in srgb, var(--team-primary) 45%, var(--border));
+  border-color: var(--brand-red);
+  background: color-mix(in srgb, var(--brand-red) 14%, transparent);
 }
 
-/* --- Empty / error state --- */
+.btn-ghost-dark:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ====================================================================
+   11. Estado vacío / error
+   ==================================================================== */
 
 .empty-state {
   border: 1px dashed var(--border);
-  border-radius: 10px;
-  padding: 18px;
+  border-radius: 0;
+  padding: 20px;
   color: var(--text-secondary);
-  font-size: 0.88rem;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.65;
+  background: var(--surface-card);
 }
 
 .empty-state code {
-  background: var(--surface-page);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 0.82em;
-}
-
-/* --- Buttons --- */
-
-.btn {
-  appearance: none;
+  background: var(--surface-sunken);
   border: 1px solid var(--border);
-  background: linear-gradient(135deg, var(--brand-red), var(--brand-red-dark));
-  color: #fff;
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 600;
-  padding: 9px 16px;
-  border-radius: 8px;
-  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 0.85em;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-.btn:hover {
-  filter: brightness(1.12);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-/* --- Chat (Explicador IA) --- */
+/* ====================================================================
+   12. Chat (Explicador IA)
+   ==================================================================== */
 
 .chat-log {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-height: 420px;
+  gap: var(--space-3);
+  max-height: 440px;
   overflow-y: auto;
-  padding: 4px 2px;
-  margin: 14px 0;
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
 }
 
 .chat-bubble {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 0.88rem;
-  line-height: 1.55;
+  max-width: 78%;
+  padding: 11px 14px;
+  border-radius: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
   white-space: pre-wrap;
 }
 
 .chat-bubble.user {
   align-self: flex-end;
-  background: linear-gradient(135deg, var(--brand-blue), var(--accent-450));
+  background: var(--brand-red);
   color: #fff;
-  border-bottom-right-radius: 4px;
 }
 
 .chat-bubble.assistant {
   align-self: flex-start;
   background: var(--surface-card-alt);
-  border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
+  border-left: 3px solid var(--border);
+  color: var(--text-primary);
 }
 
 .chat-input-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
-.chat-input-row input {
-  background: var(--surface-card-alt);
+.chat-input-row input,
+.chat-input-row textarea {
+  flex: 1 1 auto;
+  background: var(--surface-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 9px 12px;
+  border-radius: 0;
+  padding: 11px 14px;
   color: var(--text-primary);
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 13.5px;
 }
 
-.chat-input-row input:focus {
-  outline: 2px solid var(--accent-450);
-  outline-offset: 1px;
+.chat-input-row input::placeholder {
+  color: var(--text-muted);
 }
 
-/* --- Charts --- */
+.chat-input-row input:focus,
+.chat-input-row textarea:focus {
+  outline: 2px solid var(--brand-red-bright);
+  outline-offset: -1px;
+}
+
+/* Cualquier textarea suelta de las vistas (pegado de noticias). */
+textarea {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  padding: 12px;
+  width: 100%;
+}
+
+/* ====================================================================
+   13. Gráficos
+   ==================================================================== */
 
 .chart-tooltip {
   position: fixed;
   pointer-events: none;
   background: var(--text-primary);
-  color: var(--surface-card);
-  font-size: 0.78rem;
+  color: var(--surface-page);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   padding: 6px 9px;
-  border-radius: 6px;
-  transform: translate(-50%, -120%);
+  border-radius: 0;
+  transform: translate(-50%, -130%);
   white-space: nowrap;
-  z-index: 20;
+  z-index: 60;
   opacity: 0;
   transition: opacity 0.08s ease;
 }
@@ -568,20 +784,45 @@ table.data-table {
   opacity: 1;
 }
 
-/* Vista previa de jugador al pasar el ratón/foco (player-preview.js) --
-   tarjeta real (foto + stats de la temporada proyectada), no una línea
-   de texto plano. Mismo lenguaje visual que el resto de tarjetas
-   (surface-card, radius-card, shadow-card). */
+svg.chart {
+  display: block;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  padding: 4px 0;
+}
+
+svg.chart text {
+  fill: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+svg.chart .axis-line {
+  stroke: var(--baseline);
+  stroke-width: 1;
+}
+
+svg.chart .gridline {
+  stroke: var(--gridline);
+  stroke-width: 1;
+}
+
+/* ====================================================================
+   14. Vista previa de jugador (hover)
+   ==================================================================== */
+
 .player-preview {
   position: fixed;
   pointer-events: none;
-  z-index: 30;
+  z-index: 70;
   width: 300px;
   background: var(--surface-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  padding: 12px 14px;
+  border: 1px solid var(--rule-strong);
+  border-top: 3px solid var(--brand-red);
+  border-radius: 0;
+  box-shadow: var(--shadow-overlay);
+  padding: 14px;
   opacity: 0;
   transform: translateY(4px);
   transition: opacity 0.12s ease, transform 0.12s ease;
@@ -605,8 +846,9 @@ table.data-table {
 }
 
 .player-preview-name {
-  font-size: 0.92rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -614,19 +856,22 @@ table.data-table {
 }
 
 .player-preview-team {
-  font-size: 0.74rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .player-preview-caption {
-  margin: 10px 0 6px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  margin: 12px 0 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
   border-top: 1px solid var(--border);
-  padding-top: 8px;
+  padding-top: 9px;
 }
 
 .player-preview-stats {
@@ -644,9 +889,10 @@ table.data-table {
 }
 
 .player-preview-stat-value {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--accent-600);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
   overflow-wrap: break-word;
@@ -654,165 +900,169 @@ table.data-table {
 }
 
 .player-preview-stat-label {
-  font-size: 0.65rem;
+  font-size: 9px;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.08em;
 }
 
-svg.chart text {
-  fill: var(--text-muted);
-  font-family: var(--font-sans);
-  font-size: 10px;
-}
-
-svg.chart .axis-line {
-  stroke: var(--baseline);
-  stroke-width: 1;
-}
-
-svg.chart .gridline {
-  stroke: var(--gridline);
-  stroke-width: 1;
-}
-
-/* --- Celda de tabla con doble clic (popup de jugador) --- */
+/* ====================================================================
+   15. Celda con doble clic
+   ==================================================================== */
 
 .cell-clickable {
   cursor: pointer;
   color: var(--text-primary);
   text-decoration: underline;
+  text-decoration-thickness: 1px;
   text-decoration-color: var(--border);
   text-underline-offset: 3px;
 }
 
 .cell-clickable:hover {
   text-decoration-color: var(--brand-red);
+  color: var(--brand-red-bright);
 }
 
-/* --- Popup de detalle (jugador o equipo) -- chrome compartido --- */
+/* ====================================================================
+   16. Popup de detalle (jugador / equipo)
+   ==================================================================== */
 
 .detail-modal {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--surface-card);
+  border: 1px solid var(--rule-strong);
+  border-top: 4px solid var(--brand-red);
+  border-radius: 0;
+  background: var(--surface-page);
   color: var(--text-primary);
   padding: 0;
-  width: min(680px, 92vw);
-  max-height: 85vh;
+  width: min(760px, 94vw);
+  max-height: 88vh;
+  box-shadow: var(--shadow-overlay);
 }
 
 .detail-modal::backdrop {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
+  background: rgba(8, 8, 8, 0.78);
+  backdrop-filter: blur(3px);
 }
 
 .detail-modal-body {
-  padding: 24px;
+  padding: var(--space-6);
   position: relative;
   overflow-y: auto;
-  max-height: 85vh;
+  max-height: 88vh;
 }
 
 .modal-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: var(--space-4);
+  right: var(--space-4);
   appearance: none;
   border: 1px solid var(--border);
-  background: var(--surface-card-alt);
+  background: transparent;
   color: var(--text-secondary);
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 0;
   cursor: pointer;
   font-size: 0.9rem;
+  line-height: 1;
 }
 
 .modal-close:hover {
-  color: var(--text-primary);
+  color: #fff;
+  background: var(--brand-red);
+  border-color: var(--brand-red);
 }
 
 .detail-modal-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin: 4px 36px 18px 0;
+  gap: var(--space-4);
+  margin: 0 48px var(--space-4) 0;
+}
+
+.detail-modal-header h2 {
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  margin: 0;
+}
+
+.detail-modal-header h2::before {
+  display: none;
 }
 
 .player-photo {
-  background: linear-gradient(135deg, var(--surface-card-alt), var(--surface-card));
-  border: 2px solid var(--border);
+  background: var(--surface-card-alt);
+  border: 1px solid var(--border);
 }
 
 .bio-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 22px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
+  gap: var(--space-3) var(--space-8);
+  padding: var(--space-3) 0;
+  border-top: 2px solid var(--rule-strong);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 .bio-fact {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 0.85rem;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .bio-fact-label {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 9px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.1em;
 }
 
 .quality-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .quality-chip {
-  background: color-mix(in srgb, var(--brand-blue) 30%, var(--surface-card-alt));
+  background: transparent;
   border: 1px solid var(--border);
-  border-radius: var(--radius-badge);
-  padding: 5px 12px;
-  font-size: 0.78rem;
-  color: var(--text-primary);
+  border-radius: 0;
+  padding: 5px 11px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
-/* --- Bracket de playoffs (árbol real, no una lista de resultados) ---
-   Geometría exacta con CSS Grid: cada conferencia es una rejilla de 4
-   filas (una por partido de Ronda 1) x 5 columnas (Ronda 1 / conector /
-   Semis / conector / Final de conf.), con altura de fila fija
-   (--leaf-h). Un partido de ronda N ocupa el rango de filas exacto de
-   los dos partidos de la ronda N-1 que lo alimentan y se centra ahí
-   (align-self: center) -- eso ubica su centro vertical exactamente en
-   el punto medio de sus dos "padres", sin aproximaciones de flexbox.
-   El conector de esa misma columna usa la fórmula
-   margin = (leafCount * leaf-h + (leafCount-1) * row-gap) / 2, que se
-   deduce de esa misma geometría, para que sus bordes toquen justo esos
-   dos centros -- ver el comentario de bracketConnector() en league.js
-   para la derivación completa. Oeste fluye izquierda->derecha, Este es
-   la misma rejilla en espejo (orden de columnas invertido en JS), así
-   ambas confluyen hacia el campeón central, como en un bracket real de
-   TV. */
+/* ====================================================================
+   17. Bracket de playoffs
+   Geometría idéntica a la anterior (league.js::bracketConnector deduce
+   sus márgenes de --leaf-h / --row-gap y de estos anchos de columna):
+   solo cambian trazo, color y tipografía.
+   ==================================================================== */
 
 .bracket-scroll {
   overflow-x: auto;
-  padding-bottom: 6px;
+  padding-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  background: var(--surface-card);
 }
 
 .bracket-layout {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-6);
   min-width: max-content;
-  padding: 12px 4px 4px;
+  padding: var(--space-4);
 }
 
 .bracket-conf {
@@ -827,20 +1077,21 @@ svg.chart .gridline {
 .bracket-labels {
   display: grid;
   grid-template-columns: 148px 24px 148px 24px 148px;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .bracket-label {
-  font-size: 0.68rem;
+  font-size: 9px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
   text-align: center;
 }
 
 .bracket-match {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--surface-card-alt);
   padding: 5px 8px;
   display: flex;
@@ -858,11 +1109,13 @@ svg.chart .gridline {
   gap: 6px;
   padding: 2px 0;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .bracket-team .seed {
-  font-size: 0.66rem;
+  font-size: 9px;
+  font-weight: 800;
   color: var(--text-muted);
   width: 13px;
   flex-shrink: 0;
@@ -873,11 +1126,12 @@ svg.chart .gridline {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: 0.04em;
 }
 
 .bracket-team.winner {
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .bracket-team.winner .team-badge {
@@ -910,71 +1164,68 @@ svg.chart .gridline {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 130px;
+  gap: var(--space-1);
+  min-width: 140px;
   text-align: center;
   position: relative;
+  padding: var(--space-4) var(--space-2);
+  border: 2px solid var(--brand-red);
+  background: color-mix(in srgb, var(--brand-red) 12%, transparent);
 }
 
 .bracket-trophy {
-  font-size: 2rem;
+  font-size: 1.8rem;
   line-height: 1;
 }
-
-/* --- Play-in (resumen compacto debajo del bracket principal) --- */
 
 .bracket-playin-games {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 6px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .bracket-playin-game {
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 8px;
-  background: var(--surface-card-alt);
-  min-width: 120px;
+  border-radius: 0;
+  padding: 6px 9px;
+  background: var(--surface-card);
+  min-width: 124px;
+  font-size: 12px;
 }
 
-/* --- Focus visible ---
-   Ningún elemento interactivo tenía un anillo de foco propio salvo el
-   input del chat -- el resto dependía del outline nativo del navegador,
-   que `appearance: none` en botones puede debilitar o quitar según el
-   navegador (visto en Safari). :focus-visible (no :focus) para no pintar
-   el anillo en un clic de ratón, solo en navegación por teclado. */
+/* ====================================================================
+   18. Foco visible
+   ==================================================================== */
+
 .tab-button:focus-visible,
 .team-rail-item:focus-visible,
 .segmented button:focus-visible,
 .btn:focus-visible,
+.btn-ghost-dark:focus-visible,
 .modal-close:focus-visible,
 .cell-clickable:focus-visible,
-td.cell-clickable:focus-visible {
-  outline: 2px solid var(--accent-450);
+td.cell-clickable:focus-visible,
+.leaderboard-row:focus-visible,
+.court-lineup-marker:focus-visible {
+  outline: 2px solid var(--brand-red-bright);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
-/* --- Skeleton loading (shimmer) ---
-   Sustituye el texto plano "Cargando..." como primer render de cada
-   pestaña. Con la vista de Premios individuales tardando ~4s en el
-   backend (compute_awards_summary corre pandas sin caché), un texto fijo
-   sin movimiento no comunica que algo sigue en curso -- ver
-   `progressive-loading` de la skill de UI/UX de este proyecto: para
-   esperas >1s hace falta una señal de progreso, no un spinner opaco ni
-   (peor) texto estático. Barras del tamaño aproximado del contenido real
-   (título + un par de filas) para minimizar el salto de layout cuando
-   llega el dato. */
+/* ====================================================================
+   19. Skeleton de carga
+   ==================================================================== */
+
 .skeleton-line {
-  height: 14px;
-  border-radius: 4px;
+  height: 13px;
+  border-radius: 0;
   margin-bottom: 10px;
   background: linear-gradient(
     100deg,
-    var(--surface-card-alt) 30%,
-    color-mix(in srgb, var(--surface-card-alt) 55%, var(--text-muted)) 50%,
-    var(--surface-card-alt) 70%
+    var(--surface-card) 30%,
+    var(--surface-card-alt) 50%,
+    var(--surface-card) 70%
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
@@ -982,11 +1233,11 @@ td.cell-clickable:focus-visible {
 
 .skeleton-line.title {
   height: 20px;
-  width: 45%;
+  width: 42%;
 }
 
 .skeleton-line.short {
-  width: 60%;
+  width: 58%;
 }
 
 .skeleton-line:last-child {
@@ -1006,29 +1257,33 @@ td.cell-clickable:focus-visible {
   .skeleton-line {
     animation: none;
   }
+  html {
+    scroll-behavior: auto;
+  }
 }
 
-/* Mapa de tiros (court.js) -- media cancha con tiros reales
-   (ShotChartDetail). El SVG usa el mismo sistema de coordenadas que la
-   API (décimas de pie desde el aro), así que estas reglas solo definen
-   trazo/relleno, nunca posición. */
+/* ====================================================================
+   20. Cancha: shot chart y quintetos
+   ==================================================================== */
+
 .court-chart-wrap {
-  max-width: 420px;
+  max-width: 440px;
   margin: 0 auto;
 }
 
 .court-chart {
   width: 100%;
   height: auto;
-  background: color-mix(in srgb, var(--basketball-orange) 8%, transparent);
-  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 0;
 }
 
 .court-lines .court-boundary,
 .court-lines .court-paint-outer,
 .court-lines .court-paint-inner {
   fill: none;
-  stroke: var(--border);
+  stroke: var(--rule-strong);
   stroke-width: 2;
 }
 
@@ -1039,7 +1294,7 @@ td.cell-clickable:focus-visible {
 }
 
 .court-lines .court-backboard {
-  stroke: var(--text-muted);
+  stroke: var(--text-secondary);
   stroke-width: 2.5;
 }
 
@@ -1047,14 +1302,14 @@ td.cell-clickable:focus-visible {
 .court-lines .court-ft-circle,
 .court-lines .court-three {
   fill: none;
-  stroke: var(--border);
+  stroke: var(--rule-strong);
   stroke-width: 2;
 }
 
 .court-shot {
-  stroke: rgba(0, 0, 0, 0.35);
+  stroke: rgba(0, 0, 0, 0.45);
   stroke-width: 0.6;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .court-shot-made {
@@ -1068,9 +1323,9 @@ td.cell-clickable:focus-visible {
 .court-chart-legend {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-4);
   justify-content: center;
-  margin-top: 8px;
+  margin-top: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -1078,14 +1333,17 @@ td.cell-clickable:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.85rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
 .court-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
+  width: 9px;
+  height: 9px;
+  border-radius: 0;
   display: inline-block;
 }
 
@@ -1097,10 +1355,6 @@ td.cell-clickable:focus-visible {
   background: var(--status-critical);
 }
 
-/* Quinteto sobre la cancha (court.js::courtLineup) -- capa HTML absoluta
-   de fotos de jugador superpuesta al SVG de líneas, ver el comentario
-   junto a LINEUP_SLOT_COORDS en court.js sobre por qué no es
-   `<foreignObject>`. */
 .court-lineup-wrap {
   position: relative;
 }
@@ -1118,46 +1372,61 @@ td.cell-clickable:focus-visible {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  transition: transform 0.14s ease;
+}
+
+.court-lineup-marker:hover {
+  transform: translate(-50%, -54%);
 }
 
 .court-lineup-marker:hover .player-photo,
 .court-lineup-marker:focus-visible .player-photo {
-  outline: 2px solid var(--accent-450);
-  outline-offset: 2px;
+  outline: 2px solid var(--brand-red);
+  outline-offset: 1px;
 }
 
 .court-lineup-label {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   color: var(--text-primary);
-  background: rgba(0, 0, 0, 0.6);
-  padding: 1px 6px;
-  border-radius: 6px;
+  background: var(--surface-page);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 0;
   white-space: nowrap;
 }
 
-/* Ranking de un premio (leaderboard.js) -- foto + barra en vez de
-   tabla. La fila entera es un <button> (clic abre el popup de
-   jugador). */
+/* ====================================================================
+   21. Leaderboard de premios
+   ==================================================================== */
+
 .leaderboard {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
 }
 
 .leaderboard-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 12px;
   background: none;
-  border: none;
-  border-radius: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--gridline);
+  border-radius: 0;
   cursor: pointer;
   font: inherit;
   color: inherit;
   text-align: left;
+}
+
+.leaderboard-row:last-child {
+  border-bottom: 0;
 }
 
 .leaderboard-row:hover,
@@ -1165,67 +1434,85 @@ td.cell-clickable:focus-visible {
   background: var(--surface-card-alt);
 }
 
+/* El líder del ranking se distingue por peso y por la barra roja, no
+   por una medalla. */
+.leaderboard-row:first-child .leaderboard-rank,
+.leaderboard-row:first-child .leaderboard-name {
+  color: var(--text-primary);
+}
+
+.leaderboard-row:first-child .leaderboard-bar {
+  background: var(--brand-red);
+}
+
 .leaderboard-rank {
-  width: 18px;
-  flex: 0 0 18px;
-  font-size: 0.8rem;
-  font-weight: 700;
+  width: 20px;
+  flex: 0 0 20px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
   color: var(--text-muted);
-  text-align: center;
+  text-align: right;
 }
 
 .leaderboard-info {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  flex: 0 0 130px;
+  flex: 0 0 138px;
 }
 
 .leaderboard-name {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .leaderboard-team {
-  font-size: 0.72rem;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .leaderboard-bar-track {
   flex: 1 1 auto;
-  height: 8px;
-  border-radius: 999px;
+  height: 10px;
+  border-radius: 0;
   background: var(--surface-card-alt);
   overflow: hidden;
 }
 
 .leaderboard-bar {
   height: 100%;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--accent-450);
-  transition: width 0.25s ease;
+  transition: width 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 .leaderboard-value {
-  flex: 0 0 46px;
+  flex: 0 0 52px;
   text-align: right;
-  font-size: 0.8rem;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
-/* Etiqueta corta opcional en una fila del leaderboard (p.ej. "Titular"
-   vs. "Reserva" en el All-Star -- ver compute_all_star_selections). */
 .leaderboard-tag {
   flex: 0 0 auto;
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
-  background: var(--surface-card-alt);
-  border-radius: 999px;
-  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 2px 7px;
   white-space: nowrap;
 }

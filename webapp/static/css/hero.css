@@ -1,26 +1,34 @@
-/* hero.css -- pantalla de entrada (splash, ver views/splash.js) + jugador
-   animado (player-hero.js) + transición de navegación entre pestañas de
-   primer nivel. Separado de components.css porque es la única parte de
-   la interfaz con animación de movimiento no trivial -- mantenerlo aparte
-   deja components.css como el catálogo "estático" de piezas reutilizables. */
+/*
+  hero.css — REDISEÑO
 
-/* --- Splash: pantalla de entrada, ANTERIOR a la app, no una pestaña ---
-   Overlay fijo por encima de .app-shell (que sigue existiendo debajo,
-   normalmente ya en la sección "Mi equipo" por defecto) -- app.js solo
-   descarta este overlay al entrar, nunca desmonta ni reconstruye el
-   shell de pestañas. Con scroll propio porque en pantallas bajas
-   (portátil con poca altura) el hero + KPIs + accesos rápidos no caben
-   enteros en un viewport fijo. */
+  Pantalla de entrada (views/splash.js), jugador animado
+  (player-hero.js), roster hipotético editable (roster-builder.js) y
+  transición de navegación entre secciones. Sigue separado de
+  components.css por la misma razón que antes: es la única parte con
+  animación de movimiento no trivial.
+
+  Todas las clases y los nombres de @keyframes se conservan EXACTAMENTE
+  (db-bob, db-ball-bounce, db-shadow-pulse, db-run-across,
+  .dribbler-shadow-off, .hero-stage, .nav-transition-track…), así que
+  player-hero.js, app.js::withNavTransition y roster-builder.js siguen
+  funcionando sin tocar una línea. Lo que cambia es el lenguaje visual:
+  radio 0, reglas de 2px, campos de color planos (sin degradados de
+  fondo), alineación a la izquierda también en móvil.
+*/
+
+/* ====================================================================
+   1. Splash
+   ==================================================================== */
+
 .splash {
   position: fixed;
   inset: 0;
   z-index: 80;
   overflow: hidden;
   background: var(--surface-page);
-  background-image: var(--page-gradient);
   opacity: 1;
   visibility: visible;
-  transition: opacity 0.35s ease, visibility 0.35s;
+  transition: opacity 0.3s ease, visibility 0.3s;
 }
 
 .splash.dismissed {
@@ -29,19 +37,10 @@
   pointer-events: none;
 }
 
-/* height:100% (no min-height) es lo que hace que overflow-y:auto tenga
-   algo que desbordar -- con min-height el contenedor simplemente crecía
-   con su contenido (scrollHeight == clientHeight, comprobado) y quedaba
-   recortado sin scrollbar por el overflow:hidden de .splash, un bug peor
-   que el que se estaba arreglando. Y NO flex + align-items:center a
-   propósito: con contenido más alto que el viewport (caso normal: hero +
-   KPIs + 6 accesos rápidos) centrar verticalmente en un contenedor con
-   scroll deja la parte de ARRIBA inalcanzable (scrollTop no puede bajar
-   de 0, y el centrado empuja el contenido hacia arriba fuera del área de
-   scroll) -- bug real visto en captura: el eyebrow/título del hero
-   aparecía cortado sin forma de hacer scroll hasta él. Flujo de bloque
-   normal de arriba a abajo, alto fijo al 100%, es lo único que deja
-   TANTO el principio como el final alcanzables. */
+/* height:100% (no min-height): es lo único que da algo que desbordar a
+   overflow-y:auto dentro del overflow:hidden de .splash. Y flujo de
+   bloque normal, nunca centrado vertical — con contenido más alto que el
+   viewport, centrar deja la parte de arriba inalcanzable. */
 .splash-scroll {
   height: 100%;
   overflow-y: auto;
@@ -49,125 +48,148 @@
 
 .splash-content {
   width: 100%;
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 48px 24px;
+  padding: 40px var(--gutter, 32px) 64px;
 }
 
-/* --- Hero banner (dentro del splash) --- */
+/* ====================================================================
+   2. Hero
+   ==================================================================== */
 
 .hero {
   position: relative;
   overflow: hidden;
-  border-radius: var(--radius-card);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-card);
-  padding: 40px clamp(20px, 5vw, 56px);
-  margin-bottom: 20px;
+  border-radius: 0;
+  border: 0;
+  border-top: 3px solid var(--brand-red);
+  border-bottom: 2px solid var(--rule-strong);
+  box-shadow: none;
+  padding: 44px clamp(20px, 4vw, 48px);
+  margin-bottom: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 32px;
-  min-height: 260px;
+  gap: var(--space-8);
+  min-height: 280px;
   color: #fff;
-  background: linear-gradient(
-      120deg,
-      color-mix(in srgb, var(--team-primary) 92%, black) 0%,
-      color-mix(in srgb, var(--team-primary) 78%, #050608) 55%,
-      color-mix(in srgb, var(--team-secondary) 55%, #050608) 100%
-    ),
-    var(--surface-page);
+  /* Campo de color PLANO de la franquicia activa (--team-* lo fija
+     team-colors.js desde /api/status). Nada de degradado de fondo: la
+     textura la da la retícula de cancha de abajo, no un blend. */
+  background: color-mix(in srgb, var(--team-primary) 62%, #08090b);
 }
 
-/* Líneas de cancha de baloncesto muy sutiles -- decoración original (no
-   una foto de una cancha real), solo para dar textura de "producto
-   deportivo" al banner sin competir con el texto. */
+/* Retícula de cancha: decoración original, no una foto. Reglas rectas y
+   un arco, coherentes con la rejilla visible del sistema. */
 .hero::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.16;
-  background-image: radial-gradient(circle at 82% 50%, transparent 0 78px, rgba(255, 255, 255, 0.9) 78px 80px, transparent 80px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.5) 0 1px, transparent 1px 64px);
-  background-position: 0 0;
+  opacity: 0.14;
+  background-image: radial-gradient(
+      circle at 82% 50%,
+      transparent 0 78px,
+      rgba(255, 255, 255, 0.9) 78px 80px,
+      transparent 80px
+    ),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.5) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.32) 0 1px, transparent 1px 64px);
 }
 
 .hero-copy {
   position: relative;
   z-index: 1;
-  max-width: 560px;
+  max-width: 600px;
 }
 
 .hero-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
-  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0 0 14px;
 }
 
 .hero-eyebrow::before {
   content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--basketball-orange);
-  box-shadow: 0 0 0 3px rgba(226, 121, 58, 0.25);
+  width: 28px;
+  height: 3px;
+  border-radius: 0;
+  background: var(--brand-red);
+  box-shadow: none;
 }
 
 .hero h1 {
-  font-size: clamp(1.7rem, 3.4vw, 2.6rem);
-  line-height: 1.1;
-  margin: 0 0 10px;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4.4vw, 3.4rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.028em;
+  margin: 0 0 14px;
+  text-wrap: balance;
 }
 
 .hero p {
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.98rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 15px;
   line-height: 1.6;
-  margin: 0 0 22px;
-  max-width: 46ch;
+  margin: 0 0 26px;
+  max-width: 52ch;
+  text-wrap: pretty;
 }
 
 .hero-cta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
+/* Sobre el campo de la franquicia, la acción primaria invierte: tinta
+   sobre blanco. Etiqueta a ras de la izquierda, como el resto. */
 .hero .btn {
   background: #fff;
-  color: color-mix(in srgb, var(--team-primary) 85%, black);
-  border-color: transparent;
+  color: #14110f;
+  border-color: #fff;
 }
 
 .hero .btn:hover {
   filter: none;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--brand-red);
+  border-color: var(--brand-red);
+  color: #fff;
 }
 
 .hero .btn-ghost {
   appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: transparent;
   color: #fff;
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 600;
-  padding: 9px 16px;
-  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 11px 18px;
+  border-radius: 0;
   cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .hero .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #fff;
 }
+
+/* ====================================================================
+   3. Jugador destacado animado (player-hero.js)
+   ==================================================================== */
 
 .hero-stage {
   position: relative;
@@ -188,16 +210,9 @@
   height: 14px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), transparent 80%);
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.5), transparent 80%);
   animation: db-shadow-pulse 0.5s ease-in-out infinite alternate;
 }
-
-/* --- Jugador destacado (player-hero.js): foto real + balón animado ---
-   Reemplaza un primer intento de silueta ilustrada a mano (formas SVG
-   genéricas para cabeza/torso/piernas) que se veía incompleta -- una foto
-   real del roster (hotlink en vivo a cdn.nba.com, mismo mecanismo que ya
-   usa el popup de jugador) resuelve "un jugador de los 76ers" de forma
-   mucho más creíble y profesional que reintentar la anatomía a mano. */
 
 .hero-motion {
   position: absolute;
@@ -205,7 +220,7 @@
   width: 100%;
   height: 100%;
   overflow: visible;
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .motion-arc {
@@ -230,13 +245,12 @@
 }
 
 .hero-photo-bob .team-badge {
-  border: 4px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 0;
+  box-shadow: none;
+  background: rgba(0, 0, 0, 0.28);
 }
 
-/* Variante del hero para un recorte de cuerpo entero (staticHeroImage())
-   en vez de la insignia circular -- proporción vertical, no 1:1, y sin
-   recortar la imagen (contain, no cover). */
 .hero-stage-photo {
   width: clamp(180px, 22vw, 300px);
   aspect-ratio: 3 / 4;
@@ -250,11 +264,14 @@
   justify-content: center;
 }
 
+/* Las fotografías del sistema van en blanco y negro; aquí se deja un
+   punto de grises altos para que el recorte no se pierda contra el
+   campo de color de la franquicia. */
 .hero-static-photo {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.45));
+  filter: grayscale(1) contrast(1.12) drop-shadow(0 18px 22px rgba(0, 0, 0, 0.5));
 }
 
 .hero-ball-wrap {
@@ -270,7 +287,7 @@
   width: 100%;
   height: 100%;
   overflow: visible;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
 }
 
 .db-ball {
@@ -290,94 +307,93 @@
 }
 
 @keyframes db-bob {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-6px);
-  }
+  from { transform: translateY(0); }
+  to { transform: translateY(-6px); }
 }
 
 @keyframes db-ball-bounce {
-  from {
-    transform: translateY(0) scale(1, 1) rotate(0deg);
-  }
-  to {
-    transform: translateY(-22px) scale(1.04, 0.96) rotate(-18deg);
-  }
+  from { transform: translateY(0) scale(1, 1) rotate(0deg); }
+  to { transform: translateY(-22px) scale(1.04, 0.96) rotate(-18deg); }
 }
 
 @keyframes db-shadow-pulse {
-  from {
-    opacity: 0.5;
-    transform: translateX(-50%) scale(1);
-  }
-  to {
-    opacity: 0.25;
-    transform: translateX(-50%) scale(0.82);
-  }
+  from { opacity: 0.5; transform: translateX(-50%) scale(1); }
+  to { opacity: 0.25; transform: translateX(-50%) scale(0.82); }
 }
 
-/* --- KPI strip debajo del hero --- */
+/* ====================================================================
+   4. Tira de KPIs — rejilla modular cosida, no tarjetas sueltas
+   ==================================================================== */
 
+/* Misma razón que .quick-links: cuatro KPIs, columnas explícitas. */
 .hero-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-8);
 }
 
 .hero-kpi {
-  background: var(--surface-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  padding: 16px 18px;
+  background: var(--surface-page);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 18px 20px 20px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .hero-kpi .label {
-  color: var(--text-secondary);
-  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.1em;
 }
 
 .hero-kpi .value {
-  font-size: 1.7rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.025em;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
 
 .hero-kpi .value.accent {
-  color: color-mix(in srgb, var(--team-primary) 55%, var(--text-primary));
+  color: var(--brand-red-bright);
 }
 
 .hero-kpi .sub {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 12px;
 }
 
-/* --- Roster hipotético editable (roster-builder.js) --- */
+/* ====================================================================
+   5. Roster hipotético editable (roster-builder.js)
+   ==================================================================== */
 
 .roster-slots {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
-  margin: 16px 0;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin: var(--space-4) 0;
 }
 
 .roster-slot {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-card-alt);
+  padding: 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-card);
   min-width: 0;
 }
 
@@ -388,8 +404,8 @@
 
 .roster-slot-name {
   margin: 0;
-  font-weight: 600;
-  font-size: 0.88rem;
+  font-weight: 700;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -397,8 +413,11 @@
 
 .roster-slot-meta {
   margin: 2px 0 0;
-  font-size: 0.76rem;
-  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -408,18 +427,21 @@
   appearance: none;
   flex-shrink: 0;
   border: 1px solid var(--border);
-  background: var(--surface-card);
+  background: transparent;
   color: var(--text-primary);
-  font: inherit;
-  font-size: 0.76rem;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-radius: 6px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  border-radius: 0;
   cursor: pointer;
 }
 
 .roster-slot-change:hover {
-  border-color: color-mix(in srgb, var(--team-primary) 45%, var(--border));
+  border-color: var(--brand-red);
+  background: color-mix(in srgb, var(--brand-red) 16%, transparent);
 }
 
 .roster-slot-remove {
@@ -428,9 +450,9 @@
   width: 28px;
   height: 28px;
   border: 1px solid var(--border);
-  background: var(--surface-card);
-  color: var(--text-secondary);
-  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 0;
   font-size: 0.72rem;
   line-height: 1;
   cursor: pointer;
@@ -439,14 +461,14 @@
 .roster-slot-remove:hover {
   border-color: var(--status-critical);
   color: var(--status-critical);
+  background: color-mix(in srgb, var(--status-critical) 14%, transparent);
 }
 
 .roster-add-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
-  margin-top: -4px;
 }
 
 .roster-slot-add {
@@ -454,53 +476,64 @@
   border: 1px dashed var(--border);
   background: none;
   color: var(--text-primary);
-  font: inherit;
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 9px 16px;
-  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 16px;
+  border-radius: 0;
   cursor: pointer;
+  text-align: left;
 }
 
 .roster-slot-add:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--team-primary) 55%, var(--border));
+  border-color: var(--brand-red);
   border-style: solid;
+  background: color-mix(in srgb, var(--brand-red) 14%, transparent);
 }
 
 .roster-slot-add:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .roster-count {
   margin: 0;
 }
 
-/* --- Modal de selección de jugador (dentro de #roster-picker-modal) --- */
+/* ====================================================================
+   6. Modal de selección de jugador
+   ==================================================================== */
 
 .roster-picker-search {
   width: 100%;
-  background: var(--surface-card-alt);
+  background: var(--surface-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 0;
+  padding: 11px 14px;
   color: var(--text-primary);
   font: inherit;
-  font-size: 0.92rem;
-  margin-bottom: 12px;
+  font-size: 14px;
+  margin-bottom: var(--space-3);
+}
+
+.roster-picker-search::placeholder {
+  color: var(--text-muted);
 }
 
 .roster-picker-search:focus {
-  outline: 2px solid var(--accent-450);
-  outline-offset: 1px;
+  outline: 2px solid var(--brand-red-bright);
+  outline-offset: -1px;
 }
 
 .roster-picker-results {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 420px;
+  gap: 0;
+  max-height: 440px;
   overflow-y: auto;
+  border: 1px solid var(--border);
 }
 
 .roster-picker-row {
@@ -510,24 +543,28 @@
   gap: 10px;
   width: 100%;
   text-align: left;
-  border: 1px solid transparent;
+  border: 0;
+  border-bottom: 1px solid var(--gridline);
   background: none;
   color: var(--text-primary);
   font: inherit;
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 9px 12px;
+  border-radius: 0;
   cursor: pointer;
+}
+
+.roster-picker-row:last-child {
+  border-bottom: 0;
 }
 
 .roster-picker-row:hover,
 .roster-picker-row:focus-visible {
   background: var(--surface-card-alt);
-  border-color: var(--border);
 }
 
 .roster-picker-row-name {
-  font-weight: 600;
-  font-size: 0.88rem;
+  font-weight: 700;
+  font-size: 13px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -536,54 +573,80 @@
 }
 
 .roster-picker-row-meta {
-  color: var(--text-secondary);
-  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   flex-shrink: 0;
 }
 
 .roster-picker-row-gs {
-  color: var(--text-muted);
-  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   width: 78px;
   text-align: right;
 }
 
-/* --- Tarjetas de acceso rápido a las secciones principales --- */
+/* ====================================================================
+   7. Accesos rápidos a las secciones
+   ==================================================================== */
 
+/* Cuatro accesos fijos: columnas explícitas, nunca auto-fit. Con auto-fit
+   caben 3 a ~950px y la cuarta queda sola en una fila donde las celdas
+   vacías del contenedor cosido se pintan como un panel gris roto. */
 .quick-links {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-8);
+}
+
+@media (max-width: 1100px) {
+  .quick-links {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .quick-links {
+    grid-template-columns: 1fr;
+  }
 }
 
 .quick-link {
   appearance: none;
   text-align: left;
-  border: 1px solid var(--border);
+  border: 0;
+  border-top: 3px solid transparent;
   background: var(--surface-card);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  padding: 18px 20px;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 20px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   font: inherit;
   color: var(--text-primary);
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  transition: background 0.14s ease, border-color 0.14s ease;
 }
 
 .quick-link:hover {
-  border-color: color-mix(in srgb, var(--team-primary) 45%, var(--border));
-  transform: translateY(-2px);
+  border-top-color: var(--brand-red);
+  background: var(--surface-card-alt);
 }
 
 .quick-link .quick-link-title {
-  font-weight: 700;
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -591,19 +654,15 @@
 
 .quick-link .quick-link-desc {
   color: var(--text-secondary);
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.55;
+  text-wrap: pretty;
 }
 
-/* --- Transición de navegación entre pestañas de primer nivel ---
-   Se activa al entrar desde el splash Y al cambiar entre Mi equipo/Liga
-   NBA/Explicador (no en cada sub-pestaña o toggle -- el pedido era "antes
-   de entrar en estadísticas", no en cada clic). Cubre el viewport un
-   instante, mientras la pestaña de destino ya se está montando/pidiendo
-   datos detrás -- doble función: comunica que "esto va a otra sección
-   grande" Y disimula el parpadeo de contenido vacío mientras carga.
-   z-index por encima de .splash (80) para que se vea también durante el
-   propio hand-off splash -> app. */
+/* ====================================================================
+   8. Transición entre secciones
+   ==================================================================== */
+
 .nav-transition {
   position: fixed;
   inset: 0;
@@ -631,18 +690,32 @@
   animation: db-run-across 0.85s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-@keyframes db-run-across {
-  from {
-    left: -22%;
-  }
-  to {
-    left: 108%;
-  }
+/* Regla de acento que barre con el jugador: el mismo gesto que separa
+   secciones en el resto del sistema, en movimiento. */
+.nav-transition.visible::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: var(--brand-red);
+  transform-origin: left center;
+  animation: db-rule-sweep 0.85s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-/* En pleno cruce de pantalla no hay un "suelo" fijo con el que la sombra
-   elíptica del hero tenga sentido (esa sombra asume una franja de banner
-   estática) -- se oculta solo en este contexto. */
+@keyframes db-run-across {
+  from { left: -22%; }
+  to { left: 108%; }
+}
+
+@keyframes db-rule-sweep {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* En pleno cruce no hay un "suelo" con el que la sombra elíptica del
+   hero tenga sentido — se oculta solo en este contexto. */
 .dribbler-shadow-off .dribbler-shadow {
   display: none;
 }
@@ -658,22 +731,33 @@
     left: 50%;
     transform: translate(-50%, -50%);
   }
+  .nav-transition.visible::after {
+    animation: none;
+    transform: scaleX(1);
+  }
 }
 
 @media (max-width: 900px) {
+  .hero-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .hero {
     flex-direction: column;
-    text-align: center;
-    padding: 32px 24px;
+    align-items: flex-start;
+    /* Nunca centrado: los títulos y la copia van a ras de la izquierda
+       también en móvil. */
+    text-align: left;
+    padding: 32px 20px;
   }
   .hero-copy {
     max-width: none;
   }
   .hero-cta-row {
-    justify-content: center;
+    justify-content: flex-start;
   }
   .hero-stage {
     width: 150px;
+    align-self: flex-end;
   }
   .hero-stage-photo {
     width: 190px;

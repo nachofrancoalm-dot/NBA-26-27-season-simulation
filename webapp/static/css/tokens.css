@@ -1,108 +1,197 @@
 /*
-  tokens.css
+  tokens.css — REDISEÑO "terminal modernista"
 
-  Tema oscuro fijo por defecto, con un degradado de fondo que insinúa los
-  colores de marca de la NBA (azul marino -> negro -> rojo muy oscuro)
-  sin ser literal ni chillón -- las cards/tablas/gráficos NO viven sobre
-  el degradado, viven sobre --surface-card, que sigue siendo exactamente
-  la superficie oscura ya validada por la skill dataviz de este proyecto
-  (references/palette.md, "Dark chart surface": #1a1a19) -- el degradado
-  es decoración de la página, nunca la superficie donde se mide contraste
-  de un gráfico. --accent-* (azul) sigue siendo el hue secuencial
-  validado para datos; --brand-red es un acento de marca NUEVO, solo para
-  chrome de interfaz (botones, tab activo) -- nunca se usa para codificar
-  datos en un gráfico.
+  Mismo CONTRATO de variables que la versión anterior: ningún nombre de
+  token desaparece, así charts.js (--accent-450, --gridline, --baseline,
+  --surface-card), team-colors.js (--team-primary/--team-secondary) y el
+  resto de hojas siguen funcionando sin tocar una línea de JS.
 
-  [data-theme="light"] deja el tema claro disponible para un futuro
-  toggle manual (no expuesto en la UI todavía).
+  Lo que cambia es el sistema visual:
+  - Fondo tinta casi negro y PLANO (sin degradado de marca): en una
+    interfaz de datos el degradado compite con los gráficos. La marca la
+    lleva la tipografía y el rojo, no el fondo.
+  - Radio 0 en todo. Sin sombras difusas: la jerarquía la hacen reglas de
+    2px y la alineación, no cajas flotantes.
+  - Un solo acento de marca (rojo) para chrome, y un hue frío separado
+    (--accent-*) reservado EXCLUSIVAMENTE a codificar datos, como en la
+    versión anterior. Nunca se mezclan.
+  - Archivo en 400/600/800, cifras tabulares en toda la app.
+
+  [data-theme="light"] se mantiene disponible para un futuro toggle.
 */
+
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap");
 
 :root {
   color-scheme: dark;
 
-  --surface-page: #0d0d0d;
-  --page-gradient: radial-gradient(1200px 800px at 8% -10%, #0f2a52 0%, rgba(15, 42, 82, 0) 55%),
-    radial-gradient(1100px 900px at 100% 115%, #4a0e14 0%, rgba(74, 14, 20, 0) 50%),
-    linear-gradient(160deg, #0a0e18 0%, #08090c 45%, #0c0708 100%);
-  --surface-card: #2b2b30;
-  --surface-card-alt: #38383f;
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-  --gridline: #45454e;
-  --baseline: #55555f;
-  --border: rgba(255, 255, 255, 0.20);
+  /* --- Tinta y superficies ------------------------------------------ */
+  --surface-page: #100f0f;
+  --page-gradient: none;
+  --surface-card: #191817;
+  --surface-card-alt: #221f1f;
+  --surface-sunken: #0b0a0a;
 
-  --accent-100: #184f95;
-  --accent-400: #3987e5;
-  --accent-450: #3987e5;
-  --accent-600: #86b6ef;
+  --text-primary: #f3f2f2;
+  --text-secondary: #bab6b6;
+  --text-muted: #7d7979;
 
-  --brand-red: #e0293e;
-  --brand-red-dark: #a01623;
+  /* Reglas: la de 2px organiza secciones, la de 1px separa filas. */
+  --border: rgba(243, 242, 242, 0.16);
+  --rule-strong: rgba(243, 242, 242, 0.30);
+  --gridline: rgba(243, 242, 242, 0.10);
+  --baseline: rgba(243, 242, 242, 0.34);
+
+  /* --- Hue de DATOS (nunca chrome) ----------------------------------- */
+  --accent-100: #12293d;
+  --accent-400: #4f9de0;
+  --accent-450: #4f9de0;
+  --accent-600: #a7cff3;
+
+  /* --- Acento de MARCA (nunca datos) --------------------------------- */
+  --brand-red: #ec3013;
+  --brand-red-bright: #ff563c;
+  --brand-red-dark: #ae1800;
   --brand-blue: #1d428a;
 
-  /* Colores reales de la franquicia activa -- team-colors.js los
-     sobrescribe en JS al arrancar, leyendo /api/status. Estos son solo el
-     fallback antes de que ese script corra (o si la abreviatura no
-     estuviera en la tabla). --brand-*  arriba se queda como el acento de
-     CHROME (nav, tabs, botones) para cualquier equipo; --team-* es solo
-     para el hero de Inicio y el ilustrador del jugador, donde SÍ tiene
-     sentido que cambie con la franquicia. */
+  /* team-colors.js los sobrescribe leyendo /api/status. */
   --team-primary: var(--brand-blue);
   --team-secondary: var(--brand-red);
 
   --basketball-orange: #e2793a;
   --basketball-orange-dark: #a8531e;
 
-  --status-good: #0ca30c;
-  --status-warning: #fab219;
-  --status-serious: #ec835a;
-  --status-critical: #d03b3b;
+  --status-good: #38b24a;
+  --status-warning: #e0a21c;
+  --status-serious: #e07a44;
+  --status-critical: #e0453a;
 
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --radius-card: 12px;
-  --radius-badge: 999px;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  /* --- Tipografía y métrica ------------------------------------------ */
+  --font-sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Archivo", system-ui, sans-serif;
+
+  --radius-card: 0px;
+  --radius-badge: 0px;
+  --shadow-card: none;
+  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.65);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Alturas de las tres barras fijas — layout.css las encadena con
+     position: sticky, así que el offset de cada una se deriva de estas
+     dos y nunca se escribe a mano dos veces. */
+  --masthead-h: 56px;
+  --nav-h: 44px;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --surface-page: #f9f9f7;
-  --page-gradient: none;
-  --surface-card: #fcfcfb;
-  --surface-card-alt: #f4f3ef;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --gridline: #e1e0d9;
-  --baseline: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.10);
+  --surface-page: #f3f2f2;
+  --surface-card: #ffffff;
+  --surface-card-alt: #eae9e9;
+  --surface-sunken: #eae7e7;
 
-  --accent-100: #cde2fb;
-  --accent-400: #3987e5;
-  --accent-450: #2a78d6;
-  --accent-600: #184f95;
+  --text-primary: #201e1d;
+  --text-secondary: #605d5d;
+  --text-muted: #7d7979;
 
-  --brand-red: #c8102e;
-  --brand-red-dark: #96091f;
-  --brand-blue: #1d428a;
+  --border: rgba(32, 30, 29, 0.18);
+  --rule-strong: rgba(32, 30, 29, 0.40);
+  --gridline: rgba(32, 30, 29, 0.10);
+  --baseline: rgba(32, 30, 29, 0.45);
 
-  --shadow-card: 0 1px 2px rgba(11, 11, 11, 0.04), 0 1px 8px rgba(11, 11, 11, 0.03);
+  --accent-100: #d6e7f8;
+  --accent-400: #2f7cbd;
+  --accent-450: #2f7cbd;
+  --accent-600: #17517f;
+
+  --brand-red: #ec3013;
+  --brand-red-bright: #dd2b0f;
+  --brand-red-dark: #ae1800;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
   background-color: var(--surface-page);
   background-image: var(--page-gradient);
-  background-attachment: fixed;
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.012em;
+  line-height: 1.14;
+}
+
+a {
+  color: var(--brand-red-bright);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--text-primary);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand-red) 40%, transparent);
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-red-bright);
+  outline-offset: 2px;
+}
+
+/* Barra de scroll discreta: en una interfaz densa hay muchas regiones
+   con scroll propio (tablas, rails, bracket) y la nativa clara rompe el
+   tono. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--rule-strong);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
 }

@@ -1,79 +1,143 @@
-/* layout.css -- estructura de página: una sola columna, tabs, grid de contenido */
+/*
+  layout.css — REDISEÑO
+
+  Estructura: masthead fijo (identidad + secciones) y sub-navegación
+  contextual pegajosa debajo. Tres capas encadenadas por sticky, con los
+  offsets derivados de --masthead-h / --nav-h en tokens.css para que no
+  haya un número mágico repetido.
+
+  Las clases y los ids son EXACTAMENTE los mismos que consume app.js
+  (.tabs / .subtabs / .tab-button / .tab-panel / .subtab-panel /
+  .topbar / .team-identity-home). Solo cambia el aspecto.
+*/
+
+:root {
+  --gutter: 32px;
+  --content-max: 1560px;
+}
 
 .app-shell {
   min-height: 100vh;
 }
 
-.main {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 24px 36px 64px;
-  min-width: 0;
+/* --- Masthead fijo -------------------------------------------------- */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface-page);
+  border-bottom: 2px solid var(--rule-strong);
 }
 
 .topbar {
+  height: var(--masthead-h);
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: var(--space-4);
 }
 
 .topbar .team-identity {
-  gap: 14px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.masthead-titles {
+  min-width: 0;
 }
 
 .topbar h1 {
-  font-size: 1.4rem;
-  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar .subtitle {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 1px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tabs,
-.subtabs {
+.masthead-meta {
   display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  flex-shrink: 0;
 }
+
+/* Sello de método, no un dato: dice QUÉ es esta interfaz, no cuánto
+   vale nada. */
+.masthead-stamp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.masthead-stamp::before {
+  content: "";
+  width: 26px;
+  height: 3px;
+  background: var(--brand-red);
+}
+
+/* --- Navegación de sección (dentro del masthead) --------------------- */
+
+.tabs {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  height: var(--nav-h);
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* --- Sub-navegación contextual pegajosa ------------------------------ */
 
 .subtabs {
-  margin-top: -4px;
+  position: sticky;
+  top: calc(var(--masthead-h) + var(--nav-h) + 2px);
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  /* NUNCA envuelve: si envolviera, la barra pasaría de ~44px a ~87px y
+     dejaría de casar con el offset --masthead-h + --nav-h del que
+     depende toda la cadena de sticky (bug real entre 900 y 1100px, con
+     una sub-pestaña huérfana en la segunda línea). Scroll horizontal
+     en su lugar, a cualquier ancho. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  background: var(--surface-page);
+  border-bottom: 2px solid var(--rule-strong);
+  margin: 0 calc(var(--gutter) * -1) var(--space-6);
+  padding: 0 var(--gutter);
 }
 
-.tab-button {
-  appearance: none;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.95rem;
-  padding: 10px 14px;
-  cursor: pointer;
-  border-radius: 6px 6px 0 0;
-}
-
-.tab-button:hover {
-  color: var(--text-primary);
-  background: var(--surface-card);
-}
-
-.tab-button[aria-selected="true"] {
-  color: var(--text-primary);
-  border-bottom-color: var(--brand-red);
-  font-weight: 600;
-}
-
-.subtabs .tab-button {
-  font-size: 0.85rem;
-  padding: 8px 12px;
+.subtabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-panel[hidden],
@@ -81,61 +145,101 @@
   display: none;
 }
 
+/* El Explicador no tiene sub-navegación, así que su primer panel
+   quedaría pegado al masthead sin el aire que dan las .subtabs. */
+#tab-explicador {
+  padding-top: var(--space-6);
+}
+
+/* --- Contenido ------------------------------------------------------- */
+
+.main {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0 var(--gutter) 96px;
+  min-width: 0;
+}
+
+/* Rejilla modular visible: el hueco de 1px deja pasar la regla de fondo,
+   así las celdas quedan cosidas en una malla en vez de flotar sueltas.
+   Es la misma clase .grid que emite ui.js::statGrid. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-4);
 }
 
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: var(--space-8);
 }
 
-/* Sin esto, un hijo de grid no se encoge por debajo del ancho de su
-   contenido (min-width: auto por defecto) -- una tabla ancha dentro de
-   una columna 1fr la empuja más allá del viewport en vez de activar el
-   scroll horizontal de .table-wrap. Bug real: pestaña Premios con tablas
-   de muchas columnas desbordando el layout. */
+/* Sin esto un hijo de grid no se encoge por debajo del ancho de su
+   contenido y una tabla ancha empuja el layout fuera del viewport en
+   vez de activar el scroll de .table-wrap. */
 .grid-2 > * {
   min-width: 0;
 }
 
-/* Quintetos All-NBA/All-Defensive (awards.js::allTeamSection): solo el
-   gráfico de cancha, sin tabla al lado -- ver court.js. minmax más
-   ancho que .grid porque una cancha con 5 fotos necesita más sitio que
-   un stat tile. */
 .court-lineup-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
 }
 
-/* Explorador de equipo (Liga y Playoffs): rail lateral de equipos +
- * detalle, en vez de un <select> nativo. */
+.court-lineup-grid > * {
+  background: var(--surface-card);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+/* Explorador de equipo (Liga y Playoffs): rail lateral + detalle. */
 .team-explorer {
   display: grid;
-  grid-template-columns: 190px 1fr;
-  gap: 16px;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-6);
 }
 
-/* Igual que .grid-2 > * -- sin min-width: 0 el panel de detalle (stat
-   tiles + tabla ancha) no se encoge por debajo de su contenido y empuja
-   el layout más allá del viewport. Bug real reportado: KPIs y tabla del
-   explorador de equipo saliéndose del marco horizontalmente. */
 .team-explorer > * {
   min-width: 0;
 }
 
-@media (max-width: 900px) {
-  .main {
-    padding: 16px 16px 48px;
+@media (max-width: 1100px) {
+  :root {
+    --gutter: 20px;
   }
   .grid-2 {
-    grid-template-columns: 1fr;
+    gap: var(--space-6);
   }
+}
+
+@media (max-width: 900px) {
+  .grid-2,
   .team-explorer {
     grid-template-columns: 1fr;
+  }
+  .topbar .subtitle {
+    display: none;
+  }
+  .masthead-stamp {
+    display: none;
+  }
+  /* Las secciones tampoco caben en una fila a 390px. */
+  .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .main {
+    padding-bottom: 64px;
   }
 }
