@@ -124,7 +124,7 @@ function teamExplorerCard(teamAbbrevs, teamIds, myAbbreviation, hypothetical) {
           loadTeamDetail(detail, abbr, myAbbreviation, hypothetical);
         },
       },
-      [teamBadge(teamIds[abbr], abbr, 20), abbr]
+      [teamBadge(teamIds[abbr], abbr, 26), abbr]
     )
   );
   const rail = el("div", { class: "team-rail" }, railButtons);
@@ -186,7 +186,7 @@ async function loadTeamDetail(container, abbreviation, myAbbreviation, hypotheti
     header.replaceChildren(
       el("div", { class: "card-header-row", style: "margin-bottom: 16px;" }, [
         el("div", { class: "team-identity", style: "gap: 16px;" }, [
-          teamBadge(data.team_id, abbreviation, 72),
+          teamBadge(data.team_id, abbreviation, 82),
           el("strong", { style: "font-size: 1.4rem;" }, abbreviation),
         ]),
         pillToggle(
@@ -394,7 +394,7 @@ function bracketCard() {
 function bracketTeamRow(abbreviation, seed, winner, teamIds) {
   return el("div", { class: `bracket-team${abbreviation === winner ? " winner" : ""}` }, [
     el("span", { class: "seed" }, seed != null ? String(seed) : ""),
-    teamBadge(teamIds[abbreviation], abbreviation, 18),
+    teamBadge(teamIds[abbreviation], abbreviation, 22),
     el("span", { class: "abbr" }, abbreviation || "—"),
   ]);
 }
@@ -483,7 +483,7 @@ function bracketCenterChampion(result) {
     el("div", { class: "bracket-trophy" }, "🏆"),
     el("div", { class: "caption", style: "margin: 0;" }, "Campeón NBA"),
     el("div", { class: "team-identity", style: "justify-content: center;" }, [
-      teamBadge(result.team_ids[result.nba_champion], result.nba_champion, 48),
+      teamBadge(result.team_ids[result.nba_champion], result.nba_champion, 56),
       el("strong", { style: "font-size: 1.1rem;" }, result.nba_champion),
     ]),
   ]);

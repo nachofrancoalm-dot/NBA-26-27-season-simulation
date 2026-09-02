@@ -20,7 +20,7 @@ function fmt1(value) {
 
 function rosterSlot(player, onChangeClick, onRemoveClick) {
   return el("div", { class: "roster-slot" }, [
-    teamBadge(player.team_id, player.team_abbreviation, 32),
+    teamBadge(player.team_id, player.team_abbreviation, 38),
     el("div", { class: "roster-slot-info" }, [
       el("p", { class: "roster-slot-name" }, player.player_name),
       el(
@@ -76,7 +76,7 @@ function openPickerModal(pool, excludeIds, onPick) {
             },
           },
           [
-            teamBadge(p.team_id, p.team_abbreviation, 28),
+            teamBadge(p.team_id, p.team_abbreviation, 34),
             el("span", { class: "roster-picker-row-name" }, p.player_name),
             el("span", { class: "roster-picker-row-meta" }, `${p.team_abbreviation} · ${p.position || "?"}`),
             el("span", { class: "roster-picker-row-gs" }, `GS/36 ${fmt1(p.game_score_per36)}`),

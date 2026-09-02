@@ -111,7 +111,7 @@ export async function openPlayerModal(playerId, teamId) {
       el("button", { class: "modal-close", "aria-label": "Cerrar", onclick: () => dialog.close() }, "✕"),
       el("div", { class: "detail-modal-header" }, [
         playerPhoto(data.player_id, data.name, 96),
-        teamBadge(teamId, null, 56),
+        teamBadge(teamId, null, 64),
         el("div", {}, [
           el("h2", { style: "margin: 0 0 4px;" }, data.name),
           el("p", { class: "caption", style: "margin: 0;" }, data.position || "Posición no disponible"),

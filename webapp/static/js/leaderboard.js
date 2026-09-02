@@ -96,7 +96,7 @@ export function teamLeaderboardChart(records, { valueKey, valueFormat = (v) => (
       },
       [
         el("span", { class: "leaderboard-rank" }, String(index + 1)),
-        teamBadge(teamIds[record.team_abbreviation], record.team_abbreviation, 36),
+        teamBadge(teamIds[record.team_abbreviation], record.team_abbreviation, 42),
         el("div", { class: "leaderboard-info" }, [
           el("span", { class: "leaderboard-name" }, record.team_abbreviation),
           record.conference ? el("span", { class: "leaderboard-team" }, record.conference) : null,
@@ -108,7 +108,7 @@ export function teamLeaderboardChart(records, { valueKey, valueFormat = (v) => (
 
     if (statsFn) {
       const preview = () => ({
-        photo: teamBadge(teamIds[record.team_abbreviation], record.team_abbreviation, 40),
+        photo: teamBadge(teamIds[record.team_abbreviation], record.team_abbreviation, 48),
         name: record.team_abbreviation,
         subtitle: record.conference,
         caption: captionFn ? captionFn(record) : null,

@@ -141,7 +141,7 @@ export function photoBadge(src, fallbackText, size = 40, extraClass = "") {
 
 /** Insignia de equipo -- caso particular de photoBadge() con la URL de
  * cdn.nba.com ya armada a partir del team_id. */
-export function teamBadge(teamId, abbreviation, size = 40) {
+export function teamBadge(teamId, abbreviation, size = 48) {
   const src = teamId ? `https://cdn.nba.com/logos/nba/${teamId}/global/L/logo.svg` : null;
   return photoBadge(src, abbreviation ? abbreviation.slice(0, 3) : "NBA", size);
 }

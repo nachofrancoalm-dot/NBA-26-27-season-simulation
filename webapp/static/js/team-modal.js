@@ -32,7 +32,7 @@ export async function openTeamModal(abbreviation, teamId) {
 
     body.replaceChildren(
       el("div", { class: "detail-modal-header" }, [
-        teamBadge(data.team_id ?? teamId, abbreviation, 96),
+        teamBadge(data.team_id ?? teamId, abbreviation, 104),
         el("div", {}, [
           el("h2", { style: "margin: 0 0 4px;" }, abbreviation),
           el("p", { class: "caption", style: "margin: 0;" }, positionLine),
