@@ -405,6 +405,59 @@ def build_roster_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool
     return shots_df
 
 
+def build_league_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+    """
+    Mismo mapa de tiros que build_roster_shot_charts_dataset, pero para
+    todos los jugadores únicos de la liga (no solo el roster propio) --
+    webapp/routers/players.py lo usa como fallback para el popup de
+    cualquier jugador que no esté en roster_shot_charts.csv. Guarda
+    data/processed/league_shot_charts.csv, mismo esquema.
+
+    ADVERTENCIA DE COSTE: ~570-600 llamadas (una por jugador único de la
+    liga) -- opt-in vía --league-shot-charts, no forma parte de --league
+    (que ya de por sí cuesta ~1350 llamadas). Requiere haber corrido
+    --league antes (lee league_player_career_stats.csv). Un jugador cuya
+    descarga falle se salta con un aviso, mismo patrón que
+    _download_player_stats_for_cases -- con ~600 llamadas a un endpoint
+    que ya se sabe inestable, un fallo puntual es cuestión de cuándo, no
+    de si.
+    """
+    paths = get_paths(config)
+    career_path = paths["processed"] / "league_player_career_stats.csv"
+    if not career_path.exists():
+        raise FileNotFoundError(f"No se encontró {career_path}. Corre `python src/data_pipeline.py --league` primero.")
+    career = pd.read_csv(career_path)
+    career = career[career["GP"] > 0]
+
+    rows = []
+    for player_id, group in tqdm(career.groupby("PLAYER_ID"), desc="Descargando mapas de tiro de la liga"):
+        latest_season = sorted(group["SEASON_ID"].astype(str))[-1]
+        try:
+            shots = fetch_player_shot_chart(int(player_id), latest_season, paths["raw"], force_refresh)
+        except Exception as e:  # noqa: BLE001 -- un jugador roto no debe abortar el resto de la ingesta
+            print(f"  [omitido] player_id={player_id}: {e}")
+            continue
+        if shots.empty:
+            continue
+        for _, shot in shots.iterrows():
+            rows.append(
+                {
+                    "player_id": int(player_id),
+                    "season": latest_season,
+                    "loc_x": shot["LOC_X"],
+                    "loc_y": shot["LOC_Y"],
+                    "shot_made": bool(shot["SHOT_MADE_FLAG"]),
+                    "shot_type": shot["SHOT_TYPE"],
+                }
+            )
+
+    shots_df = pd.DataFrame(rows, columns=["player_id", "season", "loc_x", "loc_y", "shot_made", "shot_type"])
+    out_path = paths["processed"] / "league_shot_charts.csv"
+    shots_df.to_csv(out_path, index=False)
+    print(f"Guardado: {out_path} ({len(shots_df)} tiros, {shots_df['player_id'].nunique()} jugadores)")
+    return shots_df
+
+
 def fetch_team_roster(
     team_id: int,
     season: str,
@@ -1379,6 +1432,14 @@ if __name__ == "__main__":
              "defecto). ADVERTENCIA: la ingesta más cara del proyecto -- del orden "
              "de miles de llamadas, 1.5-3 horas la primera vez. Opt-in.",
     )
+    parser.add_argument(
+        "--league-shot-charts",
+        action="store_true",
+        help="Descarga el mapa de tiros real de cada jugador único de la liga (para "
+             "el popup de detalle de cualquier jugador, no solo el roster propio). "
+             "ADVERTENCIA: ~570-600 llamadas. Requiere haber corrido --league antes. "
+             "Opt-in, no forma parte de --league.",
+    )
     args = parser.parse_args()
 
     run_full_pipeline(force_refresh=args.refresh)
@@ -1394,6 +1455,11 @@ if __name__ == "__main__":
         build_league_player_countries_dataset(config, force_refresh=args.refresh)
         print("\n--- 4/4: Calendario real de la temporada (1 llamada, barato) ---")
         build_league_schedule_dataset(config, force_refresh=args.refresh)
+
+    if args.league_shot_charts:
+        config = load_config()
+        print("\n=== Ingesta de mapas de tiro de la liga completa ===\n")
+        build_league_shot_charts_dataset(config, force_refresh=args.refresh)
 
     if args.backtest_sweep:
         print("\n=== Ingesta del backtest sweep (30 equipos x 15 temporadas) ===\n")

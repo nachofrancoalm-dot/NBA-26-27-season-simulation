@@ -225,21 +225,24 @@ def get_player(player_id: int):
 
 @router.get("/player/{player_id}/shot-chart")
 def get_player_shot_chart(player_id: int):
-    """Tiros reales (LOC_X/LOC_Y) de la temporada más reciente -- solo lee
-    roster_shot_charts.csv, nunca dispara una llamada a nba_api. Lista
-    vacía si no hay CSV o tiros cacheados; el frontend lo trata como
-    "sin datos"."""
+    """Tiros reales (LOC_X/LOC_Y) de la temporada más reciente. Lee
+    roster_shot_charts.csv (roster propio, curado) y cae a
+    league_shot_charts.csv (los 30 equipos reales, requiere
+    --league-shot-charts) para cualquier otro jugador -- nunca dispara
+    una llamada a nba_api. Lista vacía si ninguno de los dos tiene al
+    jugador; el frontend lo trata como "sin datos"."""
     config = load_config()
     paths = get_paths(config)
-    path = paths["processed"] / "roster_shot_charts.csv"
-    if not path.exists():
-        return {"player_id": player_id, "season": None, "shots": []}
+    for filename in ("roster_shot_charts.csv", "league_shot_charts.csv"):
+        path = paths["processed"] / filename
+        if not path.exists():
+            continue
+        shots = pd.read_csv(path)
+        shots = shots[shots["player_id"] == player_id]
+        if shots.empty:
+            continue
+        season = str(shots["season"].iloc[0])
+        records = shots[["loc_x", "loc_y", "shot_made", "shot_type"]].to_dict(orient="records")
+        return {"player_id": player_id, "season": season, "shots": records}
 
-    shots = pd.read_csv(path)
-    shots = shots[shots["player_id"] == player_id]
-    if shots.empty:
-        return {"player_id": player_id, "season": None, "shots": []}
-
-    season = str(shots["season"].iloc[0])
-    records = shots[["loc_x", "loc_y", "shot_made", "shot_type"]].to_dict(orient="records")
-    return {"player_id": player_id, "season": season, "shots": records}
+    return {"player_id": player_id, "season": None, "shots": []}

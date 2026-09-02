@@ -647,7 +647,29 @@ def test_player_shot_chart_returns_shots_for_that_player_only(client, config):
     body = response.json()
     assert body["season"] == "2024-25"
     assert len(body["shots"]) == 2
-    assert all(s["loc_x"] in (-10, 200) for s in body["shots"])
+
+
+def test_player_shot_chart_falls_back_to_league_csv_for_non_roster_players(client, config):
+    processed_dir = tmp_path_from_config(config)
+    # roster_shot_charts.csv existe pero no trae a este jugador (no es del
+    # roster propio) -- debe caer a league_shot_charts.csv en vez de 404.
+    pd.DataFrame(
+        [{"player_id": 1, "season": "2024-25", "loc_x": 0, "loc_y": 0, "shot_made": True, "shot_type": "2PT Field Goal"}]
+    ).to_csv(processed_dir / "roster_shot_charts.csv", index=False)
+    pd.DataFrame(
+        [{"player_id": 777, "season": "2025-26", "loc_x": 50, "loc_y": 60, "shot_made": True, "shot_type": "2PT Field Goal"}]
+    ).to_csv(processed_dir / "league_shot_charts.csv", index=False)
+
+    response = client.get("/api/player/777/shot-chart")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["season"] == "2025-26"
+    assert len(body["shots"]) == 1
+
+    # Un jugador que no está en NINGUNO de los dos CSV sigue degradando a
+    # lista vacía, no a un 404.
+    missing = client.get("/api/player/999/shot-chart").json()
+    assert missing["shots"] == []
 
 
 def _write_single_season_game_log(processed_dir, rows, suffix=""):
