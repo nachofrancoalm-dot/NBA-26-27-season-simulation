@@ -2,11 +2,11 @@
 
 # Notebooks
 
-Narraciones visuales y curadas de tres de las investigaciones del proyecto. Son un complemento a la fuente
-de verdad real — los scripts testeados en [`scripts/experiments/`](../scripts/experiments/) y
-[`src/backtesting.py`](../src/backtesting.py) — no un sustituto. Cada notebook vuelve a correr el análisis
-real sobre `data/processed/` (ya incluido en este repo) y muestra los mismos números que documentan el
-propio README del proyecto y `CLAUDE.md`.
+Narraciones visuales y curadas de cuatro de las investigaciones del proyecto. Son un complemento a la fuente
+de verdad real — los scripts testeados en [`scripts/experiments/`](../scripts/experiments/),
+[`src/backtesting.py`](../src/backtesting.py) y [`src/shot_chart_projection.py`](../src/shot_chart_projection.py)
+— no un sustituto. Cada notebook vuelve a correr el análisis real sobre `data/processed/` (ya incluido en
+este repo) y muestra los mismos números que documentan el propio README del proyecto y `CLAUDE.md`.
 
 - [`01_lineup_synergy_investigation.ipynb`](01_lineup_synergy_investigation.ipynb) — ¿un bonus de "sinergia
   de alineación" ajustado a mano predice el net rating real de una pareja de jugadores? (No — se probaron 5
@@ -17,6 +17,10 @@ propio README del proyecto y `CLAUDE.md`.
 - [`03_backtest_calibration_story.ipynb`](03_backtest_calibration_story.ipynb) — cómo un hallazgo de
   "fricción de superequipo" basado en 4 casos resultó ser mayormente un artefacto de calibración al escalar
   el backtesting a 480 temporadas de equipo reales. La lección metodológica más importante del proyecto.
+- [`04_shot_chart_projection_walkthrough.ipynb`](04_shot_chart_projection_walkthrough.ipynb) — cómo se
+  construye de verdad el mapa de tiros proyectado del popup de jugador: las zonas de cancha son de la propia
+  NBA (`SHOT_ZONE_BASIC`, nunca redibujadas por este proyecto), el remuestreo ponderado por recencia entre
+  temporadas, y el ajuste de dispersión que bajó la tasa de coordenadas duplicadas de hasta un 39.5% a 0%.
 
 Para volver a correr uno:
 
@@ -26,4 +30,4 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/01_lineup_synergy_
 
 `02_contract_year_effect.ipynb` necesita `data/raw/contract_data/` (dos CSV de Kaggle, no redistribuidos en
 este repo — ver la sección "contract year" del README para saber de dónde sacarlos) para correr desde cero;
-los otros dos solo necesitan `data/processed/`, que ya está incluido en el repo.
+los otros tres solo necesitan `data/processed/`, que ya está incluido en el repo.
