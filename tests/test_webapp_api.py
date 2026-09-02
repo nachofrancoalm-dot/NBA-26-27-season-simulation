@@ -335,6 +335,46 @@ def test_league_leaders_returns_all_players_with_filter_columns(client, config):
     assert row_totals["DREB"] == 600 * 0.8
 
 
+def test_league_leaders_excludes_players_outside_the_projected_rotation(client, config):
+    # Jugador con minutes_projection=0 (fuera de la rotación de su equipo)
+    # pero con game_score_per36 alto -- caso real reportado por el usuario
+    # (Robert Williams III/Paul Reed con temporada real completa pero 0
+    # minutos proyectados, y Norchad Omier/Alex Antetokounmpo con muestra
+    # real minúscula). No debe colarse en la tabla de líderes.
+    processed_dir = tmp_path_from_config(config)
+    pd.DataFrame(
+        [
+            {
+                "player_id": 1, "player_name": "Rotation Player", "team_abbreviation": "AAA", "conference": "East",
+                "position": "C", "country": "USA", "current_age": 25, "game_score_per36": 20.0,
+                "minutes_projection": 32, "minutes_per_game_last_season": 32, "games_played_last_season": 70,
+                "risk_score": 0.2, "fatigue_score": 0.2,
+                "PTS_projected": 1500, "REB_projected": 900, "OREB_projected": 300, "DREB_projected": 600,
+                "AST_projected": 200, "STL_projected": 60, "BLK_projected": 150, "TOV_projected": 100,
+                "FG3M_projected": 10,
+                "PPG": 18.3, "RPG": 11.0, "ORPG": 300 / 82, "DRPG": 600 / 82,
+                "APG": 2.4, "SPG": 0.7, "BPG": 1.8, "TOPG": 1.2, "3PM": 0.1,
+            },
+            {
+                "player_id": 2, "player_name": "Deep Bench Player", "team_abbreviation": "BBB", "conference": "West",
+                "position": "F", "country": "USA", "current_age": 24, "game_score_per36": 27.0,
+                "minutes_projection": 0, "minutes_per_game_last_season": 4.0, "games_played_last_season": 6,
+                "risk_score": 0.75, "fatigue_score": 0.1,
+                "PTS_projected": 0, "REB_projected": 0, "OREB_projected": 0, "DREB_projected": 0,
+                "AST_projected": 0, "STL_projected": 0, "BLK_projected": 0, "TOV_projected": 0,
+                "FG3M_projected": 0,
+                "PPG": 0.0, "RPG": 0.0, "ORPG": 0.0, "DRPG": 0.0,
+                "APG": 0.0, "SPG": 0.0, "BPG": 0.0, "TOPG": 0.0, "3PM": 0.0,
+            },
+        ]
+    ).to_csv(processed_dir / "league_player_projections.csv", index=False)
+
+    response = client.get("/api/league/leaders")
+    assert response.status_code == 200
+    names = [p["player_name"] for p in response.json()["players"]]
+    assert names == ["Rotation Player"]
+
+
 def test_league_leaders_404_when_no_league_data(client, config):
     response = client.get("/api/league/leaders")
     assert response.status_code == 404
