@@ -1,19 +1,9 @@
 /*
-  components.css — REDISEÑO
-
-  Todas las clases que emite el JS existente (ui.js, charts.js, court.js,
-  leaderboard.js, player-modal.js, league.js…) siguen aquí con el MISMO
-  nombre. Ninguna vista cambia; cambia el lenguaje visual:
-
-  - Radio 0 y cero sombras difusas. La jerarquía la hacen reglas de 2px
-    (sección) y 1px (fila), la alineación a la izquierda y el peso
-    tipográfico.
-  - .card deja de ser una caja flotante y pasa a ser un PANEL editorial:
-    sin fondo propio, separado por una regla superior y encabezado con
-    una barra de acento corta. Así una página con seis secciones deja de
-    leerse como seis tarjetas apiladas.
-  - Rojo = chrome de marca. Azul (--accent-*) = codificación de datos.
-    Nunca se cruzan.
+  Mismos nombres de clase que emite el JS (ui.js, charts.js, court.js,
+  leaderboard.js, player-modal.js, league.js...) -- solo cambia el
+  lenguaje visual: radio 0, sin sombras difusas, jerarquía por reglas de
+  2px/1px en vez de cajas flotantes. .card es un panel editorial (regla
+  superior + barra de acento), no una tarjeta con fondo propio.
 */
 
 /* ====================================================================

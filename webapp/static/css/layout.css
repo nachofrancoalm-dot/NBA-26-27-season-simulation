@@ -1,14 +1,7 @@
 /*
-  layout.css — REDISEÑO
-
-  Estructura: masthead fijo (identidad + secciones) y sub-navegación
-  contextual pegajosa debajo. Tres capas encadenadas por sticky, con los
-  offsets derivados de --masthead-h / --nav-h en tokens.css para que no
-  haya un número mágico repetido.
-
-  Las clases y los ids son EXACTAMENTE los mismos que consume app.js
-  (.tabs / .subtabs / .tab-button / .tab-panel / .subtab-panel /
-  .topbar / .team-identity-home). Solo cambia el aspecto.
+  Masthead fijo + sub-navegación pegajosa debajo, tres capas encadenadas
+  por sticky con los offsets derivados de --masthead-h/--nav-h (evita un
+  número mágico repetido). Mismas clases/ids que consume app.js.
 */
 
 :root {

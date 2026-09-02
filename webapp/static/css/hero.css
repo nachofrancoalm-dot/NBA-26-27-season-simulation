@@ -1,19 +1,9 @@
 /*
-  hero.css — REDISEÑO
-
-  Pantalla de entrada (views/splash.js), jugador animado
-  (player-hero.js), roster hipotético editable (roster-builder.js) y
-  transición de navegación entre secciones. Sigue separado de
-  components.css por la misma razón que antes: es la única parte con
-  animación de movimiento no trivial.
-
-  Todas las clases y los nombres de @keyframes se conservan EXACTAMENTE
-  (db-bob, db-ball-bounce, db-shadow-pulse, db-run-across,
-  .dribbler-shadow-off, .hero-stage, .nav-transition-track…), así que
-  player-hero.js, app.js::withNavTransition y roster-builder.js siguen
-  funcionando sin tocar una línea. Lo que cambia es el lenguaje visual:
-  radio 0, reglas de 2px, campos de color planos (sin degradados de
-  fondo), alineación a la izquierda también en móvil.
+  Pantalla de entrada, jugador animado (player-hero.js), roster
+  hipotético (roster-builder.js) y transición de navegación -- separado
+  de components.css porque es la única parte con animación de movimiento.
+  Mismas clases y nombres de @keyframes que antes (db-bob, db-run-across,
+  .hero-stage...), solo cambia el lenguaje visual (radio 0, color plano).
 */
 
 /* ====================================================================

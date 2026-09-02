@@ -1,23 +1,9 @@
 /*
-  tokens.css — REDISEÑO "terminal modernista"
-
-  Mismo CONTRATO de variables que la versión anterior: ningún nombre de
-  token desaparece, así charts.js (--accent-450, --gridline, --baseline,
-  --surface-card), team-colors.js (--team-primary/--team-secondary) y el
-  resto de hojas siguen funcionando sin tocar una línea de JS.
-
-  Lo que cambia es el sistema visual:
-  - Fondo tinta casi negro y PLANO (sin degradado de marca): en una
-    interfaz de datos el degradado compite con los gráficos. La marca la
-    lleva la tipografía y el rojo, no el fondo.
-  - Radio 0 en todo. Sin sombras difusas: la jerarquía la hacen reglas de
-    2px y la alineación, no cajas flotantes.
-  - Un solo acento de marca (rojo) para chrome, y un hue frío separado
-    (--accent-*) reservado EXCLUSIVAMENTE a codificar datos, como en la
-    versión anterior. Nunca se mezclan.
-  - Archivo en 400/600/800, cifras tabulares en toda la app.
-
-  [data-theme="light"] se mantiene disponible para un futuro toggle.
+  Variables del tema "terminal modernista": fondo casi negro plano, radio
+  0, un solo acento de marca (rojo, chrome) separado del hue de datos
+  (--accent-*, nunca se mezclan). Mismos nombres de token que antes --
+  charts.js, team-colors.js y el resto de hojas no necesitan cambios.
+  [data-theme="light"] queda disponible para un futuro toggle.
 */
 
 @import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap");
