@@ -165,11 +165,21 @@ def get_leaders(mode: str = Query("per_game", pattern="^(per_game|totals)$"), sc
     equipo). El filtrado por equipo/posición/país es responsabilidad del
     cliente (577 filas, barato) para que cambiar un filtro no dispare
     una petición nueva.
+
+    Se excluye a quien no está en la rotación proyectada de su equipo
+    (`minutes_projection == 0`) -- sin esto, jugadores con un puñado de
+    partidos reales (ruido de muestra pequeña) o bien fuera de la
+    rotación pese a tener temporada real completa aparecían arriba del
+    todo al ordenar por game_score_per36 con PPG/RPG/etc. en 0, algo que
+    nunca van a producir en la temporada simulada. Mismo criterio que
+    usa NBA.com con un mínimo de partidos/minutos para "calificar" en
+    una tabla de líderes.
     """
     config = load_config()
     players = load_league_player_projections(config, scenario=scenario)
     if players is None:
         raise HTTPException(status_code=404, detail=LEAGUE_MISSING_DETAIL)
+    players = players[players["minutes_projection"] > 0]
 
     view = select_roster_view(
         players,
