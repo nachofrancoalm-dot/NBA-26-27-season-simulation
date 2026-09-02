@@ -110,3 +110,55 @@ def test_build_roster_shot_charts_dataset_skips_players_with_no_shots(config, mo
     result = data_pipeline.build_roster_shot_charts_dataset(config)
 
     assert result.empty
+
+
+def test_build_league_shot_charts_dataset_requires_league_career_stats(config):
+    with pytest.raises(FileNotFoundError):
+        data_pipeline.build_league_shot_charts_dataset(config)
+
+
+def test_build_league_shot_charts_dataset_covers_every_unique_league_player(config, monkeypatch):
+    processed_dir = Path(config["paths"]["processed_data_dir"])
+    pd.DataFrame(
+        [
+            {"PLAYER_ID": 1, "SEASON_ID": "2024-25", "GP": 60},
+            {"PLAYER_ID": 1, "SEASON_ID": "2025-26", "GP": 40},
+            {"PLAYER_ID": 2, "SEASON_ID": "2025-26", "GP": 70},
+            {"PLAYER_ID": 3, "SEASON_ID": "2026-27", "GP": 0},  # sin partidos reales todavía -- se filtra
+        ]
+    ).to_csv(processed_dir / "league_player_career_stats.csv", index=False)
+
+    calls = []
+
+    def _fake_fetch(player_id, season, raw_dir, force_refresh):
+        calls.append((player_id, season))
+        return pd.DataFrame([{"LOC_X": 5, "LOC_Y": 5, "SHOT_MADE_FLAG": 1, "SHOT_TYPE": "2PT Field Goal"}])
+
+    monkeypatch.setattr(data_pipeline, "fetch_player_shot_chart", _fake_fetch)
+
+    result = data_pipeline.build_league_shot_charts_dataset(config)
+
+    assert sorted(calls) == [(1, "2025-26"), (2, "2025-26")]
+    assert set(result["player_id"]) == {1, 2}
+
+
+def test_build_league_shot_charts_dataset_skips_a_player_whose_download_fails(config, monkeypatch):
+    processed_dir = Path(config["paths"]["processed_data_dir"])
+    pd.DataFrame(
+        [
+            {"PLAYER_ID": 1, "SEASON_ID": "2025-26", "GP": 60},
+            {"PLAYER_ID": 2, "SEASON_ID": "2025-26", "GP": 70},
+        ]
+    ).to_csv(processed_dir / "league_player_career_stats.csv", index=False)
+
+    def _flaky_fetch(player_id, season, raw_dir, force_refresh):
+        if player_id == 1:
+            raise KeyError("resultSet")  # misma clase de fallo real ya visto en este endpoint
+        return pd.DataFrame([{"LOC_X": 5, "LOC_Y": 5, "SHOT_MADE_FLAG": 1, "SHOT_TYPE": "2PT Field Goal"}])
+
+    monkeypatch.setattr(data_pipeline, "fetch_player_shot_chart", _flaky_fetch)
+
+    result = data_pipeline.build_league_shot_charts_dataset(config)
+
+    # El jugador 1 se salta sin abortar la descarga del jugador 2.
+    assert set(result["player_id"]) == {2}
