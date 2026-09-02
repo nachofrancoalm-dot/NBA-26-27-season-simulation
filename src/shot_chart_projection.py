@@ -27,6 +27,16 @@ histórico ponderado por recencia de la ZONA (SHOT_ZONE_BASIC) de cada
 tiro -- las zonas donde el jugador acierta más tienen más probabilidad
 de aparecer en verde, sin dejar de cuadrar el total exacto.
 
+Cada coordenada remuestreada recibe además un pequeño desplazamiento
+aleatorio (ruido gaussiano, ~1 pie de desviación típica -- ver
+JITTER_STD_TENTHS_OF_FOOT) para no dejar el punto exacto de un tiro
+real repetido varias veces en el mapa cuando el histórico es corto. Es
+solo dispersión visual: no cambia la ZONA del tiro (SHOT_ZONE_BASIC ya
+quedó fijada al elegir la coordenada original), así que no afecta al
+peso de "anotado" del paso anterior. Sin este ajuste, un jugador con
+poco historial mostraba coordenadas idénticas apiladas en el 39.5% de
+los casos en una prueba real (412 tiros históricos, 200 proyectados).
+
 LIMITACIÓN CONOCIDA: si un jugador no tiene ningún tiro histórico de un
 tipo (p. ej. un pívot que nunca ha tirado un triple) pero la proyección
 le asigna algunos, esos tiros concretos no se pueden ubicar -- no se
@@ -53,6 +63,13 @@ TWO_PT_SHOT_TYPE = "2PT Field Goal"
 # las zonas presentes tuvieran 0% real (jugador con muestra muy corta).
 MIN_ZONE_MAKE_RATE = 0.05
 
+# LOC_X/LOC_Y de ShotChartDetail están en décimas de pie (confirmado
+# contra SHOT_DISTANCE: sqrt(x²+y²)/10 == distancia real en pies). ~1 pie
+# de desviación típica es suficiente para separar visualmente puntos
+# duplicados sin sacar el tiro de su zona real (las zonas de
+# SHOT_ZONE_BASIC miden varios pies de ancho).
+JITTER_STD_TENTHS_OF_FOOT = 10.0
+
 SHOT_CHART_PROJECTION_COLUMNS = ["loc_x", "loc_y", "shot_made", "shot_type"]
 
 
@@ -74,13 +91,19 @@ def _recency_weighted_shot_pool(shots: pd.DataFrame, n_seasons: int, half_life_s
 
 def _resample_attempts(pool: pd.DataFrame, n_attempts: int, rng: np.random.Generator) -> pd.DataFrame:
     """Remuestrea con reemplazo `n_attempts` filas de `pool`, ponderadas
-    por `_weight`. Vacío si no hay tiros de ese tipo en el histórico."""
+    por `_weight`, y les añade un pequeño desplazamiento aleatorio a
+    loc_x/loc_y (ver JITTER_STD_TENTHS_OF_FOOT) para que copiar la misma
+    coordenada real varias veces no deje puntos exactos apilados en el
+    mapa. Vacío si no hay tiros de ese tipo en el histórico."""
     if n_attempts <= 0 or pool.empty:
         return pool.iloc[0:0]
     weights = pool["_weight"].to_numpy()
     probs = weights / weights.sum()
     chosen = rng.choice(len(pool), size=n_attempts, replace=True, p=probs)
-    return pool.iloc[chosen].reset_index(drop=True)
+    sampled = pool.iloc[chosen].reset_index(drop=True)
+    sampled["loc_x"] = sampled["loc_x"] + rng.normal(0, JITTER_STD_TENTHS_OF_FOOT, size=n_attempts)
+    sampled["loc_y"] = sampled["loc_y"] + rng.normal(0, JITTER_STD_TENTHS_OF_FOOT, size=n_attempts)
+    return sampled
 
 
 def _zone_make_rates(pool: pd.DataFrame) -> pd.Series:

@@ -54,7 +54,10 @@ def test_makes_are_weighted_toward_the_more_efficient_zone():
     )
     made = result[result["shot_made"]]
     assert len(made) == 100
-    assert (made["loc_x"] == 0).mean() > 0.8  # Restricted Area está en loc_x=0
+    # loc_x jitterado (~1 pie de desviación) alrededor de la coordenada
+    # real -- Restricted Area está en loc_x=0, Mid-Range en loc_x=50, así
+    # que "más cerca de 0" sigue distinguiendo el origen con margen.
+    assert (made["loc_x"].abs() < 25).mean() > 0.8
 
 
 def test_recency_weighting_favors_the_most_recent_season():
@@ -69,8 +72,10 @@ def test_recency_weighting_favors_the_most_recent_season():
         shots, target_fga=200, target_fg3a=0, target_fgm=200, target_fg3m=0,
         n_seasons=2, half_life_seasons=0.5, rng=np.random.default_rng(1),
     )
-    # peso_reciente=1.0 vs peso_viejo=0.5**(1/0.5)=0.25 -> ~80% esperado
-    recent_share = (result["loc_x"] == 100).mean()
+    # peso_reciente=1.0 vs peso_viejo=0.5**(1/0.5)=0.25 -> ~80% esperado.
+    # loc_x jitterado (~1 pie) alrededor de 0 (viejo) o 100 (reciente) --
+    # el punto medio (50) sigue separando ambos grupos con margen.
+    recent_share = (result["loc_x"] > 50).mean()
     assert recent_share > 0.7
 
 
@@ -83,7 +88,9 @@ def test_n_seasons_window_excludes_older_seasons():
         shots, target_fga=50, target_fg3a=0, target_fgm=50, target_fg3m=0,
         n_seasons=1, rng=np.random.default_rng(2),
     )
-    assert (result["loc_x"] == -999).sum() == 0
+    # loc_x jitterado (~1 pie) alrededor de la coordenada original -- muy
+    # por debajo del hueco real (-999 vs 100) entre las dos temporadas.
+    assert (result["loc_x"] < -500).sum() == 0
 
 
 def test_missing_shot_type_in_history_yields_fewer_shots_than_requested():
@@ -101,6 +108,31 @@ def test_empty_history_returns_empty_result_with_expected_columns():
     result = project_player_shot_chart(empty, target_fga=10, target_fg3a=3, target_fgm=4, target_fg3m=1)
     assert result.empty
     assert list(result.columns) == ["loc_x", "loc_y", "shot_made", "shot_type"]
+
+
+def test_jitter_avoids_stacking_identical_coordinates_with_sparse_history():
+    # Regresión: con poco historial (5 tiros reales de cada tipo), copiar
+    # coordenadas exactas dejaba decenas de puntos apilados uno encima de
+    # otro. El jitter debe reducir eso drásticamente sin eliminarlo del
+    # todo (dos jitters pueden coincidir por azar, pero no la mayoría).
+    shots = _uniform_pool(n_2pt=5, n_3pt=5)
+    result = project_player_shot_chart(
+        shots, target_fga=100, target_fg3a=20, target_fgm=50, target_fg3m=8, rng=np.random.default_rng(7)
+    )
+    duplicate_rate = result.duplicated(subset=["loc_x", "loc_y"]).mean()
+    assert duplicate_rate < 0.05
+
+
+def test_jitter_keeps_shots_close_to_their_real_source_coordinate():
+    # La dispersión es pequeña (~1 pie) -- no debe alejar el tiro de su
+    # zona real de origen.
+    shots = _uniform_pool(n_2pt=5, n_3pt=0)
+    result = project_player_shot_chart(
+        shots, target_fga=200, target_fg3a=0, target_fgm=100, target_fg3m=0, rng=np.random.default_rng(8)
+    )
+    # tiros reales estaban todos en loc_x=0 -- con jitter_std=10 y 200
+    # muestras, un margen de 6 desviaciones típicas es generoso y estable.
+    assert result["loc_x"].abs().max() < 60
 
 
 def test_same_seed_is_reproducible():
