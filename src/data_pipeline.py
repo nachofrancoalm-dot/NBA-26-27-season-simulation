@@ -358,21 +358,72 @@ def fetch_player_shot_chart(
     return _cached_fetch(cache_path, _fetch, force_refresh=force_refresh)
 
 
-def build_roster_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+def _download_shot_chart_seasons_for_players(
+    career: pd.DataFrame, raw_dir: Path, force_refresh: bool, n_seasons: int, desc: str
+) -> List[Dict[str, Any]]:
     """
-    Mapa de tiros de cada jugador del roster propio, para su temporada
-    REAL más reciente registrada (no la temporada de proyección del
+    Núcleo compartido por build_roster_shot_charts_dataset y
+    build_league_shot_charts_dataset: descarga hasta `n_seasons`
+    temporadas REALES más recientes (con GP>0) de cada jugador, no solo
+    la última -- necesario para shot_chart_projection.py, que pondera
+    por recencia igual que aging_curve.py y necesita más de un punto de
+    datos para hacerlo. Incluye SHOT_ZONE_BASIC (Restricted Area,
+    Mid-Range, Corner 3...), que esa misma ponderación usa para decidir
+    qué tiros remuestreados se marcan como anotados. Una
+    temporada/jugador cuya descarga falle se salta con un aviso, mismo
+    patrón que _download_player_stats_for_cases.
+    """
+    from season_utils import season_start_year
+
+    rows: List[Dict[str, Any]] = []
+    for player_id, group in tqdm(career.groupby("PLAYER_ID"), desc=desc):
+        seasons = sorted(group["SEASON_ID"].astype(str).unique(), key=season_start_year, reverse=True)[:n_seasons]
+        for season in seasons:
+            try:
+                shots = fetch_player_shot_chart(int(player_id), season, raw_dir, force_refresh)
+            except Exception as e:  # noqa: BLE001 -- una temporada rota no debe abortar el resto de la ingesta
+                print(f"  [omitido] player_id={player_id} {season}: {e}")
+                continue
+            if shots.empty:
+                continue
+            for _, shot in shots.iterrows():
+                rows.append(
+                    {
+                        "player_id": int(player_id),
+                        "season": season,
+                        "loc_x": shot["LOC_X"],
+                        "loc_y": shot["LOC_Y"],
+                        "shot_made": bool(shot["SHOT_MADE_FLAG"]),
+                        "shot_type": shot["SHOT_TYPE"],
+                        "shot_zone_basic": shot["SHOT_ZONE_BASIC"],
+                    }
+                )
+    return rows
+
+
+_SHOT_CHART_COLUMNS = ["player_id", "season", "loc_x", "loc_y", "shot_made", "shot_type", "shot_zone_basic"]
+
+
+def build_roster_shot_charts_dataset(
+    config: Dict[str, Any], force_refresh: bool = False, n_seasons: Optional[int] = None
+) -> pd.DataFrame:
+    """
+    Mapa de tiros de cada jugador del roster propio, de sus últimas
+    `n_seasons` temporadas REALES registradas (no la de proyección del
     config, que es futura y no tiene tiros de verdad todavía) -- misma
     idea que las columnas GP/MPG "reales" del roster (ver
-    dashboard/data_loader.py). Guarda
-    data/processed/roster_shot_charts.csv (player_id, season, loc_x,
-    loc_y, shot_made, shot_type) para que el router de la webapp lo lea
-    directo, sin disparar ninguna llamada a nba_api desde un request
-    HTTP (mismo principio que fetch_player_common_info -- ver
+    dashboard/data_loader.py). `n_seasons` por defecto usa
+    aging_curve.DEFAULT_N_SEASONS_LOOKBACK, el mismo criterio que el
+    resto de la línea base por recencia del proyecto. Guarda
+    data/processed/roster_shot_charts.csv para que el router de la
+    webapp lo lea directo, sin disparar ninguna llamada a nba_api desde
+    un request HTTP (mismo principio que fetch_player_common_info -- ver
     webapp/routers/players.py). Un jugador sin temporadas reales
-    registradas (rookie sin GP todavía) o sin tiros en su última
-    temporada real (lesión) se omite, no rompe el resto.
+    registradas (rookie sin GP todavía) se omite, no rompe el resto.
     """
+    from aging_curve import DEFAULT_N_SEASONS_LOOKBACK
+
+    n_seasons = n_seasons or DEFAULT_N_SEASONS_LOOKBACK
     paths = get_paths(config)
     career_path = paths["processed"] / "roster_career_stats.csv"
     if not career_path.exists():
@@ -380,32 +431,19 @@ def build_roster_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool
     career = pd.read_csv(career_path)
     career = career[career["GP"] > 0]
 
-    rows = []
-    for player_id, group in tqdm(career.groupby("PLAYER_ID"), desc="Descargando mapas de tiro del roster"):
-        latest_season = sorted(group["SEASON_ID"].astype(str))[-1]
-        shots = fetch_player_shot_chart(int(player_id), latest_season, paths["raw"], force_refresh)
-        if shots.empty:
-            continue
-        for _, shot in shots.iterrows():
-            rows.append(
-                {
-                    "player_id": int(player_id),
-                    "season": latest_season,
-                    "loc_x": shot["LOC_X"],
-                    "loc_y": shot["LOC_Y"],
-                    "shot_made": bool(shot["SHOT_MADE_FLAG"]),
-                    "shot_type": shot["SHOT_TYPE"],
-                }
-            )
-
-    shots_df = pd.DataFrame(rows, columns=["player_id", "season", "loc_x", "loc_y", "shot_made", "shot_type"])
+    rows = _download_shot_chart_seasons_for_players(
+        career, paths["raw"], force_refresh, n_seasons, "Descargando mapas de tiro del roster"
+    )
+    shots_df = pd.DataFrame(rows, columns=_SHOT_CHART_COLUMNS)
     out_path = paths["processed"] / "roster_shot_charts.csv"
     shots_df.to_csv(out_path, index=False)
     print(f"Guardado: {out_path} ({len(shots_df)} tiros, {shots_df['player_id'].nunique()} jugadores)")
     return shots_df
 
 
-def build_league_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool = False) -> pd.DataFrame:
+def build_league_shot_charts_dataset(
+    config: Dict[str, Any], force_refresh: bool = False, n_seasons: Optional[int] = None
+) -> pd.DataFrame:
     """
     Mismo mapa de tiros que build_roster_shot_charts_dataset, pero para
     todos los jugadores únicos de la liga (no solo el roster propio) --
@@ -413,15 +451,16 @@ def build_league_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool
     cualquier jugador que no esté en roster_shot_charts.csv. Guarda
     data/processed/league_shot_charts.csv, mismo esquema.
 
-    ADVERTENCIA DE COSTE: ~570-600 llamadas (una por jugador único de la
-    liga) -- opt-in vía --league-shot-charts, no forma parte de --league
-    (que ya de por sí cuesta ~1350 llamadas). Requiere haber corrido
-    --league antes (lee league_player_career_stats.csv). Un jugador cuya
-    descarga falle se salta con un aviso, mismo patrón que
-    _download_player_stats_for_cases -- con ~600 llamadas a un endpoint
-    que ya se sabe inestable, un fallo puntual es cuestión de cuándo, no
-    de si.
+    ADVERTENCIA DE COSTE: hasta ~3x más llamadas que antes de añadir
+    varias temporadas (una por jugador único de la liga POR temporada
+    disponible, hasta n_seasons) -- opt-in vía --league-shot-charts, no
+    forma parte de --league (que ya de por sí cuesta ~1350 llamadas).
+    Requiere haber corrido --league antes (lee
+    league_player_career_stats.csv).
     """
+    from aging_curve import DEFAULT_N_SEASONS_LOOKBACK
+
+    n_seasons = n_seasons or DEFAULT_N_SEASONS_LOOKBACK
     paths = get_paths(config)
     career_path = paths["processed"] / "league_player_career_stats.csv"
     if not career_path.exists():
@@ -429,29 +468,10 @@ def build_league_shot_charts_dataset(config: Dict[str, Any], force_refresh: bool
     career = pd.read_csv(career_path)
     career = career[career["GP"] > 0]
 
-    rows = []
-    for player_id, group in tqdm(career.groupby("PLAYER_ID"), desc="Descargando mapas de tiro de la liga"):
-        latest_season = sorted(group["SEASON_ID"].astype(str))[-1]
-        try:
-            shots = fetch_player_shot_chart(int(player_id), latest_season, paths["raw"], force_refresh)
-        except Exception as e:  # noqa: BLE001 -- un jugador roto no debe abortar el resto de la ingesta
-            print(f"  [omitido] player_id={player_id}: {e}")
-            continue
-        if shots.empty:
-            continue
-        for _, shot in shots.iterrows():
-            rows.append(
-                {
-                    "player_id": int(player_id),
-                    "season": latest_season,
-                    "loc_x": shot["LOC_X"],
-                    "loc_y": shot["LOC_Y"],
-                    "shot_made": bool(shot["SHOT_MADE_FLAG"]),
-                    "shot_type": shot["SHOT_TYPE"],
-                }
-            )
-
-    shots_df = pd.DataFrame(rows, columns=["player_id", "season", "loc_x", "loc_y", "shot_made", "shot_type"])
+    rows = _download_shot_chart_seasons_for_players(
+        career, paths["raw"], force_refresh, n_seasons, "Descargando mapas de tiro de la liga"
+    )
+    shots_df = pd.DataFrame(rows, columns=_SHOT_CHART_COLUMNS)
     out_path = paths["processed"] / "league_shot_charts.csv"
     shots_df.to_csv(out_path, index=False)
     print(f"Guardado: {out_path} ({len(shots_df)} tiros, {shots_df['player_id'].nunique()} jugadores)")

@@ -672,6 +672,73 @@ def test_player_shot_chart_falls_back_to_league_csv_for_non_roster_players(clien
     assert missing["shots"] == []
 
 
+def test_player_shot_chart_real_picks_the_most_recent_of_several_cached_seasons(client, config):
+    # Regresión: con varias temporadas cacheadas por jugador (para poder
+    # ponderar por recencia en la proyección), kind=real no debe mezclar
+    # temporadas ni quedarse con la que aparezca primero en el CSV.
+    processed_dir = tmp_path_from_config(config)
+    pd.DataFrame(
+        [
+            {"player_id": 42, "season": "2025-26", "loc_x": 10, "loc_y": 10, "shot_made": True, "shot_type": "2PT Field Goal", "shot_zone_basic": "Mid-Range"},
+            {"player_id": 42, "season": "2023-24", "loc_x": -50, "loc_y": -50, "shot_made": False, "shot_type": "3PT Field Goal", "shot_zone_basic": "Above the Break 3"},
+            {"player_id": 42, "season": "2024-25", "loc_x": 5, "loc_y": 5, "shot_made": True, "shot_type": "2PT Field Goal", "shot_zone_basic": "Mid-Range"},
+        ]
+    ).to_csv(processed_dir / "roster_shot_charts.csv", index=False)
+
+    body = client.get("/api/player/42/shot-chart").json()
+    assert body["season"] == "2025-26"
+    assert len(body["shots"]) == 1
+    assert body["shots"][0]["loc_x"] == 10
+
+
+def test_player_shot_chart_projected_matches_projected_totals(client, config):
+    processed_dir = tmp_path_from_config(config)
+    pd.DataFrame(
+        [
+            {"player_id": 42, "season": "2024-25", "loc_x": 0, "loc_y": 0, "shot_made": True, "shot_type": "2PT Field Goal", "shot_zone_basic": "Restricted Area"},
+            {"player_id": 42, "season": "2024-25", "loc_x": 0, "loc_y": 0, "shot_made": False, "shot_type": "2PT Field Goal", "shot_zone_basic": "Restricted Area"},
+            {"player_id": 42, "season": "2025-26", "loc_x": 200, "loc_y": 200, "shot_made": True, "shot_type": "3PT Field Goal", "shot_zone_basic": "Above the Break 3"},
+            {"player_id": 42, "season": "2025-26", "loc_x": 200, "loc_y": 200, "shot_made": False, "shot_type": "3PT Field Goal", "shot_zone_basic": "Above the Break 3"},
+        ]
+    ).to_csv(processed_dir / "roster_shot_charts.csv", index=False)
+    pd.DataFrame(
+        [{
+            "player_id": 42, "player_name": "Test Player",
+            "FGA_per36_projected": 20.0, "FTA_per36_projected": 5.0, "TOV_per36_projected": 3.0,
+            "AST_per36_projected": 9.0, "FG3A_per36_projected": 2.0,
+            "BLK_per36_projected": 0.5, "DREB_per36_projected": 4.0,
+            "projected_total_minutes": 2200,
+            "PTS_projected": 1500, "REB_projected": 450, "AST_projected": 350,
+            "STL_projected": 70, "BLK_projected": 40,
+            "FGM_projected": 6, "FGA_projected": 10,
+            "FG3M_projected": 2, "FG3A_projected": 4,
+            "FTM_projected": 300, "FTA_projected": 350,
+        }]
+    ).to_csv(processed_dir / "aging_curve_projection.csv", index=False)
+
+    body = client.get("/api/player/42/shot-chart?kind=projected").json()
+    assert body["kind"] == "projected"
+    assert len(body["shots"]) == 10
+    assert sum(s["shot_type"] == "3PT Field Goal" for s in body["shots"]) == 4
+    assert sum(s["shot_made"] for s in body["shots"]) == 6
+
+    # Semilla estable por jugador -- dos peticiones seguidas dan el mismo mapa.
+    again = client.get("/api/player/42/shot-chart?kind=projected").json()
+    assert again["shots"] == body["shots"]
+
+
+def test_player_shot_chart_projected_empty_without_projection(client, config):
+    processed_dir = tmp_path_from_config(config)
+    pd.DataFrame(
+        [{"player_id": 42, "season": "2025-26", "loc_x": 0, "loc_y": 0, "shot_made": True, "shot_type": "2PT Field Goal", "shot_zone_basic": "Mid-Range"}]
+    ).to_csv(processed_dir / "roster_shot_charts.csv", index=False)
+    # sin aging_curve_projection.csv ni league_player_projections.csv
+
+    body = client.get("/api/player/42/shot-chart?kind=projected").json()
+    assert body["shots"] == []
+    assert body["kind"] == "projected"
+
+
 def _write_single_season_game_log(processed_dir, rows, suffix=""):
     pd.DataFrame(rows).to_csv(processed_dir / f"league_single_season_game_log{suffix}.csv", index=False)
 

@@ -130,16 +130,76 @@ export async function openPlayerModal(playerId, teamId) {
 
 /** Se carga aparte (no bloquea el resto del popup): roster_shot_charts.csv
  * puede no existir para jugadores fuera del roster propio, en cuyo caso
- * la sección simplemente no aparece. */
+ * la sección simplemente no aparece. Toggle Real/Proyectado -- "real" son
+ * tiros de verdad de la última temporada jugada; "projected" es un mapa
+ * SINTÉTICO (remuestreo del histórico, ver src/shot_chart_projection.py)
+ * cuyo conteo de intentos/anotados cuadra exacto con FGA/FG3A/FGM/FG3M ya
+ * proyectados -- no una predicción independiente del volumen de tiro.
+ */
 async function loadShotChart(container, playerId) {
-  try {
-    const data = await api.playerShotChart(playerId);
-    if (!data.shots.length) return;
-    container.replaceChildren(
-      el("h3", { style: "margin: 20px 0 6px;" }, `Mapa de tiros -- temporada ${data.season}`),
-      courtShotChart(data.shots, { title: `Mapa de tiros de ${playerId}` })
-    );
-  } catch {
-    // Sin mapa de tiros disponible -- se omite en silencio.
+  const chartBox = el("div");
+  const headerBox = el("div", { class: "card-header-row", style: "margin: 20px 0 6px;" });
+
+  function renderResult(data, kind) {
+    const titleEl = headerBox.querySelector("h3");
+    if (!data.shots.length) {
+      if (titleEl) titleEl.textContent = "Mapa de tiros";
+      chartBox.replaceChildren(
+        el(
+          "p",
+          { class: "caption" },
+          kind === "real" ? "Sin mapa de tiros disponible." : "Sin proyección disponible para estimar el mapa de tiros."
+        )
+      );
+      return;
+    }
+    if (titleEl) titleEl.textContent = `Mapa de tiros -- temporada ${data.season}`;
+    chartBox.replaceChildren(courtShotChart(data.shots, { title: `Mapa de tiros de ${playerId}` }));
   }
+
+  async function loadKind(kind) {
+    chartBox.replaceChildren(el("p", { class: "caption" }, "Cargando mapa de tiros…"));
+    try {
+      renderResult(await api.playerShotChart(playerId, kind), kind);
+    } catch {
+      chartBox.replaceChildren();
+    }
+  }
+
+  // Primera carga real: si no hay NINGÚN dato (ni real ni proyectado),
+  // toda la sección se omite -- pero eso no se sabe sin preguntar
+  // primero, así que se decide tras la respuesta inicial.
+  let initial;
+  try {
+    initial = await api.playerShotChart(playerId, "real");
+  } catch {
+    return;
+  }
+  let initialKind = "real";
+  if (!initial.shots.length) {
+    // Puede que solo falte lo real (jugador nuevo sin temporada previa
+    // cacheada) pero sí haya proyección -- se comprueba antes de omitir
+    // la sección entera.
+    try {
+      initial = await api.playerShotChart(playerId, "projected");
+    } catch {
+      return;
+    }
+    if (!initial.shots.length) return;
+    initialKind = "projected";
+  }
+
+  headerBox.replaceChildren(
+    el("h3", { style: "margin: 0;" }, `Mapa de tiros -- temporada ${initial.season}`),
+    pillToggle(
+      [
+        { value: "real", label: "Real" },
+        { value: "projected", label: "Proyectado" },
+      ],
+      initialKind,
+      (value) => loadKind(value)
+    )
+  );
+  container.replaceChildren(headerBox, chartBox);
+  renderResult(initial, initialKind);
 }

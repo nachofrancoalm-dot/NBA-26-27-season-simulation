@@ -21,12 +21,14 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from config_loader import get_paths, load_config  # noqa: E402
 from lineup_synergy import DEFAULT_USAGE_THRESHOLD, compute_style_profile  # noqa: E402
+from season_utils import season_start_year  # noqa: E402
+from shot_chart_projection import project_player_shot_chart  # noqa: E402
 from simulation import compute_expected_games_played  # noqa: E402
 
 from webapp.serializers import df_to_records
@@ -223,26 +225,79 @@ def get_player(player_id: int):
     }
 
 
-@router.get("/player/{player_id}/shot-chart")
-def get_player_shot_chart(player_id: int):
-    """Tiros reales (LOC_X/LOC_Y) de la temporada más reciente. Lee
+def _load_shot_chart_history(paths, player_id: int) -> Optional[pd.DataFrame]:
+    """Todas las temporadas cacheadas de un jugador (hasta
+    aging_curve.DEFAULT_N_SEASONS_LOOKBACK, ver data_pipeline.py). Lee
     roster_shot_charts.csv (roster propio, curado) y cae a
     league_shot_charts.csv (los 30 equipos reales, requiere
     --league-shot-charts) para cualquier otro jugador -- nunca dispara
-    una llamada a nba_api. Lista vacía si ninguno de los dos tiene al
-    jugador; el frontend lo trata como "sin datos"."""
-    config = load_config()
-    paths = get_paths(config)
+    una llamada a nba_api."""
     for filename in ("roster_shot_charts.csv", "league_shot_charts.csv"):
         path = paths["processed"] / filename
         if not path.exists():
             continue
-        shots = pd.read_csv(path)
-        shots = shots[shots["player_id"] == player_id]
-        if shots.empty:
-            continue
-        season = str(shots["season"].iloc[0])
-        records = shots[["loc_x", "loc_y", "shot_made", "shot_type"]].to_dict(orient="records")
-        return {"player_id": player_id, "season": season, "shots": records}
+        df = pd.read_csv(path)
+        rows = df[df["player_id"] == player_id]
+        if not rows.empty:
+            return rows
+    return None
 
-    return {"player_id": player_id, "season": None, "shots": []}
+
+@router.get("/player/{player_id}/shot-chart")
+def get_player_shot_chart(player_id: int, kind: str = Query("real", pattern="^(real|projected)$")):
+    """
+    `kind=real` (por defecto): tiros reales de la temporada real más
+    reciente cacheada -- lo que ya había.
+
+    `kind=projected`: shot chart SINTÉTICO de la temporada proyectada
+    (ver src/shot_chart_projection.py) -- remuestrea el histórico real
+    de hasta 3 temporadas para que el conteo de intentos/anotados de
+    2/3 cuadre EXACTO con FGA/FG3A/FGM/FG3M ya proyectados por
+    aging_curve.py, escalados por el mismo factor de disponibilidad
+    (`compute_expected_games_played`) que ya usa `_projected_season_row`
+    -- así el total de tiros del mapa coincide con lo que el resto del
+    popup muestra para esa misma temporada. Semilla del RNG = player_id,
+    no el reloj -- el mapa no debe "saltar" cada vez que se reabre el
+    popup del mismo jugador.
+
+    Lista vacía si no hay histórico cacheado para el jugador, o (en
+    `projected`) si no hay proyección disponible; el frontend lo trata
+    como "sin datos", nunca dispara una llamada a nba_api.
+    """
+    config = load_config()
+    paths = get_paths(config)
+    shots = _load_shot_chart_history(paths, player_id)
+    if shots is None or shots.empty:
+        return {"player_id": player_id, "season": None, "shots": [], "kind": kind}
+
+    if kind == "real":
+        latest_season = max(shots["season"].astype(str).unique(), key=season_start_year)
+        latest = shots[shots["season"].astype(str) == latest_season]
+        records = latest[["loc_x", "loc_y", "shot_made", "shot_type"]].to_dict(orient="records")
+        return {"player_id": player_id, "season": latest_season, "shots": records, "kind": "real"}
+
+    projection_row = _find_projection_row(paths, player_id)
+    if projection_row is None or any(col not in projection_row.index for col in PROJECTED_TOTAL_COLUMNS):
+        return {"player_id": player_id, "season": None, "shots": [], "kind": "projected"}
+
+    games_per_season = config["simulation"]["games_per_season"]
+    risk_score = projection_row.get("risk_score")
+    if pd.notna(risk_score):
+        availability = float(compute_expected_games_played(np.array([risk_score]), games_per_season)[0]) / games_per_season
+    else:
+        availability = 1.0
+
+    projected_shots = project_player_shot_chart(
+        shots,
+        target_fga=projection_row["FGA_projected"] * availability,
+        target_fg3a=projection_row["FG3A_projected"] * availability,
+        target_fgm=projection_row["FGM_projected"] * availability,
+        target_fg3m=projection_row["FG3M_projected"] * availability,
+        rng=np.random.default_rng(player_id),
+    )
+    return {
+        "player_id": player_id,
+        "season": f"{config['team']['season']} (proyección)",
+        "shots": projected_shots.to_dict(orient="records"),
+        "kind": "projected",
+    }
