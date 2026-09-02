@@ -1465,7 +1465,7 @@ nba-superteam-sim/
 │       ├── injury_survival_model.py      # discarded: Cox doesn't improve injury_model.py's heuristic
 │       ├── game_win_predictor.py         # discarded: GBT doesn't improve compute_win_probabilities's logistic model
 │       └── game_win_predictor_injury_signal.py  # positive: key-player availability improves the Brier score, even in a deployable pregame version
-├── notebooks/                      # 3 investigations narrated visually (complement, don't replace, scripts/experiments/)
+├── notebooks/                      # 4 investigations narrated visually (complement, don't replace, scripts/experiments/)
 ├── dashboard/
 │   └── data_loader.py              # CSV loading/combination, testable -- webapp/'s data layer (the Streamlit dashboard that used to live here was retired)
 ├── webapp/                         # the project's only interface: HTML/CSS/JS + FastAPI
